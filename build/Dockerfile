@@ -20,8 +20,11 @@ COPY /go.mod /src/go.mod
 COPY /go.sum /src/go.sum
 RUN cd /src && go mod download
 
-RUN go install github.com/canonical/pebble/cmd/pebble@v1.25.0
-
+# https://github.com/canonical/pebble/issues/719
+# RUN go install github.com/canonical/pebble/cmd/pebble@v1.25.0
+WORKDIR /src
+RUN git clone --branch stop-signal --single-branch https://github.com/haproxytech/pebble.git
+RUN cd pebble/cmd/pebble && go build -buildvcs=true -o /go/bin/pebble
 COPY / /src
 
 RUN mkdir -p /var/run/vars && \
