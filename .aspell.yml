@@ -59,16 +59,19 @@ allowed:
   - reconciler
   - releaser
   - repo
+  - req
   - resync
   - runtime
   - slogger
   - ssl
+  - sslv
   - sudo
   - symlink
   - taskfile
   - testenv
   - tcp
   - tls
+  - tlsv
   - ubuntu
   - unix
   - usr

@@ -250,11 +250,11 @@ func (b *HaproxyConfMgrImpl) newFrontend(params newFrontendParams) (*models.Fron
 	switch {
 	case listener.TLS != nil && utils.PointerDefaultValueIfNil(listener.TLS.Mode) == gatewayv1.TLSModePassthrough:
 		tcpRules = []*models.TCPRequestRule{
-			{ // tcp-request content reject if !{ req_ssl_hello_type 1 }
+			{ // tcp-request content reject if !{ req.ssl_hello_type 1 }
 				Type:     "content",
 				Action:   "reject",
 				Cond:     "if",
-				CondTest: "!{ req_ssl_hello_type 1 }",
+				CondTest: "!{ req.ssl_hello_type 1 }",
 			},
 			{
 				// tcp-request inspect-delay 50000
@@ -262,28 +262,28 @@ func (b *HaproxyConfMgrImpl) newFrontend(params newFrontendParams) (*models.Fron
 				Timeout: utils.PtrInt64(50000),
 			},
 			{
-				// tcp-request content set-var(sess.sni) req_ssl_sni
+				// tcp-request content set-var(sess.sni) req.ssl_sni
 				Type:     "content",
 				Action:   "set-var",
 				VarName:  "sni",
 				VarScope: "sess",
-				Expr:     "req_ssl_sni",
+				Expr:     "req.ssl_sni",
 			},
 			{
-				// tcp-request content set-var(txn.sni_match) req_ssl_sni,map(sni.map)
+				// tcp-request content set-var(txn.sni_match) req.ssl_sni,map(sni.map)
 				Type:     "content",
 				Action:   "set-var",
 				VarName:  "sni_match",
 				VarScope: "txn",
-				Expr:     "req_ssl_sni,map(" + sniMap.FullPath() + ")",
+				Expr:     "req.ssl_sni,map(" + sniMap.FullPath() + ")",
 			},
 			{
-				// tcp-request content set-var(txn.sni_match,ifnotexists) req_ssl_sni,map_end(sniDomainWildcardMap.map)
+				// tcp-request content set-var(txn.sni_match,ifnotexists) req.ssl_sni,map_end(sniDomainWildcardMap.map)
 				Type:     "content",
 				Action:   "set-var",
 				VarName:  "sni_match,ifnotexists",
 				VarScope: "txn",
-				Expr:     "req_ssl_sni,map_end(" + sniDomainWildcardMap.FullPath() + ")",
+				Expr:     "req.ssl_sni,map_end(" + sniDomainWildcardMap.FullPath() + ")",
 			},
 		}
 		backendSwitchingRules = []*models.BackendSwitchingRule{
