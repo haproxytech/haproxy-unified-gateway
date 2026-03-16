@@ -32,6 +32,9 @@ includes:
   controller-gen:
     taskfile: taskfile/controller-gen.yml
     flatten: true
+  conformance:
+    taskfile: taskfile/conformance.yml
+    flatten: true
 
 vars:
 

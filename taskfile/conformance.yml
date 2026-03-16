@@ -1,0 +1,89 @@
+#https://taskfile.dev/
+version: "3"
+
+vars:
+  # Images required by the Gateway API conformance test suite
+  CONFORMANCE_ECHO_IMAGE: "gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd"
+  CONFORMANCE_COREDNS_IMAGE: "registry.k8s.io/coredns/coredns:v1.12.2"
+
+tasks:
+  conformance-pull-images:
+    desc: "pre-pull images required by conformance tests"
+    cmds:
+      - docker pull {{.CONFORMANCE_ECHO_IMAGE}}
+      - docker pull {{.CONFORMANCE_COREDNS_IMAGE}}
+
+  conformance-create:
+    desc: "create a Kind cluster for conformance testing"
+    cmds:
+      - task: kind-create-cluster
+        vars:
+          KIND_CONFIG: "kind-config-conformance.yaml"
+      - task: "{{ .CONTROLLER_BUILD_TASK | default \"kind-build-controller-image-build-in-docker\" }}"
+      - task: conformance-pull-images
+      - task: conformance-deploy
+
+  conformance-deploy:
+    desc: "deploy HUG and prerequisites for conformance testing"
+    deps:
+      - task: check-kubectl
+    vars:
+      kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
+      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
+      CLUSTER_NAME: '{{ default "dev-controller" .CLUSTER_NAME }}'
+    cmds:
+      # Load images into Kind (HUG + conformance test images)
+      - cmd: /{{.kind}} load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
+      - cmd: /{{.kind}} load docker-image {{.CONFORMANCE_ECHO_IMAGE}} --name={{.CLUSTER_NAME}}
+      - cmd: /{{.kind}} load docker-image {{.CONFORMANCE_COREDNS_IMAGE}} --name={{.CLUSTER_NAME}}
+      # Create namespace
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/namespace.yaml
+      # Install CRDs
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/crd-update/rbac.yaml
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/crd-update/job-gwapi.yaml
+      - /{{.kubectl}} wait --for=condition=complete --timeout=120s job/haproxy-unified-gateway-gwapi -n haproxy-unified-gateway
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/crd-update/job-crd.yaml
+      - /{{.kubectl}} wait --for=condition=complete --timeout=120s job/haproxy-unified-gateway-crd -n haproxy-unified-gateway
+      # Deploy controller
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/rbac.yaml
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/hugconf.yaml
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/global.yaml
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug-dev/controller.yaml
+      # Wait for controller
+      - /{{.kubectl}} wait --for=condition=ready --timeout=120s pod -l run=haproxy-unified-gateway -n haproxy-unified-gateway
+      # Create GatewayClass for conformance
+      - /{{.kubectl}} apply -f test/conformance/manifests/gatewayclass.yaml
+      - echo "HUG deployed. Ready for conformance tests."
+
+  conformance-run:
+    desc: "run Gateway API conformance tests (cluster must be ready)"
+    deps:
+      - task: check-go-tool
+        vars:
+          TOOL: GOTESTSUM
+    vars:
+      FORMAT: '{{default "testdox" .FORMAT}}'
+      CONFORMANCE_REPORT_OUTPUT: '{{default "conformance-report.yaml" .CONFORMANCE_REPORT_OUTPUT}}'
+      RUN: '{{default "" .RUN}}'
+    cmds:
+      - |
+        CONFORMANCE_REPORT_OUTPUT={{.CONFORMANCE_REPORT_OUTPUT}} \
+        /{{.TMP}}/gotestsum/{{.GOTESTSUM_VERSION}}/gotestsum \
+          --format-icons=hivis \
+          --format={{.FORMAT}} \
+          --format-hide-empty-pkg \
+          --junitfile conformance-junit.xml \
+          -- -count=1 \
+            -tags=conformance \
+            -timeout 60m \
+            -v \
+            {{if .RUN}}-run '{{.RUN}}'{{end}} \
+            ./test/conformance/
+      - echo "Conformance report written to {{.CONFORMANCE_REPORT_OUTPUT}}"
+      - echo "JUnit report written to conformance-junit.xml"
+
+  conformance:
+    desc: "create cluster, deploy HUG, and run conformance tests"
+    cmds:
+      - task: conformance-create
+      - task: conformance-run
