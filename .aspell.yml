@@ -23,6 +23,7 @@ allowed:
   - frontends
   - gatewayclass
   - github
+  - gitignore
   - gitlab
   - golang
   - golangci
