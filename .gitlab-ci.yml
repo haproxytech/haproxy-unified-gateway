@@ -5,6 +5,7 @@ stages:
   - security
   - build
   - unit-tests
+  - conformance-tests
   - metrics-report
 variables:
   HAPROXY_VERSION: "3.2"
@@ -27,4 +28,5 @@ include:
   - local: .gitlab/security.yml
   - local: .gitlab/build.yaml
   - local: .gitlab/unit-tests.yml
+  - local: .gitlab/conformance-tests.yml
   - local: .gitlab/metrics-report.yml

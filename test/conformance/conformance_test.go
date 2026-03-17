@@ -1,6 +1,6 @@
 //go:build conformance
 
-// Copyright 2024 HAProxy Technologies LLC
+// Copyright 2026 HAProxy Technologies LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ import (
 	confv1 "sigs.k8s.io/gateway-api/conformance/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/tests"
 	conformanceconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
+	"sigs.k8s.io/gateway-api/conformance/utils/flags"
 	"sigs.k8s.io/gateway-api/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
@@ -132,6 +133,7 @@ func TestConformance(t *testing.T) {
 			Version:      "dev",
 			Contact:      []string{"https://github.com/haproxytech/haproxy-unified-gateway/issues"},
 		},
+		RunTest: *flags.RunTest,
 	}
 
 	// Build the suite ourselves instead of using RunConformanceWithOptions,

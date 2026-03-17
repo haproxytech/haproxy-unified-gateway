@@ -23,6 +23,23 @@ tasks:
       - task: conformance-pull-images
       - task: conformance-deploy
 
+  conformance-create-ci:
+    desc: "create a Kind cluster for conformance testing in Docker-in-Docker CI"
+    vars:
+      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
+      kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
+    cmds:
+      - task: kind-create-cluster
+        vars:
+          KIND_CONFIG: "kind-config-conformance.yaml"
+      - task: conformance-pull-images
+      # Patch kubeconfig to use the dind service hostname instead of 127.0.0.1.
+      # In GitLab DinD, kind runs inside the Docker daemon and its containers
+      # are not reachable by their internal IP from the CI runner.
+      # The dind service is reachable via the "docker" hostname on port 7443.
+      - /{{.kubectl}} config set-cluster kind-{{.CLUSTER_NAME}} --server=https://docker:7443 --insecure-skip-tls-verify=true
+      - task: conformance-deploy
+
   conformance-deploy:
     desc: "deploy HUG and prerequisites for conformance testing"
     deps:
@@ -64,6 +81,7 @@ tasks:
     vars:
       FORMAT: '{{default "testdox" .FORMAT}}'
       CONFORMANCE_REPORT_OUTPUT: '{{default "conformance-report.yaml" .CONFORMANCE_REPORT_OUTPUT}}'
+      CONFORMANCE_JUNIT_OUTPUT: '{{default "conformance-junit.xml" .CONFORMANCE_JUNIT_OUTPUT}}'
       RUN: '{{default "" .RUN}}'
     cmds:
       - |
@@ -72,7 +90,7 @@ tasks:
           --format-icons=hivis \
           --format={{.FORMAT}} \
           --format-hide-empty-pkg \
-          --junitfile conformance-junit.xml \
+          --junitfile {{.CONFORMANCE_JUNIT_OUTPUT}} \
           -- -count=1 \
             -tags=conformance \
             -timeout 60m \
@@ -80,7 +98,7 @@ tasks:
             {{if .RUN}}-run '{{.RUN}}'{{end}} \
             ./test/conformance/
       - echo "Conformance report written to {{.CONFORMANCE_REPORT_OUTPUT}}"
-      - echo "JUnit report written to conformance-junit.xml"
+      - echo "JUnit report written to {{.CONFORMANCE_JUNIT_OUTPUT}}"
 
   conformance:
     desc: "create cluster, deploy HUG, and run conformance tests"

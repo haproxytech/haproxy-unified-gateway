@@ -279,7 +279,7 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 				Valid:      false,
 				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
 			}
-			break
+			continue
 		}
 
 		if block, _ := pem.Decode(certPEM); block == nil {
@@ -288,7 +288,7 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 				Valid:      false,
 				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
 			}
-			break
+			continue
 		}
 
 		if block, _ := pem.Decode(keyPEM); block == nil {
@@ -297,7 +297,7 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 				Valid:      false,
 				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
 			}
-			break
+			continue
 		}
 	}
 }
