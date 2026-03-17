@@ -14,8 +14,10 @@
 package tree
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"slices"
 	"strings"
@@ -28,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
+	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -264,6 +267,37 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 				Valid:      false,
 				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
 			}
+			continue
+		}
+
+		certPEM := treeSecret.K8sResource.Data[v1.TLSCertKey]
+		keyPEM := treeSecret.K8sResource.Data[v1.TLSPrivateKeyKey]
+
+		if bytes.Equal(certPEM, keyPEM) {
+			msg := fmt.Sprintf("Secret %s/%s: certificate and key are identical", nsName.Namespace, nsName.Name)
+			l.CheckSecret = CheckResult{
+				Valid:      false,
+				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+			}
+			break
+		}
+
+		if block, _ := pem.Decode(certPEM); block == nil {
+			msg := fmt.Sprintf("Secret %s/%s: certificate contains an invalid PEM", nsName.Namespace, nsName.Name)
+			l.CheckSecret = CheckResult{
+				Valid:      false,
+				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+			}
+			break
+		}
+
+		if block, _ := pem.Decode(keyPEM); block == nil {
+			msg := fmt.Sprintf("Secret %s/%s: key contains an invalid PEM", nsName.Namespace, nsName.Name)
+			l.CheckSecret = CheckResult{
+				Valid:      false,
+				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+			}
+			break
 		}
 	}
 }

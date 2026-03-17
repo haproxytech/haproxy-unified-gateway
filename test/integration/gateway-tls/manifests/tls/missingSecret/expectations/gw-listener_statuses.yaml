@@ -23,7 +23,7 @@
   conditions:
   - message: Secret e2e-tests-gateway-tls/offload does not exist
     observedGeneration: 1
-    reason: ResolvedRefs
+    reason: InvalidCertificateRef
     status: "False"
     type: ResolvedRefs
   - message: Listener is accepted

@@ -38,7 +38,7 @@ func NewListenerResolvedRefInvalidCertificateRefs(msg string) generic.Conditions
 		generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs): {
 			Type:    generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs),
 			Status:  metav1.ConditionFalse,
-			Reason:  string(gatewayv1.ListenerReasonResolvedRefs),
+			Reason:  string(gatewayv1.ListenerReasonInvalidCertificateRef),
 			Message: msg,
 		},
 	}
