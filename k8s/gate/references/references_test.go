@@ -50,9 +50,9 @@ func mockExtractGVK(obj client.Object) schema.GroupVersionKind {
 	// Fallback for actual types if needed, though mocks are preferred for isolation
 	switch obj.(type) {
 	case *gatewayv1.GatewayClass:
-		return gatewayv1.SchemeGroupVersion.WithKind("GatewayClass")
+		return schema.GroupVersionKind{Group: gatewayv1.GroupVersion.Group, Version: gatewayv1.GroupVersion.Version, Kind: "GatewayClass"}
 	case *gatewayv1.Gateway:
-		return gatewayv1.SchemeGroupVersion.WithKind("Gateway")
+		return schema.GroupVersionKind{Group: gatewayv1.GroupVersion.Group, Version: gatewayv1.GroupVersion.Version, Kind: "Gateway"}
 	}
 	return schema.GroupVersionKind{}
 }

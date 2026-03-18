@@ -93,3 +93,7 @@ allowed:
   - gzip
   - gwapi
   - prometheus
+  - apiextensions
+  - clientset
+  - unmarshaled
+  - kubernetes

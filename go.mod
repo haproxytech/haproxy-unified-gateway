@@ -11,7 +11,7 @@ require (
 	github.com/imdario/mergo v0.3.16
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.2
-	github.com/onsi/gomega v1.38.2
+	github.com/onsi/gomega v1.39.1
 	github.com/peterbourgon/ff/v4 v4.0.0-beta.1
 	github.com/phuslu/log v1.0.120
 	github.com/prometheus/client_golang v1.23.2
@@ -25,8 +25,9 @@ require (
 	k8s.io/apimachinery v0.35.2
 	k8s.io/client-go v0.35.2
 	k8s.io/kubectl v0.35.2
-	sigs.k8s.io/controller-runtime v0.22.4
-	sigs.k8s.io/gateway-api v1.4.0
+	sigs.k8s.io/controller-runtime v0.23.1
+	sigs.k8s.io/gateway-api v1.5.0
+	sigs.k8s.io/gateway-api/conformance v1.5.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -78,7 +79,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/miekg/dns v1.1.68 // indirect
+	github.com/miekg/dns v1.1.72 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/spdystream v0.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

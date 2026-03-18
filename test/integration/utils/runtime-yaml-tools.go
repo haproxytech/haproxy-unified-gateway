@@ -18,8 +18,11 @@ package utils // revive:disable:var-naming
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -55,26 +58,50 @@ func CreateRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 	if err != nil {
 		return err
 	}
+	gwAPIVersion := os.Getenv("GWAPI_VERSION")
+	if gwAPIVersion == "" {
+		gwAPIVersion = "1.3.0"
+	}
+	gwAPIVersion = "v" + gwAPIVersion
+	filesSpecific, err := os.ReadDir(path.Join(params.Dir, "gwapi_specific", gwAPIVersion))
+	if err != nil {
+		_, pathError := errors.AsType[*fs.PathError](err)
+		if !pathError {
+			return err
+		}
+	}
+	fileList := map[string]string{}
+	for _, filePath := range files {
+		if filePath.IsDir() {
+			continue // Skip directories
+		}
+		fullPath := filepath.Join(params.Dir, filePath.Name())
+		fileList[filePath.Name()] = fullPath
+	}
+	for _, filePath := range filesSpecific {
+		if filePath.IsDir() {
+			continue // Skip directories
+		}
+		fullPathValue := filepath.Join(params.Dir, "gwapi_specific", gwAPIVersion, filePath.Name())
+		fileList[filePath.Name()] = fullPathValue
+	}
+
 	mnames := map[string]struct{}{}
 	for _, manisfest := range params.ManifestNames {
 		mnames[manisfest] = struct{}{}
 	}
 
-	for _, filePath := range files {
-		if filePath.IsDir() {
-			continue // Skip directories
-		}
+	for fileName, filePath := range fileList {
 		// if ManifestNames is not empty, then consider only those ones
 		if len(mnames) > 0 {
-			if _, ok := mnames[filePath.Name()]; !ok {
+			if _, ok := mnames[fileName]; !ok {
 				continue
 			}
 		}
 
-		fullPath := filepath.Join(params.Dir, filePath.Name())
-		logger.Info("Processing file", "path", filePath)
+		logger.Info("Processing file", "path", fileName)
 
-		manifestData, err := os.ReadFile(fullPath)
+		manifestData, err := os.ReadFile(filePath)
 		if err != nil {
 			return err
 		}
@@ -185,27 +212,50 @@ func DeleteRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 	if err != nil {
 		return err
 	}
+	gwAPIVersion := os.Getenv("GWAPI_VERSION")
+	if gwAPIVersion == "" {
+		gwAPIVersion = "1.3.0"
+	}
+	gwAPIVersion = "v" + gwAPIVersion
+	filesSpecific, err := os.ReadDir(path.Join(params.Dir, "gwapi_specific", gwAPIVersion))
+	if err != nil {
+		_, pathError := errors.AsType[*fs.PathError](err)
+		if !pathError {
+			return err
+		}
+	}
+	fileList := map[string]string{}
+	for _, filePath := range files {
+		if filePath.IsDir() {
+			continue // Skip directories
+		}
+		fullPath := filepath.Join(params.Dir, filePath.Name())
+		fileList[filePath.Name()] = fullPath
+	}
+	for _, filePath := range filesSpecific {
+		if filePath.IsDir() {
+			continue // Skip directories
+		}
+		fullPathValue := filepath.Join(params.Dir, "gwapi_specific", gwAPIVersion, filePath.Name())
+		fileList[filePath.Name()] = fullPathValue
+	}
 
 	mnames := map[string]struct{}{}
 	for _, manisfest := range params.ManifestNames {
 		mnames[manisfest] = struct{}{}
 	}
 
-	for _, filePath := range files {
-		if filePath.IsDir() {
-			continue // Skip directories
-		}
+	for fileName, filePath := range fileList {
 		// if ManifestNames is not empty, then consider only those ones
 		if len(mnames) > 0 {
-			if _, ok := mnames[filePath.Name()]; !ok {
+			if _, ok := mnames[fileName]; !ok {
 				continue
 			}
 		}
 
-		fullPath := filepath.Join(params.Dir, filePath.Name())
 		logger.Info("Processing file", "path", filePath)
 
-		manifestData, err := os.ReadFile(fullPath)
+		manifestData, err := os.ReadFile(filePath)
 		if err != nil {
 			return err
 		}
