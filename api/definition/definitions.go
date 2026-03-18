@@ -23,7 +23,7 @@ var defaults []byte
 func getCRDs() map[string][]byte {
 	return map[string][]byte{
 		"backends.gate.v3.haproxy.org": backends,
-		"global.gate.v3.haproxy.org":   globals,
+		"globals.gate.v3.haproxy.org":  globals,
 		"huggates.gate.v3.haproxy.org": hugGates,
 		"hugconfs.gate.v3.haproxy.org": hugConf,
 		"defaults.gate.v3.haproxy.org": defaults,

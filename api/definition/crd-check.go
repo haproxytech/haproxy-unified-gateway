@@ -64,17 +64,21 @@ func CRDRefresh(external bool) error { //revive:disable:function-length
 	}
 
 	// Create a new clientset for the apiextensions API group
-	clientset := apiextensionsclientset.NewForConfigOrDie(config)
+	clientset, err := apiextensionsclientset.NewForConfig(config)
+	if err != nil {
+		return err
+	}
 
 	// Check if the CRD exists
 	crds := getCRDs()
-	for crdName, crdDef := range crds {
+	for _, crdDef := range crds {
 		// CustomResourceDefinition object
 		var crd apiextensionsv1.CustomResourceDefinition
 		err = yaml.Unmarshal(crdDef, &crd)
 		if err != nil {
 			return err
 		}
+		crdName := crd.Name
 		fmt.Println()
 		fmt.Println("checking CRD ", crdName)
 
