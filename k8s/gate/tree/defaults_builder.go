@@ -48,7 +48,6 @@ func (b *DefaultsCRBuilder) ComputeTreeUpdates() {
 				slog.String("namespace", nsName.Namespace),
 				slog.String("spec_name", specName),
 			)
-			continue
 		}
 
 		switch update.Status {

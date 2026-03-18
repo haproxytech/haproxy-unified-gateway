@@ -29,6 +29,7 @@ allowed:
   - golangci
   - groups
   - haproxycfg
+  - haproxytech
   - huggate
   - hugconf
   - http

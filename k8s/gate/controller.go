@@ -467,6 +467,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
+							predicate.DefaultsPredicate{},
 						),
 					},
 				}),
@@ -504,6 +505,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					k8spredicate.And(
 						k8spredicate.ResourceVersionChangedPredicate{},
 						predicate.NewNamespacePredicate(cfg.Namespaces),
+						predicate.DefaultsPredicate{},
 					),
 				),
 			},

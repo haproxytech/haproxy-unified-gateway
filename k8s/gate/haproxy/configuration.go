@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/haproxytech/client-native/v6/models"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/diffs"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/metadata"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/structured"
@@ -295,6 +296,10 @@ func (c *Configuration) upsertDefaults(logger *slog.Logger, defaults *models.Def
 	if defaults == nil {
 		logger.LogAttrs(context.Background(), slog.LevelError, "nil defaults")
 		return errors.New("nil defaults")
+	}
+
+	if defaults.Name != constants.DefaultsSectionName {
+		return c.deleteDefaults(logger)
 	}
 
 	if previous, ok := c.structured.Defaults[structured.DefaultsKey]; ok {
