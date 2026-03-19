@@ -50,13 +50,6 @@ tasks:
       - task: lint
       - task: test
 
-  test-todo:
-    desc: "run Go tests"
-    cmds:
-      - task: test
-        vars:
-          TEST_TAGS: "test_todo"
-
   test:
     desc: "run Go tests"
     deps:
