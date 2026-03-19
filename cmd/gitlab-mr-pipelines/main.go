@@ -53,11 +53,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 1. Get all old pipelines for this Merge Request
+	// 1. Check if the MR needs a rebase; if so, cancel everything including the current pipeline.
+	needsRebase, err := checkMRNeedsRebase(gitlabAPIURL, projectID, mrIID, gitlabToken)
+	if err != nil {
+		fmt.Printf("Error checking MR rebase status: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 2. Get all old pipelines for this Merge Request
 	pipelinesToCancel, err := getOldMergeRequestPipelines(gitlabAPIURL, projectID, mrIID, gitlabToken)
 	if err != nil {
 		fmt.Printf("Error getting merge request pipelines: %v\n", err)
 		os.Exit(1)
+	}
+
+	if needsRebase {
+		fmt.Println("MR is not rebased on the target branch. Canceling all pipelines including current.")
+		// Also cancel the current pipeline
+		currentPipelineIDStr := os.Getenv("CI_PIPELINE_ID")
+		if currentPipelineIDStr != "" {
+			currentPipelineID, _ := strconv.Atoi(currentPipelineIDStr)
+			if currentPipelineID > 0 {
+				pipelinesToCancel = append(pipelinesToCancel, pipelineInfo{
+					ID:        currentPipelineID,
+					ProjectID: mustAtoi(sourceProjectID),
+				})
+			}
+		}
 	}
 
 	if len(pipelinesToCancel) == 0 {
@@ -65,9 +87,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	fmt.Printf("Found %d old pipelines to cancel.\n", len(pipelinesToCancel))
+	fmt.Printf("Found %d pipelines to cancel.\n", len(pipelinesToCancel))
 
-	// 2. Cancel all found pipelines
+	// 3. Cancel all found pipelines
 	for _, p := range pipelinesToCancel {
 		fmt.Printf("Canceling pipeline ID %d on project ID %d\n", p.ID, p.ProjectID)
 		err = cancelPipeline(gitlabAPIURL, strconv.Itoa(p.ProjectID), p.ID, gitlabToken)
@@ -77,6 +99,11 @@ func main() {
 		} else {
 			fmt.Printf("Successfully requested cancellation for pipeline %d\n", p.ID)
 		}
+	}
+
+	if needsRebase {
+		fmt.Println("Pipeline canceled: MR needs rebase.")
+		os.Exit(1)
 	}
 }
 
@@ -130,6 +157,56 @@ func getOldMergeRequestPipelines(apiURL, projectID, mrIID, token string) ([]pipe
 	}
 
 	return pipelinesToCancel, nil
+}
+
+type mergeRequestInfo struct {
+	DiffHeadSHA         string `json:"diff_refs.head_sha"`
+	MergeStatus         string `json:"merge_status"`
+	DetailedMergeStatus string `json:"detailed_merge_status"`
+	HasConflicts        bool   `json:"has_conflicts"`
+}
+
+func checkMRNeedsRebase(apiURL, projectID, mrIID, token string) (bool, error) {
+	url := fmt.Sprintf("%s/projects/%s/merge_requests/%s", apiURL, projectID, mrIID)
+	req, err := http.NewRequest("GET", url, nil) //nolint:noctx,usestdlibvars
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("PRIVATE-TOKEN", token) //nolint:canonicalheader
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("failed to get MR info: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var mr mergeRequestInfo
+	if err := json.NewDecoder(resp.Body).Decode(&mr); err != nil {
+		return false, err
+	}
+
+	if mr.HasConflicts {
+		fmt.Println("MR has conflicts with target branch.")
+		return true, nil
+	}
+	if mr.DetailedMergeStatus == "need_rebase" {
+		fmt.Println("MR detailed_merge_status: need_rebase")
+		return true, nil
+	}
+
+	fmt.Printf("MR rebase check passed (detailed_merge_status: %s)\n", mr.DetailedMergeStatus)
+	return false, nil
+}
+
+func mustAtoi(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
 }
 
 func cancelPipeline(apiURL, projectID string, pipelineID int, token string) error {
