@@ -49,7 +49,8 @@ func main() {
 
 	if hugConfig.JobCheckCRD {
 		if err := jobs.CRDInstall(hugConfig.External.External); err != nil {
-			panic(err)
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 		fmt.Println("CRD refresh job completed successfully")
 		return
@@ -57,7 +58,8 @@ func main() {
 
 	if hugConfig.JobGWAPI != "" {
 		if err := jobs.GWAPIInstall(hugConfig.External.External, hugConfig.JobGWAPI); err != nil {
-			panic(err)
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 		fmt.Println("Gateway API CRD installation completed successfully")
 		return

@@ -53,7 +53,10 @@ func GWAPIInstall(external bool, version string) error {
 		return err
 	}
 
-	clientset := apiextensionsclientset.NewForConfigOrDie(config)
+	clientset, err := apiextensionsclientset.NewForConfig(config)
+	if err != nil {
+		return fmt.Errorf("failed to create API extensions client: %w", err)
+	}
 
 	// Parse the multi-document YAML into individual CRD documents
 	crds := splitYAMLDocuments(data)
