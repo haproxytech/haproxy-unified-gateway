@@ -87,8 +87,8 @@ func CreateRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 	}
 
 	mnames := map[string]struct{}{}
-	for _, manisfest := range params.ManifestNames {
-		mnames[manisfest] = struct{}{}
+	for _, manifest := range params.ManifestNames {
+		mnames[manifest] = struct{}{}
 	}
 
 	for fileName, filePath := range fileList {
@@ -241,8 +241,8 @@ func DeleteRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 	}
 
 	mnames := map[string]struct{}{}
-	for _, manisfest := range params.ManifestNames {
-		mnames[manisfest] = struct{}{}
+	for _, manifest := range params.ManifestNames {
+		mnames[manifest] = struct{}{}
 	}
 
 	for fileName, filePath := range fileList {
