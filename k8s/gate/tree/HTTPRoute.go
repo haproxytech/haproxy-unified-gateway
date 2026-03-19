@@ -167,24 +167,15 @@ func (r *HTTPRoute) checkParentRefs(controllerStore ControllerStore) {
 		//    Note that the parentRef.Name (the Gateway name) is mandatory, only sectionName is optional
 		// I might have multiple listeners, so maybe I needs to find all of them
 		// Listener has also allowedRoutes CHECK
-		result := r.checkParentRef(parentRef, controllerStore)
+		parentRefIs := r.checkParentRef(parentRef, controllerStore)
 
-		if !result.Managed {
+		if !parentRefIs.Managed {
 			// do not add the parentRef in Listener not check result
 			continue
 		}
-
-		routeConditions.MergeOverrideConditionsForParentRef(parentRef, result.Conditions)
-		// From now on, parentRef is a managed Gateway
-
-		// 1- The parentRef is not Valid
-		if !result.Valid {
-			// do not add the parentREf in Listener or check result
-			continue
-		}
-
-		// 2- The parentRef is Valid
-		atLeastOneValidParentRef = true
+		checkParentsRefs.Managed = true
+		routeConditions.MergeOverrideConditionsForParentRef(parentRef, parentRefIs.Conditions)
+		atLeastOneValidParentRef = parentRefIs.Valid || atLeastOneValidParentRef
 	}
 
 	// Gather all Conditions for all parentRefs in the result
@@ -366,7 +357,8 @@ func match(routeHostname, listenerHostname string) bool {
 }
 
 func (r *HTTPRoute) BuildConditions() {
-	if !r.isManaged() {
+	// We build conditions if parent ref is managed whatever the validity of the parent ref
+	if !r.hasManagedParentRef() {
 		return
 	}
 	r.Conditions = rc.RouteConditions{
@@ -384,7 +376,7 @@ func (r *HTTPRoute) BuildConditions() {
 		return true
 	})
 	// This needs to change when we implement more checks
-	r.Valid = r.CheckParentRefs.Valid
+	r.Valid = r.hasValidParentRef()
 }
 
 // GetParentRefNamespacedName returns the namespaced name for a parentRef reference,

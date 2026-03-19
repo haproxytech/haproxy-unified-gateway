@@ -67,7 +67,7 @@ func (b *HTTPRouteBuilderImpl) computeGateTreeUpdates() {
 		if httpRoute == nil || httpRoute.TreeStatus.Status != store.StatusUpserted {
 			continue
 		}
-		if httpRoute.isManaged() {
+		if httpRoute.hasValidParentRef() {
 			// Process Rules
 			b.buildRules(httpRoute)
 		}
@@ -100,7 +100,7 @@ func (b *HTTPRouteBuilderImpl) computeTreeGatewayUpdate(gwKey client.ObjectKey, 
 
 		treeHTTPRoute.processChecks(*b.ControllerStore)
 
-		if treeHTTPRoute.isManaged() {
+		if treeHTTPRoute.hasManagedParentRef() {
 			b.SetAsManaged(treeHTTPRoute)
 		} else {
 			b.SetAsUnmanaged(treeHTTPRoute)
@@ -127,8 +127,12 @@ func (b *HTTPRouteBuilderImpl) computeTreeGatewayUpdate(gwKey client.ObjectKey, 
 	}
 }
 
-func (r *HTTPRoute) isManaged() bool {
+func (r *HTTPRoute) hasValidParentRef() bool {
 	return r.CheckParentRefs.Valid
+}
+
+func (r *HTTPRoute) hasManagedParentRef() bool {
+	return r.CheckParentRefs.Managed
 }
 
 func (r *HTTPRoute) ResetChecks() {

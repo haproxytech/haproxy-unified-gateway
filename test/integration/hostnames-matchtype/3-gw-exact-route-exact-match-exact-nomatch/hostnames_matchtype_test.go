@@ -41,8 +41,8 @@ func (s *HostnamesMatchtypeSuite3) Test_3_Exact_Route_Exact_Match_Exact_Nomatch(
 	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, route, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "http", 1)
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "https", 1)
+	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "http", 0)
+	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "https", 0)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")

@@ -1,33 +1,33 @@
 ### Current state of the code does not update conditions at all
 ## To check why
 parents:
-- conditions:
-  - message: Route Accepted
-    reason: Accepted
-    status: "True"
-    type: Accepted
-  - message: References resolved
-    reason: ResolvedRefs
-    status: "True"
-    type: ResolvedRefs
-  controllerName: gate.haproxy.org/hug
-  parentRef:
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    name: hug-gateway
-    sectionName: http
-- conditions:
-  - message: Route Accepted
-    reason: Accepted
-    status: "True"
-    type: Accepted
-  - message: References resolved
-    reason: ResolvedRefs
-    status: "True"
-    type: ResolvedRefs
-  controllerName: gate.haproxy.org/hug
-  parentRef:
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    name: hug-gateway
-    sectionName: https
+  - conditions:
+      - message: No matching hostname found
+        reason: NoMatchingListenerHostname
+        status: "False"
+        type: Accepted
+      - message: References resolved
+        reason: ResolvedRefs
+        status: "True"
+        type: ResolvedRefs
+        controllerName: gate.haproxy.org/hug
+        parentRef:
+          group: gateway.networking.k8s.io
+          kind: Gateway
+          name: hug-gateway
+          sectionName: http
+  - conditions:
+      - message: References resolved
+        reason: ResolvedRefs
+        status: "True"
+        type: ResolvedRefs
+      - message: No matching hostname found
+        reason: NoMatchingListenerHostname
+        status: "False"
+        type: Accepted
+        controllerName: gate.haproxy.org/hug
+        parentRef:
+          group: gateway.networking.k8s.io
+          kind: Gateway
+          name: hug-gateway
+          sectionName: https
