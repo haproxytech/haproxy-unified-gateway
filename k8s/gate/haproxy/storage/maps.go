@@ -40,7 +40,7 @@ type MapsStorageDefault struct {
 }
 
 func NewMapsStorage(logger *slog.Logger, extractGVK utilsk8s.ExtractGVK, structureType StructureType, mapsBaseDir string) (MapsStorage, error) {
-	mylogger := logger.With(logging.LogAttrCategory(logging.LogMapsStorage))
+	mylogger := logger.With(logging.LogAttrCategory(logging.LogCategoryMapsStorage))
 
 	if mapsBaseDir == "" {
 		return nil, errors.New("maps directory is not set")

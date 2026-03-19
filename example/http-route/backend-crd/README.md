@@ -64,7 +64,8 @@ backendcrd.haproxy.local/ hug_test_hello-world-backendcrd-1_80_ef84fba452b3f62fa
 Use `curl` to send a request to the services through the Gateway.
 
 ```sh
-curl http://127.0.0.1:31080/hostname -H "Host: backendcrd.haproxy.local"
+GW_IP=$(kubectl get gateway hug-gateway -n test -o jsonpath='{.status.addresses[0].value}')
+curl http://$GW_IP:31080/hostname -H "Host: backendcrd.haproxy.local"
 ```
 
 You should see a response from the services, confirming that the traffic was routed correctly.
@@ -79,7 +80,7 @@ You can also check that by removing `/hostname` from the path that the 2 headers
 
 
 ```sh
-curl http://127.0.0.1:31080 -H "Host: backendcrd.haproxy.local"
+curl http://$GW_IP:31080 -H "Host: backendcrd.haproxy.local"
 ```
 
 ```sh

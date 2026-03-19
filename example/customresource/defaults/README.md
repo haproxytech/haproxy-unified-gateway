@@ -61,16 +61,9 @@ defaults
 
 ### curl
 
-#### From the HUG pod
-
 ```sh
-curl --header "Host: offload.haproxy.local" --resolve "offload.haproxy.local":31443:127.0.0.1 https://offload.haproxy.local:31443/hostname -k
-```
-
-#### From outside the cluster
-
-```sh
-curl --header "Host: offload.haproxy.local" --resolve "offload.haproxy.local":31443:<node IP> https://offload.haproxy.local:31443/hostname -k
+GW_IP=$(kubectl get gateway hug-gateway -n test -o jsonpath='{.status.addresses[0].value}')
+curl --header "Host: offload.haproxy.local" --resolve "offload.haproxy.local":31443:$GW_IP https://offload.haproxy.local:31443/hostname -k
 ```
 
 You should see a response like:

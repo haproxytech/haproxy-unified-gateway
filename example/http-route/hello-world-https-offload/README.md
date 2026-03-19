@@ -1,5 +1,3 @@
-# curl --header "Host: offload.haproxy.local" --resolve "offload.haproxy.local":31443:172.18.0.2 https://offload.haproxy.local:31443/hostname -k -v
-
 # Hello World HTTPRoute with HTTPS offload Example
 
 This example demonstrates how to use an HTTPRoute to expose simple "hello world" applications through the HAProxy Kubernetes Gateway, with HTTPS offload.
@@ -34,19 +32,6 @@ https.haproxy.local/ hug_test_hello-world-offload_443__
 ```
 
 ### curl
-
-### From the Hug pod
-Use `curl` to send a request to the services through the Gateway.
-
-```sh
-curl --header "Host: offload.haproxy.local" --resolve "offload.haproxy.local":31443:127.0.0.1 https://offload.haproxy.local:31443/hostname -k
-```
-
-You should see a response from the services, confirming that the traffic was routed correctly.
-
-```sh
-hello-world-offload-c6b56955d-4hjld
-```
 
 ### From outside the cluster
 
@@ -83,7 +68,8 @@ spec:
 Use `curl` to send a request to the services through the Gateway.
 
 ```sh
-curl --header "Host: offload.haproxy.local" --resolve "offload.haproxy.local":31443:<node IP> https://offload.haproxy.local:31443/hostname -k
+GW_IP=$(kubectl get gateway hug-gateway -n test -o jsonpath='{.status.addresses[0].value}')
+curl --header "Host: offload.haproxy.local" --resolve "offload.haproxy.local":31443:$GW_IP https://offload.haproxy.local:31443/hostname -k
 ```
 
 You should see a response from the services, confirming that the traffic was routed correctly.

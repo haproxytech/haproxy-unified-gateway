@@ -25,6 +25,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/diffs"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/structured"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/hugservice"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/metrics"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/status"
@@ -65,6 +66,10 @@ type GateTreeConfig struct {
 	StoreMapsOnDisk bool
 	// RuntimeUpdateHaproxy
 	RuntimeUpdateHaproxy bool
+	// DisableIPv4 indicates whether IPv4 is disabled.
+	DisableIPv4 bool
+	// DisableIPv6 indicates whether IPv6 is disabled.
+	DisableIPv6 bool
 }
 
 // eventHandlerImpl implements EventHandler.
@@ -72,11 +77,12 @@ type GateTreeConfig struct {
 // - Reconciling the Gateway API and Kubernetes built-in resources with the HAProxy configuration.
 // - building the GateTree
 type eventHandlerImpl struct {
-	clusterStoreUpdater store.ClusterStoreUpdater
-	haproxyConfBuilder  haproxy.HaproxyConfMgr
-	logger              *slog.Logger
-	config              GateTreeConfig
-	treeBuilder         GateTreeBuilder
+	clusterStoreUpdater  store.ClusterStoreUpdater
+	haproxyConfBuilder   haproxy.HaproxyConfMgr
+	hugServiceReconciler *hugservice.ServiceReconciler
+	logger               *slog.Logger
+	config               GateTreeConfig
+	treeBuilder          GateTreeBuilder
 }
 
 // NewEventHandlerImpl creates a new eventHandlerImpl.
@@ -126,11 +132,12 @@ func NewEventHandlerImpl(
 		haproxyCfgManagerParams, haproxyClient, gateTreeConfig.K8sClient)
 
 	handler := &eventHandlerImpl{
-		treeBuilder:         treeBuilder,
-		config:              gateTreeConfig,
-		clusterStoreUpdater: clusterStoreUpdater,
-		haproxyConfBuilder:  haproxyConfMgr,
-		logger:              gateTreeConfig.BaseLogger.With(logging.LogAttrCategory(logging.LogCategoryBatch)),
+		treeBuilder:          treeBuilder,
+		config:               gateTreeConfig,
+		clusterStoreUpdater:  clusterStoreUpdater,
+		haproxyConfBuilder:   haproxyConfMgr,
+		hugServiceReconciler: hugservice.New(gateTreeConfig.K8sClient, gateTreeConfig.BaseLogger),
+		logger:               gateTreeConfig.BaseLogger.With(logging.LogAttrCategory(logging.LogCategoryBatch)),
 	}
 
 	return handler
@@ -194,6 +201,8 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 			h.config.ExtractGVK,
 			h.config.ControllerName,
 			h.config.BaseLogger,
+			h.config.DisableIPv4,
+			h.config.DisableIPv6,
 		),
 		gatetree.GatewayClasses,
 		gatetree.Gateways,
@@ -202,6 +211,8 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 	)
 
 	statusUpdater.UpdateStatus(ctx)
+
+	h.hugServiceReconciler.ReconcilePorts(ctx, gatetree.VirtualListeners)
 }
 
 func (h *eventHandlerImpl) processBatch(batch events.EventBatch) bool {

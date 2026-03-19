@@ -41,7 +41,8 @@ Because the Gateway is in passthrough mode, the backend’s certificate should b
 Run:
 
 ```sh
-curl -v -k -H "Host: example.local" --resolve "example.local:31444:127.0.0.1"  https://example.local:31444/
+GW_IP=$(kubectl get gateway tls-gateway -n <namespace> -o jsonpath='{.status.addresses[0].value}')
+curl -v -k -H "Host: example.local" --resolve "example.local:31444:$GW_IP"  https://example.local:31444/
 ```
 You should observe:
 * The TLS handshake showing the backend’s certificate, not the Gateway’s.

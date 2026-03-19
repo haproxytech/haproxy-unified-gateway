@@ -40,6 +40,9 @@ var (
 		LogCategoryHaproxyCfgMgr: slog.LevelInfo,
 		LogCategoryBatch:         slog.LevelInfo,
 		LogCategoryStatus:        slog.LevelInfo,
+		LogCategoryHugService:    slog.LevelInfo,
+		LogCategoryCertsStorage:  slog.LevelInfo,
+		LogCategoryMapsStorage:   slog.LevelInfo,
 	}
 	DefaultLevel = slog.LevelInfo
 

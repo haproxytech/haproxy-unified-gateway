@@ -19,6 +19,8 @@ spec:
         level: "Info"
       - category: "certs-storage"
         level: "Info"
+      - category: "hugservice"
+        level: "Info"
   globalRef:
     group: gate.v3.haproxy.org
     kind: Global

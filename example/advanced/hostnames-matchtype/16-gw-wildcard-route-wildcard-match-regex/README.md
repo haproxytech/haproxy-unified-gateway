@@ -20,8 +20,9 @@ kubectl apply -f .
 
 
 ```sh
-curl --header "Host: offload.haproxy" http://127.0.0.1:31081/api/foo
-curl --header "Host: offload.haproxy"  https://127.0.0.1:31444/api/foo -k
-curl --header "Host: other.haproxy" http://127.0.0.1:31081/api/foo
+GW_IP=$(kubectl get gateway hug-gateway -n default -o jsonpath='{.status.addresses[0].value}')
+curl --header "Host: offload.haproxy" http://$GW_IP:31081/api/foo
+curl --header "Host: offload.haproxy"  https://$GW_IP:31444/api/foo -k
+curl --header "Host: other.haproxy" http://$GW_IP:31081/api/foo
 
 ```

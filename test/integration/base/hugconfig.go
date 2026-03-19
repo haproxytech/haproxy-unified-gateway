@@ -62,6 +62,8 @@ func hugConfig(test *IntTest, t *testing.T) hugconfig.HUGConfig {
 			logging.LogCategoryApp:           slog.LevelDebug,
 			logging.LogCategoryCertsStorage:  slog.LevelDebug,
 			logging.LogCategoryHaproxyCfgMgr: slog.LevelDebug,
+			logging.LogCategoryHugService:    slog.LevelDebug,
+			logging.LogCategoryMapsStorage:   slog.LevelInfo,
 		},
 	}
 

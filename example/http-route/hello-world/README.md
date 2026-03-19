@@ -29,7 +29,8 @@ Use `curl` to send a request to the `http-echo` service through the Gateway. You
 ## prefix
 
 ```sh
-curl http://127.0.0.1:31080/hostname -H "Host: prefix.haproxy.local"
+GW_IP=$(kubectl get gateway hug-gateway -n default -o jsonpath='{.status.addresses[0].value}')
+curl http://$GW_IP:31080/hostname -H "Host: prefix.haproxy.local"
 ```
 
 You should see a response from the service, confirming that the traffic was routed correctly.
@@ -41,7 +42,7 @@ hello-world-prefix-74cbd7d5f9-jvsg4
 ## exact
 
 ```sh
-curl http://127.0.0.1:31080/hostname -H "Host: exact.haproxy.local"
+curl http://$GW_IP:31080/hostname -H "Host: exact.haproxy.local"
 ```
 
 You should see a response from the service, confirming that the traffic was routed correctly.
@@ -51,7 +52,7 @@ hello-world-exact-6dcf8d475c-xqw4c
 ```
 
 ```sh
-curl http://127.0.0.1:31080/all -H "Host: exact.haproxy.local"
+curl http://$GW_IP:31080/all -H "Host: exact.haproxy.local"
 ```
 
 you will get 404 Not Found

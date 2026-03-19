@@ -19,6 +19,11 @@ const (
 	BundleVersionAnnotation = "gateway.networking.k8s.io/bundle-version"
 
 	// Stats Frontend name
-	StatsFrontendName   = "stats"
+	StatsFrontendName = "stats"
+	// DefaultsSectionName
 	DefaultsSectionName = "haproxytech"
+
+	// Hug Service
+	HugServiceLabelKey = "app.kubernetes.io/name"
+	HugServiceLabelVal = "haproxy-unified-gateway"
 )

@@ -111,6 +111,7 @@ spec:
                               - reloadmgr
                               - certs-storage
                               - maps-storage
+                              - hugservice
                             type: string
                           level:
                             enum:

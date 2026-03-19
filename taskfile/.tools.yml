@@ -8,6 +8,10 @@ vars:
   KIND_VERSION: v0.31.0
   KIND_URL: sigs.k8s.io/kind
 
+  CLOUD_PROVIDER_KIND_NAME: cloud-provider-kind
+  CLOUD_PROVIDER_KIND_VERSION: v0.10.0
+  CLOUD_PROVIDER_KIND_URL: sigs.k8s.io/cloud-provider-kind
+
   CONTROLLER_GEN_NAME: controller-gen
   CONTROLLER_GEN_VERSION: v0.20.1
   CONTROLLER_GEN_URL: sigs.k8s.io/controller-tools/cmd/controller-gen

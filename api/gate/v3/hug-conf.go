@@ -36,7 +36,7 @@ type HugConf struct {
 }
 
 type (
-	// +kubebuilder:validation:Enum=k8s;gate;status;haproxycfg;app;batch;reloadmgr;certs-storage;maps-storage
+	// +kubebuilder:validation:Enum=k8s;gate;status;haproxycfg;app;batch;reloadmgr;certs-storage;maps-storage;hugservice
 	Category string
 	// +kubebuilder:validation:Enum=Debug;Info;Warn;Error;None
 	// +kubebuilder:validation:Required

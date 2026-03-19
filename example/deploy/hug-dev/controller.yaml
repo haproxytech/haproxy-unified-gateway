@@ -83,40 +83,37 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
 ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: haproxy-unified-gateway
+#   namespace: haproxy-unified-gateway
+#   labels:
+#     app.kubernetes.io/name: haproxy-unified-gateway
+# spec:
+#   selector:
+#     run: haproxy-unified-gateway
+#   type: NodePort
+#   ports:
+#     - name: stat
+#       port: 31024
+#       targetPort: 31024
+#     - name: metrics
+#       port: 31060
+#       targetPort: 31060
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: haproxy-unified-gateway
   namespace: haproxy-unified-gateway
+  labels:
+    app.kubernetes.io/name: haproxy-unified-gateway
 spec:
   selector:
     run: haproxy-unified-gateway
-  type: NodePort
+  type: LoadBalancer
   ports:
-    - name: http
-      port: 31080
-      targetPort: 31080
-      # nodePort is needed for NodePort service type
-      nodePort: 31080
-      protocol: TCP
-    - name: https
-      port: 31443
-      targetPort: 31443
-      # nodePort is needed for NodePort service type
-      nodePort: 31443
-      protocol: TCP
-    - name: http2
-      port: 31081
-      targetPort: 31081
-      # nodePort is needed for NodePort service type
-      nodePort: 31081
-      protocol: TCP
-    - name: https2
-      port: 31444
-      targetPort: 31444
-      # nodePort is needed for NodePort service type
-      nodePort: 31444
-      protocol: TCP
     - name: stat
       port: 31024
       targetPort: 31024

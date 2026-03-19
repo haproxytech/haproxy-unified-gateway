@@ -77,6 +77,30 @@ tasks:
       - pwd
       - docker build --build-arg TARGETPLATFORM={{.TARGETPLATFORM}} -t haproxytech/http-echo .
 
+  kind-cloud-provider-start:
+    desc: "start cloud-provider-kind in background (assigns IPs to LoadBalancer services)"
+    deps:
+      - task: check-go-tool
+        vars:
+          TOOL: CLOUD_PROVIDER_KIND
+    vars:
+      cpk: "{{.TMP}}/cloud-provider-kind/{{.CLOUD_PROVIDER_KIND_VERSION}}/cloud-provider-kind --gateway-channel=disabled"
+      pidfile: "/tmp/cloud-provider-kind-{{.CLUSTER_NAME}}.pid"
+      logfile: "/tmp/cloud-provider-kind-{{.CLUSTER_NAME}}.log"
+    cmds:
+      - nohup /{{.cpk}} > {{.logfile}} 2>&1 & echo $! > {{.pidfile}}
+      - echo "cloud-provider-kind started (pid=$(cat {{.pidfile}}), log={{.logfile}})"
+
+  kind-cloud-provider-stop:
+    desc: "stop cloud-provider-kind background process"
+    vars:
+      pidfile: "/tmp/cloud-provider-kind-{{.CLUSTER_NAME}}.pid"
+    cmds:
+      - |
+        pkill -f cloud-provider-kind 2>/dev/null || true
+        rm -f {{.pidfile}}
+        echo "cloud-provider-kind stopped"
+
   kind-delete:
     desc: "delete a KinD cluster"
     silent: true
@@ -87,6 +111,7 @@ tasks:
     vars:
       kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
     cmds:
+      - task: kind-cloud-provider-stop
       - "/{{.kind}} delete cluster --name {{.CLUSTER_NAME}}"
 
   kind-create:
@@ -126,6 +151,7 @@ tasks:
       - task: kind-create-cluster
         vars:
           KIND_CONFIG: "{{.KIND_CONFIG}}"
+      - task: kind-cloud-provider-start
       - task: delimiter
       - task: "{{ .CONTROLLER_BUILD_TASK }}"
       - task: kind-build-echo-image

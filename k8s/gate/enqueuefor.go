@@ -161,6 +161,27 @@ func enqueueGatewayForGatewayClass(ctrlclient client.Client, _ utilsk8s.ExtractG
 	}
 }
 
+// enqueueGatewayForHugService returns a handler.EventHandler that enqueues all Gateways
+// when the HUG controller service (identified by label app.kubernetes.io/name=haproxy-unified-gateway)
+// changes. This is needed so that Gateway.Status.Addresses is refreshed when the service
+// type or ingress addresses change (e.g. a LoadBalancer IP is assigned).
+func enqueueGatewayForHugService(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctx context.Context, _ client.Object) []reconcile.Request {
+		gwList := &gatewayv1.GatewayList{}
+		if err := ctrlclient.List(ctx, gwList); err != nil {
+			return []reconcile.Request{}
+		}
+		requests := make([]reconcile.Request, 0, len(gwList.Items))
+		for _, gw := range gwList.Items {
+			requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+				Namespace: gw.GetNamespace(),
+				Name:      gw.GetName(),
+			}})
+		}
+		return requests
+	}
+}
+
 // enqueueGatewayForSecret returns a handler.EventHandler that enqueues all Gateways
 // related to an observed Secret.
 func enqueueGatewayForSecret(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {

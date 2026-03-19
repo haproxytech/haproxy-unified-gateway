@@ -82,23 +82,13 @@ kind: Service
 metadata:
   name: haproxy-unified-gateway
   namespace: haproxy-unified-gateway
+  labels:
+    app.kubernetes.io/name: haproxy-unified-gateway
 spec:
   selector:
     run: haproxy-unified-gateway
-  type: NodePort
+  type: LoadBalancer
   ports:
-    - name: http
-      port: 31080
-      targetPort: 31080
-      # nodePort is needed for NodePort service type
-      nodePort: 31080
-      protocol: TCP
-    - name: https
-      port: 31443
-      targetPort: 31443
-      # nodePort is needed for NodePort service type
-      nodePort: 31443
-      protocol: TCP
     - name: stat
       port: 31024
       targetPort: 31024

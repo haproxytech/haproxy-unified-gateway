@@ -4,6 +4,7 @@ allowed:
   - acl
   - backend
   - backends
+  - balancer
   - betteralign
   - categorizer
   - cfg
@@ -35,6 +36,7 @@ allowed:
   - http
   - httproute
   - https
+  - hostnames
   - init
   - ipv
   - json
@@ -45,6 +47,7 @@ allowed:
   - lifecycle
   - linter
   - linters
+  - loadbalancer
   - lua
   - maxconn
   - maxsslconn

@@ -16,6 +16,7 @@ package status
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
@@ -70,7 +71,7 @@ func (sp *gatewayClassStatusPatcher) SetStatus(obj client.Object) error {
 
 // ---------------------------
 // Gateway
-func newGatewayStatusPatcher(gw *tree.Gateway) StatusPatcher {
+func newGatewayStatusPatcher(gw *tree.Gateway, addresses []gatewayv1.GatewayStatusAddress) StatusPatcher {
 	listenerStatuses := make([]gatewayv1.ListenerStatus, 0, len(gw.Listeners))
 	if gw.Valid {
 		// If the Gateway is invalid, the listeners status should be empty
@@ -88,6 +89,7 @@ func newGatewayStatusPatcher(gw *tree.Gateway) StatusPatcher {
 	return &gatewayStatusPatcher{
 		conditions:       gw.Conditions,
 		listenerStatuses: listenerStatuses,
+		addresses:        addresses,
 	}
 }
 
@@ -96,6 +98,7 @@ var _ StatusPatcher = &gatewayStatusPatcher{}
 type gatewayStatusPatcher struct {
 	conditions       generic.Conditions
 	listenerStatuses []gatewayv1.ListenerStatus
+	addresses        []gatewayv1.GatewayStatusAddress
 }
 
 func (sp *gatewayStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
@@ -107,8 +110,10 @@ func (sp *gatewayStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
 	if !sp.conditions.Equal(gwConds) {
 		return false, nil
 	}
-
-	return ListenerStatusesEqual(sp.listenerStatuses, gw.Status.Listeners), nil
+	if !ListenerStatusesEqual(sp.listenerStatuses, gw.Status.Listeners) {
+		return false, nil
+	}
+	return gatewayAddressesEqual(sp.addresses, gw.Status.Addresses), nil
 }
 
 func ListenerStatusesEqual(a, b []gatewayv1.ListenerStatus) bool {
@@ -144,8 +149,34 @@ func (sp *gatewayStatusPatcher) SetStatus(obj client.Object) error {
 	gw.Status = gatewayv1.GatewayStatus{
 		Conditions: metav1conds,
 		Listeners:  sp.listenerStatuses,
+		Addresses:  sp.addresses,
 	}
 	return nil
+}
+
+func gatewayAddressesEqual(a, b []gatewayv1.GatewayStatusAddress) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	sortFunc := func(x, y gatewayv1.GatewayStatusAddress) int {
+		return strings.Compare(x.Value, y.Value)
+	}
+	sortedA := slices.Clone(a)
+	sortedB := slices.Clone(b)
+	slices.SortFunc(sortedA, sortFunc)
+	slices.SortFunc(sortedB, sortFunc)
+	for i := range sortedA {
+		if sortedA[i].Value != sortedB[i].Value {
+			return false
+		}
+		if (sortedA[i].Type == nil) != (sortedB[i].Type == nil) {
+			return false
+		}
+		if sortedA[i].Type != nil && *sortedA[i].Type != *sortedB[i].Type {
+			return false
+		}
+	}
+	return true
 }
 
 // sortListenerStatusByName sorts a slice of gatewayapi.ListenerStatus structs

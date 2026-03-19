@@ -302,7 +302,7 @@ func (c *Configuration) upsertDefaults(logger *slog.Logger, defaults *models.Def
 		return c.deleteDefaults(logger)
 	}
 
-	if previous, ok := c.structured.Defaults[structured.DefaultsKey]; ok {
+	if previous, ok := c.structured.Defaults[constants.DefaultsSectionName]; ok {
 		if previous.Equal(*defaults) && c.mergeStrategies.Defaults == mergeStrategy {
 			logger.LogAttrs(context.Background(), slog.LevelDebug, "Defaults [same]")
 			return nil
@@ -312,18 +312,18 @@ func (c *Configuration) upsertDefaults(logger *slog.Logger, defaults *models.Def
 		if err != nil {
 			return err
 		}
-		c.diffs.Updated.Defaults[structured.DefaultsKey] = deepCopied
+		c.diffs.Updated.Defaults[constants.DefaultsSectionName] = deepCopied
 		c.diffs.MergeStrategies.Defaults = mergeStrategy
 		c.mergeStrategies.Defaults = mergeStrategy
-		c.structured.Defaults[structured.DefaultsKey] = defaults
+		c.structured.Defaults[constants.DefaultsSectionName] = defaults
 	} else {
 		logger.LogAttrs(context.Background(), slog.LevelInfo, "Defaults [CREATE]")
 		deepCopied, err := DeepCopyDefaults(defaults)
 		if err != nil {
 			return err
 		}
-		c.structured.Defaults[structured.DefaultsKey] = deepCopied
-		c.diffs.Created.Defaults[structured.DefaultsKey] = deepCopied
+		c.structured.Defaults[constants.DefaultsSectionName] = deepCopied
+		c.diffs.Created.Defaults[constants.DefaultsSectionName] = deepCopied
 		c.diffs.MergeStrategies.Defaults = mergeStrategy
 		c.mergeStrategies.Defaults = mergeStrategy
 	}
@@ -334,14 +334,14 @@ func (c *Configuration) upsertDefaults(logger *slog.Logger, defaults *models.Def
 // it as Deleted in HaproxyConfDiffs. If no Defaults is currently stored the call
 // is a no-op.
 func (c *Configuration) deleteDefaults(logger *slog.Logger) error {
-	if _, ok := c.structured.Defaults[structured.DefaultsKey]; !ok {
+	if _, ok := c.structured.Defaults[constants.DefaultsSectionName]; !ok {
 		return nil
 	}
 	logger.LogAttrs(context.Background(), slog.LevelInfo, "Defaults [DELETE]")
-	c.diffs.Deleted.Defaults[structured.DefaultsKey] = nil
+	c.diffs.Deleted.Defaults[constants.DefaultsSectionName] = nil
 	c.diffs.MergeStrategies.Defaults = "" // useless but clear
 	c.mergeStrategies.Defaults = ""
-	delete(c.structured.Defaults, structured.DefaultsKey)
+	delete(c.structured.Defaults, constants.DefaultsSectionName)
 	return nil
 }
 

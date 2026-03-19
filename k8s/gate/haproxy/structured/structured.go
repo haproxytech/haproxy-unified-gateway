@@ -20,9 +20,6 @@ import (
 // GlobalKey is the fixed map key used for the single Global entry.
 const GlobalKey = "global"
 
-// DefaultsKey is the fixed map key used for the single Defaults entry (the "haproxytech" section).
-const DefaultsKey = "haproxytech"
-
 type Structured struct {
 	// Note that for Deleted Structured:
 	// *models.Frontend will be nil

@@ -28,11 +28,11 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func (s *StatusUpdaterImpl) writeGatewayStatus(ctx context.Context, gw *tree.Gateway) {
+func (s *StatusUpdaterImpl) writeGatewayStatus(ctx context.Context, gw *tree.Gateway, addresses []gatewayv1.GatewayStatusAddress) {
 	updateOptions := StatusUpdateParams[*gatewayv1.Gateway]{
 		Object:        objtypes.ObjectTypeGateway,
 		NsName:        types.NamespacedName{Name: gw.K8sResource.Name, Namespace: gw.K8sResource.Namespace},
-		StatusPatcher: newGatewayStatusPatcher(gw),
+		StatusPatcher: newGatewayStatusPatcher(gw, addresses),
 		Getter:        s.config.client,
 		StatusUpdater: s.config.client.Status(),
 		Logger:        s.config.logger,

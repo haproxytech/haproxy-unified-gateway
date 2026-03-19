@@ -35,7 +35,8 @@ blue-green.haproxy.local/ {"a":"wr","l":"hug_default_blue_8888__:90,hug_default_
 Use `curl` to send a request to the services through the Gateway.
 
 ```sh
-curl http://127.0.0.1:31080/hostname -H "Host: blue-green.haproxy.local"
+GW_IP=$(kubectl get gateway hug-gateway -n default -o jsonpath='{.status.addresses[0].value}')
+curl http://$GW_IP:31080/hostname -H "Host: blue-green.haproxy.local"
 ```
 
 You should see a response from the services, confirming that the traffic was routed correctly (one of two services).

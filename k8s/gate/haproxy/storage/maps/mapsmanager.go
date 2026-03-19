@@ -30,7 +30,7 @@ import (
 // NewMapFileState creates a new instance of MapFileState with the given filename and logger.
 // It returns a pointer to the new instance.
 func NewMapFileState(relativeMapPath, mapFilePath string, logger *slog.Logger) *MapFileState {
-	mylogger := logger.With(logging.LogAttrCategory(logging.LogMapsStorage))
+	mylogger := logger.With(logging.LogAttrCategory(logging.LogCategoryMapsStorage))
 	return &MapFileState{
 		FileName:          mapFilePath,
 		RelativeFileName:  relativeMapPath,

@@ -29,7 +29,8 @@ kubectl apply -f .
 ### HTTP: For the route route-echo-http
 
 ```sh
-curl --header "Host: offload.haproxy" http://127.0.0.1:31080/all
+GW_IP=$(kubectl get gateway hug-gateway -n default -o jsonpath='{.status.addresses[0].value}')
+curl --header "Host: offload.haproxy" http://$GW_IP:31080/all
 {
   "http": {
     "cookies": null,
@@ -58,7 +59,7 @@ curl --header "Host: offload.haproxy" http://127.0.0.1:31080/all
 ### HTTPS: For the route route-echo-https
 
 ```sh
-curl --header "Host: offload.haproxy"  https://127.0.0.1:31443/all -k
+curl --header "Host: offload.haproxy"  https://$GW_IP:31443/all -k
 {
   "http": {
     "cookies": null,

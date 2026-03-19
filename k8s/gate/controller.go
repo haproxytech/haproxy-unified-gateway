@@ -197,6 +197,8 @@ func Add(
 		CertificateStorage:         certificateStorage,
 		MapsStorage:                mapsStorage,
 		ControllerName:             cfg.ControllerName,
+		DisableIPv4:                cfg.HaproxyParams.DisableIPv4,
+		DisableIPv6:                cfg.HaproxyParams.DisableIPv6,
 	}
 	haproxyCfgMgrParams, err := haproxy.NewHaproxyConfMgrParams(extractGVK, cfg.HaproxyParams, certificateStorage, mapsStorage)
 	if err != nil {
@@ -315,6 +317,18 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
+						),
+					},
+					// Watch HUG service â refresh Gateway.Status.Addresses when the
+					// controller service (LoadBalancer IP assignment, type change, â¦) changes.
+					{
+						watchSource: objtypes.ObjectTypeService,
+						enqueueFunc: enqueueGatewayForHugService,
+						predicate: k8spredicate.And(
+							k8spredicate.ResourceVersionChangedPredicate{},
+							k8spredicate.NewPredicateFuncs(func(obj ctrlruntimeclient.Object) bool {
+								return obj.GetLabels()[constant.HugServiceLabelKey] == constant.HugServiceLabelVal
+							}),
 						),
 					},
 				},

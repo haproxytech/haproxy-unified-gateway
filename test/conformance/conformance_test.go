@@ -40,7 +40,6 @@ import (
 	"sigs.k8s.io/gateway-api/conformance/tests"
 	conformanceconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	"sigs.k8s.io/gateway-api/conformance/utils/flags"
-	"sigs.k8s.io/gateway-api/conformance/utils/roundtripper"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/pkg/features"
 )
@@ -80,21 +79,6 @@ func TestConformance(t *testing.T) {
 	require.NoError(t, v1alpha3.Install(c.Scheme()))
 	require.NoError(t, apiextensionsv1.AddToScheme(c.Scheme()))
 
-	// Start background Gateway address patcher.
-	// HUG does not currently set Gateway status addresses, so we watch for
-	// Gateways with our GatewayClass and patch their status with the node address.
-	stopPatcher := startGatewayAddressPatcher(t, c, cs, gwClassName)
-	defer stopPatcher()
-
-	// Port mapping: conformance tests use ports 80/443 from Gateway listener specs,
-	// but HUG listens on NodePort ports (31080/31443). We use a custom DialContext
-	// to remap connections.
-	rt := &roundtripper.DefaultRoundTripper{
-		Debug:             showDebug,
-		TimeoutConfig:     conformanceconfig.DefaultTimeoutConfig(),
-		CustomDialContext: newPortRemappingDialer(httpPort, httpsPort),
-	}
-
 	supportedFeatures := sets.New[features.FeatureName](
 		features.SupportGateway,
 		features.SupportHTTPRoute,
@@ -119,7 +103,6 @@ func TestConformance(t *testing.T) {
 		GatewayClassName:     gwClassName,
 		Debug:                showDebug,
 		CleanupBaseResources: true,
-		RoundTripper:         rt,
 		ManifestFS:           []fs.FS{&conformance.Manifests},
 		SupportedFeatures:    supportedFeatures,
 		ConformanceProfiles:  conformanceProfiles,
