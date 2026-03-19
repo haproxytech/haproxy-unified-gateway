@@ -13,7 +13,7 @@ vars:
   CONTROLLER_GEN_URL: sigs.k8s.io/controller-tools/cmd/controller-gen
 
   CHECK_COMMIT_NAME: check-commit
-  CHECK_COMMIT_VERSION: v5.5.0
+  CHECK_COMMIT_VERSION: v5.5.2
   CHECK_COMMIT_URL: github.com/haproxytech/check-commit/v5
 
   BETTERALIGN_NAME: betteralign
