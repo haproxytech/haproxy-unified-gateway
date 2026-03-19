@@ -98,3 +98,4 @@ allowed:
   - unmarshaled
   - kubernetes
   - amd
+  - buildx
