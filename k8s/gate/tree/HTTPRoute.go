@@ -365,7 +365,6 @@ func (r *HTTPRoute) BuildConditions() {
 		ControllerName: r.ControllerName,
 		Conditions:     utils.NewKeyMap[gatewayv1.ParentReference, generic.Conditions](utils.ParentRefToKey),
 	}
-	r.Conditions.SetGeneration(r.K8sResource.Generation)
 
 	r.CheckParentRefs.Conditions.Conditions.Iterate(func(key string, parentRefConds generic.Conditions) bool {
 		parentRef, err := utils.KeyToParentRef(key)
@@ -375,6 +374,8 @@ func (r *HTTPRoute) BuildConditions() {
 		r.Conditions.MergeOverrideConditionsForParentRef(parentRef, parentRefConds)
 		return true
 	})
+	r.Conditions.SetGeneration(r.K8sResource.Generation)
+
 	// This needs to change when we implement more checks
 	r.Valid = r.hasValidParentRef()
 }

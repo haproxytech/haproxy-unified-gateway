@@ -1,10 +1,12 @@
 parents:
 - conditions:
   - message: Route Accepted
+    observedGeneration: 1
     reason: Accepted
     status: "True"
     type: Accepted
   - message: backendRef not found :Service:_:http-echo
+    observedGeneration: 1
     reason: BackendNotFound
     status: "False"
     type: ResolvedRefs
@@ -16,10 +18,12 @@ parents:
     sectionName: http
 - conditions:
   - message: Route Accepted
+    observedGeneration: 1
     reason: Accepted
     status: "True"
     type: Accepted
   - message: backendRef not found :Service:_:http-echo
+    observedGeneration: 1
     reason: BackendNotFound
     status: "False"
     type: ResolvedRefs

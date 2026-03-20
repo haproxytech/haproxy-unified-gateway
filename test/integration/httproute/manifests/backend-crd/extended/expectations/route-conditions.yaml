@@ -1,10 +1,12 @@
 parents:
 - conditions:
   - message: Route Accepted
+    observedGeneration: 1
     reason: Accepted
     status: "True"
     type: Accepted
   - message: References resolved
+    observedGeneration: 1
     reason: ResolvedRefs
     status: "True"
     type: ResolvedRefs

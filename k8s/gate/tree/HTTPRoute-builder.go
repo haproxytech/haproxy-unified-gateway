@@ -74,6 +74,7 @@ func (b *HTTPRouteBuilderImpl) computeGateTreeUpdates() {
 
 		// Merge the backendRef conditions
 		httpRoute.mergeBackendConditions()
+		httpRoute.Conditions.SetGeneration(httpRoute.K8sResource.Generation)
 	}
 }
 

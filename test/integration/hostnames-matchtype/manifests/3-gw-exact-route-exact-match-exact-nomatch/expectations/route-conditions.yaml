@@ -3,10 +3,12 @@
 parents:
   - conditions:
       - message: No matching hostname found
+        observedGeneration: 1
         reason: NoMatchingListenerHostname
         status: "False"
         type: Accepted
       - message: References resolved
+        observedGeneration: 1
         reason: ResolvedRefs
         status: "True"
         type: ResolvedRefs
@@ -18,10 +20,12 @@ parents:
           sectionName: http
   - conditions:
       - message: References resolved
+        observedGeneration: 1
         reason: ResolvedRefs
         status: "True"
         type: ResolvedRefs
       - message: No matching hostname found
+        observedGeneration: 1
         reason: NoMatchingListenerHostname
         status: "False"
         type: Accepted
