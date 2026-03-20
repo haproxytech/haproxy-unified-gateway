@@ -82,7 +82,8 @@ tasks:
       FORMAT: '{{default "testdox" .FORMAT}}'
       CONFORMANCE_REPORT_OUTPUT: '{{default "conformance-report.yaml" .CONFORMANCE_REPORT_OUTPUT}}'
       CONFORMANCE_JUNIT_OUTPUT: '{{default "conformance-junit.xml" .CONFORMANCE_JUNIT_OUTPUT}}'
-      RUN: '{{default "" .RUN}}'
+      CONFORMANCE_RUN_TEST: '{{default "" .CONFORMANCE_RUN_TEST}}'
+      CONFORMANCE_SKIP_TESTS: '{{default "" .CONFORMANCE_SKIP_TESTS}}'
     cmds:
       - |
         CONFORMANCE_REPORT_OUTPUT={{.CONFORMANCE_REPORT_OUTPUT}} \
@@ -91,12 +92,13 @@ tasks:
           --format={{.FORMAT}} \
           --format-hide-empty-pkg \
           --junitfile {{.CONFORMANCE_JUNIT_OUTPUT}} \
-          -- -count=1 \
+          -- ./test/conformance/ \
+            -count=1 \
             -tags=conformance \
             -timeout 60m \
             -v \
-            {{if .RUN}}-run '{{.RUN}}'{{end}} \
-            ./test/conformance/
+            {{if .CONFORMANCE_RUN_TEST}}-run-test '{{.CONFORMANCE_RUN_TEST}}'{{end}} \
+            {{if .CONFORMANCE_SKIP_TESTS}}-skip-tests '{{.CONFORMANCE_SKIP_TESTS}}'{{end}}
       - echo "Conformance report written to {{.CONFORMANCE_REPORT_OUTPUT}}"
       - echo "JUnit report written to {{.CONFORMANCE_JUNIT_OUTPUT}}"
 

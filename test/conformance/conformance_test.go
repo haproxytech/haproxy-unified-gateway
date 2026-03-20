@@ -19,6 +19,7 @@ package conformance_test
 import (
 	"io/fs"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -116,8 +117,12 @@ func TestConformance(t *testing.T) {
 			Version:      "dev",
 			Contact:      []string{"https://github.com/haproxytech/haproxy-unified-gateway/issues"},
 		},
-		RunTest: *flags.RunTest,
+		RunTest:   *flags.RunTest,
+		SkipTests: strings.FieldsFunc(*flags.SkipTests, func(r rune) bool { return r == ',' }),
 	}
+
+	t.Logf("conformance run test %s", opts.RunTest)
+	t.Logf("conformance skip tests %s", opts.SkipTests)
 
 	// Build the suite ourselves instead of using RunConformanceWithOptions,
 	// so we can register a t.Cleanup that always writes the report —

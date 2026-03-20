@@ -5,6 +5,7 @@ stages:
   - security
   - build
   - unit-tests
+  - conformance
   - conformance-tests
   - metrics-report
 variables:
