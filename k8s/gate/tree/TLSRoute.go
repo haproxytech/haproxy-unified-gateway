@@ -229,8 +229,8 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 	conds := generic.Conditions{}
 
 	for _, listener := range attachableListeners {
-		// Vérifie la validité du listener
-		if !listener.Valid {
+		// Check if the listener is accepted (routes can attach to accepted listeners even with unresolved refs)
+		if !listener.Accepted {
 			conds.MergeOverrideConditions(rc.ConditionNotAcceptedNoMatchingParent())
 			continue
 		}

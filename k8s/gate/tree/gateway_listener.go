@@ -52,8 +52,11 @@ type Listener struct {
 	CheckConflict       CheckResult
 	// AllowedRouteKinds is the list of allowed route kinds for this listener.
 	AllowedRouteKinds []gatewayv1.RouteGroupKind
-	// Valid
+	// Valid indicates the listener is fully programmed (Accepted, no conflicts, all refs resolved).
 	Valid bool
+	// Accepted indicates the listener configuration is accepted (valid protocol, no conflicts).
+	// Routes can attach to an accepted listener even if refs are unresolved.
+	Accepted bool
 }
 
 // DeepCopy creates a deep copy of the Listener.
@@ -409,6 +412,8 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	l.Conditions.MergeOverrideConditions(l.CheckConflict.Conditions)
 	// Should we process with Haproxy programmation
 	shouldProgramm := true
+	// isAccepted tracks whether the listener is accepted (routes can attach even with unresolved refs)
+	isAccepted := true
 
 	_, exists := l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionAccepted))
 	if !exists {
@@ -417,6 +422,7 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	} else {
 		l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedInvalid())
 		shouldProgramm = false
+		isAccepted = false
 	}
 
 	_, exists = l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs))
@@ -426,12 +432,14 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	} else {
 		l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedInvalid())
 		shouldProgramm = false
+		// ResolvedRefs=False does NOT prevent route attachment per the Gateway API spec
 	}
 
 	_, exists = l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionConflicted))
 	if exists {
 		l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedInvalid())
 		shouldProgramm = false
+		isAccepted = false
 	}
 
 	if shouldProgramm {
@@ -439,6 +447,7 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	}
 
 	l.Valid = shouldProgramm
+	l.Accepted = isAccepted
 	l.Conditions.SetGeneration(treeGw.K8sResource.GetGeneration())
 }
 

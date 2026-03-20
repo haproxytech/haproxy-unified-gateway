@@ -251,8 +251,8 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 	conds := generic.Conditions{}
 
 	for _, listener := range attachableListeners {
-		// Check if the listener is valid
-		if !listener.Valid {
+		// Check if the listener is accepted (routes can attach to accepted listeners even with unresolved refs)
+		if !listener.Accepted {
 			conds.MergeOverrideConditions(rc.ConditionNotAcceptedNoMatchingParent())
 			continue
 		}
