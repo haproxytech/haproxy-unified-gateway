@@ -5,6 +5,7 @@ conformance-report:
       artifacts: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == 'nightly'
+    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   image:
     name: $HAPROXY_REGISTRY_GO/golang:latest-alpine
     entrypoint: [""]

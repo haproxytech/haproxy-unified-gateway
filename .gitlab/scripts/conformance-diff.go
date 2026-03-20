@@ -31,9 +31,11 @@ type junitTestCase struct {
 	Skipped   *junitSkipped `xml:"skipped"`
 }
 
-type junitFailure struct{}
-type junitError struct{}
-type junitSkipped struct{}
+type (
+	junitFailure struct{}
+	junitError   struct{}
+	junitSkipped struct{}
+)
 
 type pipeline struct {
 	ID int `json:"id"`
