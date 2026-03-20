@@ -8,6 +8,7 @@ stages:
   - conformance
   - conformance-tests
   - metrics-report
+  - conformance-report
 variables:
   HAPROXY_VERSION: "3.2"
   KIND: v0.27.0
@@ -31,3 +32,4 @@ include:
   - local: .gitlab/unit-tests.yml
   - local: .gitlab/conformance-tests.yml
   - local: .gitlab/metrics-report.yml
+  - local: .gitlab/conformance-report.yml
