@@ -123,7 +123,7 @@ func TestComputeListenerConflicts(t *testing.T) {
 			},
 		},
 		{
-			name: "Conflict - same port, overlapping hostnames (Wildcard)",
+			name: "No Conflict - wildcard and matching specific hostname coexist (specific beats wildcard)",
 			gateways: []*Gateway{
 				mkGateway("gw1", t1,
 					mkListener("wild", 80, gatewayv1.HTTPProtocolType, ptr("*.example.com")),
@@ -132,11 +132,24 @@ func TestComputeListenerConflicts(t *testing.T) {
 			},
 			expected: map[string]listenerConflictCondition{
 				"default/gw1_wild":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_exact": {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_exact": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
-			name: "Conflict - same port, overlapping hostnames (empty)",
+			name: "Conflict - same port, identical wildcard hostnames",
+			gateways: []*Gateway{
+				mkGateway("gw1", t1,
+					mkListener("wild1", 80, gatewayv1.HTTPProtocolType, ptr("*.example.com")),
+					mkListener("wild2", 80, gatewayv1.HTTPProtocolType, ptr("*.example.com")),
+				),
+			},
+			expected: map[string]listenerConflictCondition{
+				"default/gw1_wild1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_wild2": {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
+			},
+		},
+		{
+			name: "Conflict - same port, two empty hostnames conflict with each other",
 			gateways: []*Gateway{
 				mkGateway("gw1", t1,
 					mkListener("empty", 80, gatewayv1.HTTPProtocolType, nil),
@@ -146,6 +159,38 @@ func TestComputeListenerConflicts(t *testing.T) {
 			expected: map[string]listenerConflictCondition{
 				"default/gw1_empty": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
 				"default/gw1_same":  {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
+			},
+		},
+		{
+			name: "No Conflict - empty hostname coexists with specific hostname (catch-all + specific)",
+			gateways: []*Gateway{
+				mkGateway("gw1", t1,
+					mkListener("catch-all", 80, gatewayv1.HTTPProtocolType, nil),
+					mkListener("specific", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
+				),
+			},
+			expected: map[string]listenerConflictCondition{
+				"default/gw1_catch-all": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_specific":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+			},
+		},
+		{
+			// Mirrors the Gateway API conformance manifest same-namespace-with-https-listener:
+			// all four listeners must be accepted with no hostname conflict.
+			name: "No Conflict - empty, wildcard, specific, and specific-under-wildcard all coexist",
+			gateways: []*Gateway{
+				mkGateway("gw1", t1,
+					mkListener("catch-all", 443, gatewayv1.HTTPSProtocolType, nil),
+					mkListener("wildcard", 443, gatewayv1.HTTPSProtocolType, ptr("*.wildcard.org")),
+					mkListener("specific", 443, gatewayv1.HTTPSProtocolType, ptr("second-example.org")),
+					mkListener("specific-under-wildcard", 443, gatewayv1.HTTPSProtocolType, ptr("fourth-example.wildcard.org")),
+				),
+			},
+			expected: map[string]listenerConflictCondition{
+				"default/gw1_catch-all":               {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_wildcard":                {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_specific":                {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_specific-under-wildcard": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
 			},
 		},
 		{
@@ -202,14 +247,14 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 				mkGateway("gw2", t2,
 					mkListener("ok-foo", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
-					mkListener("conflict-all", 80, gatewayv1.HTTPProtocolType, nil), // nil = matches all, overlaps with ok-foo in same gw
+					mkListener("catch-all", 80, gatewayv1.HTTPProtocolType, nil), // nil = empty hostname, does NOT conflict with ok-foo (catch-all coexists with specific hostnames)
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_http":         {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_http2":        {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw2_ok-foo":       {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw2_conflict-all": {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_http":      {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_http2":     {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw2_ok-foo":    {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw2_catch-all": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -217,29 +262,29 @@ func TestComputeListenerConflicts(t *testing.T) {
 			gateways: []*Gateway{
 				mkGateway("gw1", t1,
 					mkListener("http-foo", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),   // Winner (Insecure)
-					mkListener("https-bar", 80, gatewayv1.HTTPSProtocolType, ptr("bar.com")), // Conflict (Secure != Insecure, winner is Insecure), distinct host irrelevant
-					mkListener("tls-foo", 80, gatewayv1.TLSProtocolType, ptr("foo.com")),     // Conflict (TLS != Insecure, winner is Insecure), overlapping host irrelevant
-					mkListener("http-wild", 80, gatewayv1.HTTPProtocolType, ptr("*.com")),    // Same category (Insecure). Overlaps "foo.com". Conflict.
-					mkListener("http-bar", 80, gatewayv1.HTTPProtocolType, ptr("bar.com")),   // Same category. No overlap with "foo.com". OK.
+					mkListener("https-bar", 80, gatewayv1.HTTPSProtocolType, ptr("bar.com")), // Conflict (Secure != Insecure), distinct host irrelevant
+					mkListener("tls-foo", 80, gatewayv1.TLSProtocolType, ptr("foo.com")),     // Conflict (TLS != Insecure), host irrelevant
+					mkListener("http-wild", 80, gatewayv1.HTTPProtocolType, ptr("*.com")),    // Same category. Different hostname string → no hostname conflict.
+					mkListener("http-bar", 80, gatewayv1.HTTPProtocolType, ptr("bar.com")),   // Same category. Different hostname string → no conflict.
 					mkListener("tcp", 80, gatewayv1.TCPProtocolType, nil),                    // Conflict (Unknown != Insecure)
 				),
 				mkGateway("gw2", t1,
 					mkListener("tls-foo", 443, gatewayv1.TLSProtocolType, ptr("foo.com")),     // Winner (TLS)
 					mkListener("https-bar", 443, gatewayv1.HTTPSProtocolType, ptr("bar.com")), // Conflict (Secure != TLS)
-					mkListener("tls-wild", 443, gatewayv1.TLSProtocolType, ptr("*.com")),      // Conflict (Overlaps "foo.com")
-					mkListener("tls-bar", 443, gatewayv1.TLSProtocolType, ptr("bar.com")),     // OK (No overlap with "foo.com")
+					mkListener("tls-wild", 443, gatewayv1.TLSProtocolType, ptr("*.com")),      // Same category. Different hostname string → no conflict.
+					mkListener("tls-bar", 443, gatewayv1.TLSProtocolType, ptr("bar.com")),     // Same category. Different hostname string → no conflict.
 				),
 			},
 			expected: map[string]listenerConflictCondition{
 				"default/gw1_http-foo":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
 				"default/gw1_https-bar": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategorySecure},
 				"default/gw1_tls-foo":   {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategoryTLS},
-				"default/gw1_http-wild": {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_http-wild": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
 				"default/gw1_http-bar":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
 				"default/gw1_tcp":       {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProcotolCategoryTCP},
 				"default/gw2_tls-foo":   {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryTLS},
 				"default/gw2_https-bar": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategorySecure},
-				"default/gw2_tls-wild":  {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryTLS},
+				"default/gw2_tls-wild":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryTLS},
 				"default/gw2_tls-bar":   {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryTLS},
 			},
 		},

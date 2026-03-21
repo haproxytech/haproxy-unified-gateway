@@ -113,54 +113,7 @@ func TestSupportedKinds(t *testing.T) {
 	}
 }
 
-func Test_matchesWithWildcard(t *testing.T) {
-	tests := []struct {
-		name     string
-		wildcard string
-		hostname string
-		want     bool
-	}{
-		{
-			name:     "subdomain",
-			wildcard: "*.example.com",
-			hostname: "foo.example.com",
-			want:     true,
-		},
-		{
-			name:     "not a subdomain, just the domain",
-			wildcard: "*.example.com",
-			hostname: "example.com",
-			want:     false, // Gateway API spec: A wildcard domain does not match the parent domain
-		},
-		{
-			name:     "not a subdomain, just the suffix",
-			wildcard: "*.example.com",
-			hostname: ".example.com",
-			want:     false,
-		},
-		{
-			name:     "non-matching domain",
-			wildcard: "*.example.com",
-			hostname: "foo.example.org",
-			want:     false,
-		},
-		{
-			name:     "empty hostname",
-			wildcard: "*.example.com",
-			hostname: "",
-			want:     true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := matchesWithWildcard(tt.wildcard, tt.hostname); got != tt.want {
-				t.Errorf("matchesWildcard() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_overlaps(t *testing.T) {
+func Test_hostnameConflicts(t *testing.T) {
 	tests := []struct {
 		name      string
 		hostname1 string
@@ -180,58 +133,72 @@ func Test_overlaps(t *testing.T) {
 			want:      true,
 		},
 		{
-			name:      "wildcard h1 matches h2",
-			hostname1: "*.example.com",
-			hostname2: "foo.example.com",
-			want:      true,
-		},
-		{
-			name:      "wildcard h2 matches h1",
-			hostname1: "foo.example.com",
-			hostname2: "*.example.com",
-			want:      true,
-		},
-		{
-			name:      "wildcard does not match parent domain",
-			hostname1: "*.example.com",
-			hostname2: "example.com",
-			want:      false, // Gateway API spec: A wildcard domain does not match the parent domain
-		},
-		{
 			name:      "wildcards are identical",
 			hostname1: "*.example.com",
 			hostname2: "*.example.com",
 			want:      true,
 		},
 		{
-			name:      "wildcards do not overlap",
+			name:      "both empty - two catch-all listeners conflict",
+			hostname1: "",
+			hostname2: "",
+			want:      true,
+		},
+		// The following pairs are different hostname values: specificity rules (exact >
+		// wildcard > empty) always produce an unambiguous winner, so no conflict.
+		{
+			name:      "wildcard vs matching specific - no conflict (specific beats wildcard)",
+			hostname1: "*.example.com",
+			hostname2: "foo.example.com",
+			want:      false,
+		},
+		{
+			name:      "specific vs matching wildcard - no conflict (specific beats wildcard)",
+			hostname1: "foo.example.com",
+			hostname2: "*.example.com",
+			want:      false,
+		},
+		{
+			name:      "wildcard vs parent domain - no conflict",
+			hostname1: "*.example.com",
+			hostname2: "example.com",
+			want:      false,
+		},
+		{
+			name:      "two different wildcards - no conflict",
 			hostname1: "*.foo.com",
 			hostname2: "*.bar.com",
 			want:      false,
 		},
 		{
-			name:      "no match",
+			name:      "two different exact hostnames - no conflict",
 			hostname1: "one.com",
 			hostname2: "two.com",
 			want:      false,
 		},
 		{
-			name:      "empty hostname #1",
+			name:      "empty vs specific - no conflict (empty coexists with specific)",
 			hostname1: "",
 			hostname2: "one.com",
-			want:      true,
+			want:      false,
 		},
 		{
-			name:      "empty hostname #2",
+			name:      "specific vs empty - no conflict (empty coexists with specific)",
 			hostname1: "one.com",
 			hostname2: "",
-			want:      true,
+			want:      false,
+		},
+		{
+			name:      "empty vs wildcard - no conflict (empty coexists with wildcard)",
+			hostname1: "",
+			hostname2: "*.example.com",
+			want:      false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := overlaps(tt.hostname1, tt.hostname2); got != tt.want {
-				t.Errorf("overlaps() = %v, want %v", got, tt.want)
+			if got := hostnameConflicts(tt.hostname1, tt.hostname2); got != tt.want {
+				t.Errorf("hostnameConflicts() = %v, want %v", got, tt.want)
 			}
 		})
 	}

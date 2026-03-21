@@ -16,7 +16,6 @@ package gateway
 
 import (
 	"context"
-	"slices"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -66,32 +65,9 @@ func (s *GatewaySuite) expectConditionsUpdated(ctx context.Context, namespace, n
 		// Define the option
 		opts := cmpopts.IgnoreTypes(v1.Time{})
 		diffConds := cmp.Diff(expectedConditions, gotConditions, opts)
-		sortListenerStatus(expectedListenerStatuses)
-		sortListenerStatus(gw.Status.Listeners)
+		utils.SortListenerStatus(expectedListenerStatuses)
+		utils.SortListenerStatus(gw.Status.Listeners)
 		diffListeners := cmp.Diff(expectedListenerStatuses, gw.Status.Listeners, opts)
 		s.T().Fatalf("conditions not correct for Gateway [%s/%s]. Diff conds: \n%v. Diff listener conds \n%v", namespace, name, diffConds, diffListeners)
-	}
-}
-
-func sortListenerStatus(listeners []gatewayv1.ListenerStatus) {
-	slices.SortFunc(listeners, func(a, b gatewayv1.ListenerStatus) int {
-		if a.Name < b.Name {
-			return -1
-		}
-		if a.Name > b.Name {
-			return 1
-		}
-		return 0
-	})
-	for _, l := range listeners {
-		slices.SortFunc(l.Conditions, func(a, b v1.Condition) int {
-			if a.Type < b.Type {
-				return -1
-			}
-			if a.Type > b.Type {
-				return 1
-			}
-			return 0
-		})
 	}
 }

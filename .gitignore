@@ -14,3 +14,4 @@ test/integration/*/certs
 test/integration/*/patterns
 ci/k0s/k0s-data/
 test/conformance/conformance-report.yaml
+conformance-junit.xml

@@ -142,6 +142,27 @@ func (s *GatewayTestSuite) Test_Gateway_conflict_at_least_1_listener_ok() {
 	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
 }
 
+func (s *GatewayTestSuite) Test_Gateway_conflict_empty_hostname_no_conflict() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "conflict"
+	subFixtureDir := "empty_hostname"
+
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, subFixtureDir)
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	// An empty hostname (catch-all) must not conflict with a specific hostname on the same port.
+	// Both listeners should be accepted.
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "conditions-gateway.yaml")
+	expectedConditions := s.YamlToConditions(expectedCondPath)
+	expectedListenerStatusesPath := path.Join(expectationsPath, "listener_statuses-gateway.yaml")
+	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
+
+	gwName := "gateway"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+}
+
 func (s *GatewayTestSuite) Test_Gateway_conflict_0_listener_ok() {
 	fixtureDirPath := utils.GetCRDFixturePath()
 	fixtureDir := "conflict"

@@ -45,7 +45,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 
 	// In portListeners we have now all listeners grouped by port.
 	// Some of them are already marked as conflicting because of protocol category difference.
-	// Now we need to check for hostname overlaps, but only within the same Gateway.
+	// Now we need to check for hostname conflicts, but only within the same Gateway.
 	for port, listeners := range portListeners {
 		if _, ok := b.ControllerStore.mapPort2Listeners[port]; !ok {
 			b.ControllerStore.mapPort2Listeners[port] = make(map[client.ObjectKey]listenerConflictCondition)
@@ -84,7 +84,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 				jKey := NewListenerKey(listeners[j].gatewayRef, listeners[j].listenerRef)
 				jHostname := utils.PointerDefaultValueIfNil(listeners[j].listenerRef.Hostname)
 
-				if overlaps(string(iHostname), string(jHostname)) {
+				if hostnameConflicts(string(iHostname), string(jHostname)) {
 					b.ControllerStore.mapPort2Listeners[port][jKey] = listenerConflictCondition{
 						hasConflict: true,
 						reason:      string(gatewayv1.ListenerReasonHostnameConflict),

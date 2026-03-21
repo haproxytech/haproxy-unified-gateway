@@ -49,11 +49,7 @@ const (
 	showDebug = true
 )
 
-var (
-	gwClassName = envOrDefault("HUG_GATEWAY_CLASS", "haproxy")
-	httpPort    = envOrDefault("HUG_HTTP_PORT", "31080")
-	httpsPort   = envOrDefault("HUG_HTTPS_PORT", "31443")
-)
+var gwClassName = envOrDefault("HUG_GATEWAY_CLASS", "haproxy")
 
 func envOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {

@@ -69,8 +69,12 @@ func (s *GatewayTLSSuite) expectGwConditionsUpdated(ctx context.Context, namespa
 
 		return status.ListenerStatusesEqual(gw.Status.Listeners, expectedListenerStatuses)
 	}) {
+		// Define the option
 		opts := cmpopts.IgnoreTypes(v1.Time{})
 		diffConds := cmp.Diff(expectedConditions, gotConditions, opts)
-		s.T().Fatalf("conditions not correct %s", diffConds)
+		utils.SortListenerStatus(expectedListenerStatuses)
+		utils.SortListenerStatus(gw.Status.Listeners)
+		diffListeners := cmp.Diff(expectedListenerStatuses, gw.Status.Listeners, opts)
+		s.T().Fatalf("conditions not correct for Gateway [%s/%s]. Diff conds: \n%v. Diff listener conds \n%v", namespace, name, diffConds, diffListeners)
 	}
 }

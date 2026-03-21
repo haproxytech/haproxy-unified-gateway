@@ -1,0 +1,14 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: catch-all
+    port: 8080
+    protocol: HTTP
+  - name: specific
+    port: 8080
+    protocol: HTTP
+    hostname: foo.com

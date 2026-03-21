@@ -15,17 +15,12 @@
     reason: Accepted
     status: "True"
     type: Accepted
-  name: http
+  name: catch-all
   supportedKinds:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute
 - attachedRoutes: 0
   conditions:
-  - message: Listener is accepted
-    observedGeneration: 1
-    reason: Accepted
-    status: "True"
-    type: Accepted
   - message: Listener references have been resolved
     observedGeneration: 1
     reason: ResolvedRefs
@@ -36,7 +31,12 @@
     reason: Programmed
     status: "True"
     type: Programmed
-  name: https
+  - message: Listener is accepted
+    observedGeneration: 1
+    reason: Accepted
+    status: "True"
+    type: Accepted
+  name: specific
   supportedKinds:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute

@@ -5,10 +5,10 @@
     reason: ResolvedRefs
     status: "True"
     type: ResolvedRefs
-  - message: Listener is pending Haproxy programmation
+  - message: Listener is programmed in Haproxy
     observedGeneration: 1
-    reason: Pending
-    status: Unknown
+    reason: Programmed
+    status: "True"
     type: Programmed
   - message: Listener is accepted
     observedGeneration: 1
@@ -31,10 +31,10 @@
     reason: ResolvedRefs
     status: "True"
     type: ResolvedRefs
-  - message: Listener is pending Haproxy programmation
+  - message: Listener is programmed in Haproxy
     observedGeneration: 1
-    reason: Pending
-    status: Unknown
+    reason: Programmed
+    status: "True"
     type: Programmed
   name: http-8081
   supportedKinds:

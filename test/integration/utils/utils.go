@@ -19,10 +19,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func GetIntTestNamespace(levelsUp int) (string, error) {
@@ -58,4 +61,27 @@ func WaitFor(ctx context.Context, interval time.Duration, timeout time.Duration,
 	})
 	//revive:enable
 	return err == nil
+}
+
+func SortListenerStatus(listeners []gatewayv1.ListenerStatus) {
+	slices.SortFunc(listeners, func(a, b gatewayv1.ListenerStatus) int {
+		if a.Name < b.Name {
+			return -1
+		}
+		if a.Name > b.Name {
+			return 1
+		}
+		return 0
+	})
+	for _, l := range listeners {
+		slices.SortFunc(l.Conditions, func(a, b v1.Condition) int {
+			if a.Type < b.Type {
+				return -1
+			}
+			if a.Type > b.Type {
+				return 1
+			}
+			return 0
+		})
+	}
 }

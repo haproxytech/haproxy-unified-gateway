@@ -359,43 +359,21 @@ func (l *Listener) checkConflict(treeGw *Gateway, listenersPerPort map[gatewayv1
 	}
 }
 
-// overlaps checks if h1 and h2 represent the same or overlapping traffic.
-func overlaps(h1, h2 string) bool {
-	// 0. "" (empty) matches all hostnames
-	if h1 == "" || h2 == "" {
-		return true
-	}
-	// 1. Standardize to lowercase (Hostnames are case-insensitive)
-	h1 = strings.ToLower(strings.TrimSuffix(h1, "."))
-	h2 = strings.ToLower(strings.TrimSuffix(h2, "."))
-
-	// 2. Exact match
-	if h1 == h2 {
-		return true
-	}
-
-	// 3. Handle Wildcards (e.g., *.example.com)
-	if strings.HasPrefix(h1, "*.") {
-		return matchesWithWildcard(h1, h2)
-	}
-	if strings.HasPrefix(h2, "*.") {
-		return matchesWithWildcard(h2, h1)
-	}
-
-	return false
-}
-
-// matchesWithWildcard checks if hostname2 matches the wildcard pattern of hostname1.
-func matchesWithWildcard(wildcard, hostname string) bool {
-	// An empty hostname implies it matches all hostnames, including wildcards,
-	// aligning with the Gateway API's interpretation of an empty hostname.
-	if hostname == "" {
-		return true
-	}
-	// Remove the "*." prefix
-	suffix := wildcard[1:] // results in ".example.com"
-	// Check if the hostname ends with that suffix and isn't just the suffix itself
-	return strings.HasSuffix(hostname, suffix) && len(hostname) > len(suffix)
+// hostnameConflicts reports whether two listener hostnames conflict for the purpose
+// of the Gateway API "HostnameConflict" condition.
+//
+// Per the Gateway API spec, two listeners conflict only when they have the exact
+// same hostname value (case-insensitive). Different hostnames — even when one is a
+// wildcard that would match the other — do NOT conflict, because specificity rules
+// (exact > wildcard > empty) always produce an unambiguous winner for any request.
+//
+// Concretely:
+//   - "" vs ""           → conflict  (two catch-all listeners, identical)
+//   - "" vs "foo.com"    → no conflict  (catch-all coexists with specific)
+//   - "*.ex.com" vs "foo.ex.com" → no conflict  (specific beats wildcard, unambiguous)
+//   - "*.ex.com" vs "*.ex.com"   → conflict  (identical wildcards)
+func hostnameConflicts(h1, h2 string) bool {
+	return strings.EqualFold(strings.TrimSuffix(h1, "."), strings.TrimSuffix(h2, "."))
 }
 
 func (*Listener) isSupportedCertKindGroup(certRef gatewayv1.SecretObjectReference) bool {

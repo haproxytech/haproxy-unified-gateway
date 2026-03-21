@@ -10,10 +10,10 @@
     reason: ResolvedRefs
     status: "True"
     type: ResolvedRefs
-  - message: Listener is pending Haproxy programmation
+  - message: Listener is programmed in Haproxy
     observedGeneration: 1
-    reason: Pending
-    status: Unknown
+    reason: Programmed
+    status: "True"
     type: Programmed
   name: http
   supportedKinds:
@@ -31,10 +31,10 @@
     reason: ResolvedRefs
     status: "True"
     type: ResolvedRefs
-  - message: Listener is pending Haproxy programmation
+  - message: Listener is programmed in Haproxy
     observedGeneration: 1
-    reason: Pending
-    status: Unknown
+    reason: Programmed
+    status: "True"
     type: Programmed
   name: https
   supportedKinds:

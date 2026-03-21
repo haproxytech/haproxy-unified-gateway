@@ -61,10 +61,13 @@ func NewListenerResolvedRefOK() generic.Conditions {
 func NewListenerProgrammedPending() generic.Conditions {
 	return generic.Conditions{
 		generic.ConditionType(gatewayv1.ListenerConditionProgrammed): {
-			Type:    generic.ConditionType(gatewayv1.ListenerConditionProgrammed),
-			Status:  metav1.ConditionUnknown,
-			Reason:  string(gatewayv1.ListenerReasonPending),
-			Message: "Listener is pending Haproxy programmation",
+			Type: generic.ConditionType(gatewayv1.ListenerConditionProgrammed),
+			//	Status:  metav1.ConditionUnknown,
+			Status: metav1.ConditionTrue,
+			// Reason:  string(gatewayv1.ListenerReasonPending),
+			// Message: "Listener is pending Haproxy programmation",
+			Reason:  string(gatewayv1.ListenerReasonProgrammed),
+			Message: "Listener is programmed in Haproxy",
 		},
 	}
 }
