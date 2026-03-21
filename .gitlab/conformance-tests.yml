@@ -21,7 +21,7 @@ conformance-MR-GW-API-1_3_0:
     CONFORMANCE_SKIP_TESTS: "HTTPRouteHeaderMatching,HTTPRouteInvalidBackendRefUnknownKind,HTTPRouteInvalidCrossNamespaceBackendRef,HTTPRouteInvalidCrossNamespaceParentRef,HTTPRouteInvalidNonExistentBackendRef,HTTPRouteListenerHostnameMatching,HTTPRouteMatching,HTTPRouteMatchingAcrossRoutes,HTTPRouteObservedGenerationBump,HTTPRoutePathMatchOrder,HTTPRouteRedirectHostAndStatus,HTTPRouteRequestHeaderModifier,HTTPRouteServiceTypes,HTTPRouteSimpleSameNamespace,HTTPRouteWeight,GatewaySecretInvalidReferenceGrant,GatewaySecretMissingReferenceGrant,GatewaySecretReferenceGrantAllInNamespace,GatewaySecretReferenceGrantSpecific,HTTPRouteInvalidReferenceGrant,HTTPRoutePartiallyInvalidViaInvalidReferenceGrant,HTTPRouteReferenceGrant"
   before_script:
     - export PATH=$PATH:/root/go/bin
-    - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
+    - docker login -u="$app" -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
     - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
     - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
     - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
