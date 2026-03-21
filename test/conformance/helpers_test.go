@@ -19,14 +19,9 @@ package conformance_test
 import (
 	"context"
 	"net"
-	"testing"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // newPortRemappingDialer returns a DialContext function that remaps Gateway API
@@ -50,84 +45,6 @@ func newPortRemappingDialer(httpPort, httpsPort string) func(ctx context.Context
 		var d net.Dialer
 		return d.DialContext(ctx, network, addr)
 	}
-}
-
-// startGatewayAddressPatcher runs a background goroutine that watches for
-// Gateways using the specified GatewayClass and patches their status with
-// a node IP address. This is necessary because HUG does not currently set
-// Gateway.Status.Addresses, and the conformance tests require it.
-//
-// Returns a stop function that should be deferred.
-func startGatewayAddressPatcher(t *testing.T, c client.Client, cs clientset.Interface, gatewayClass string) func() {
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				patchGatewayAddresses(ctx, t, c, cs, gatewayClass)
-			}
-		}
-	}()
-
-	return func() {
-		cancel()
-		<-done
-	}
-}
-
-// patchGatewayAddresses finds all Gateways using the given GatewayClass
-// and ensures they have at least one address in their status.
-func patchGatewayAddresses(ctx context.Context, t *testing.T, c client.Client, cs clientset.Interface, gatewayClass string) {
-	gwList := &gatewayv1.GatewayList{}
-	if err := c.List(ctx, gwList); err != nil {
-		return
-	}
-
-	nodeIP := getNodeIP(ctx, cs)
-	if nodeIP == "" {
-		return
-	}
-
-	ipType := gatewayv1.IPAddressType
-	for i := range gwList.Items {
-		gw := &gwList.Items[i]
-		if string(gw.Spec.GatewayClassName) != gatewayClass {
-			continue
-		}
-		if hasAddress(gw) {
-			continue
-		}
-
-		patch := client.MergeFrom(gw.DeepCopy())
-		gw.Status.Addresses = []gatewayv1.GatewayStatusAddress{
-			{
-				Type:  &ipType,
-				Value: nodeIP,
-			},
-		}
-		if err := c.Status().Patch(ctx, gw, patch); err != nil {
-			t.Logf("failed to patch Gateway %s/%s address: %v", gw.Namespace, gw.Name, err)
-		} else {
-			t.Logf("patched Gateway %s/%s with address %s", gw.Namespace, gw.Name, nodeIP)
-		}
-	}
-}
-
-func hasAddress(gw *gatewayv1.Gateway) bool {
-	for _, addr := range gw.Status.Addresses {
-		if addr.Type != nil && addr.Value != "" {
-			return true
-		}
-	}
-	return false
 }
 
 // getNodeIP returns the InternalIP of the first Ready node in the cluster.

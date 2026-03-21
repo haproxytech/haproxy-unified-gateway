@@ -17,6 +17,7 @@
 package conformance_test
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"strings"
@@ -49,7 +50,11 @@ const (
 	showDebug = true
 )
 
-var gwClassName = envOrDefault("HUG_GATEWAY_CLASS", "haproxy")
+var (
+	gwClassName = envOrDefault("HUG_GATEWAY_CLASS", "haproxy")
+	httpPort    = envOrDefault("HUG_HTTP_PORT", "31080")
+	httpsPort   = envOrDefault("HUG_HTTPS_PORT", "31443")
+)
 
 func envOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -76,13 +81,13 @@ func TestConformance(t *testing.T) {
 	require.NoError(t, v1alpha3.Install(c.Scheme()))
 	require.NoError(t, apiextensionsv1.AddToScheme(c.Scheme()))
 
-	supportedFeatures := sets.New[features.FeatureName](
+	supportedFeatures := sets.New(
 		features.SupportGateway,
 		features.SupportHTTPRoute,
 		features.SupportReferenceGrant,
 	)
 
-	conformanceProfiles := sets.New[suite.ConformanceProfileName](
+	conformanceProfiles := sets.New(
 		suite.GatewayHTTPConformanceProfileName,
 	)
 
@@ -92,6 +97,9 @@ func TestConformance(t *testing.T) {
 	}
 
 	reportOutput := envOrDefault("CONFORMANCE_REPORT_OUTPUT", "conformance-report.yaml")
+
+	nodeIP := getNodeIP(context.Background(), cs)
+	t.Logf("NodeIP %s", nodeIP)
 
 	opts := suite.ConformanceOptions{
 		Client:               c,
@@ -104,6 +112,7 @@ func TestConformance(t *testing.T) {
 		SupportedFeatures:    supportedFeatures,
 		ConformanceProfiles:  conformanceProfiles,
 		TimeoutConfig:        conformanceconfig.DefaultTimeoutConfig(),
+		// RoundTripper:         rt,
 		AllowCRDsMismatch:    true,
 		SkipProvisionalTests: true,
 		Implementation: confv1.Implementation{

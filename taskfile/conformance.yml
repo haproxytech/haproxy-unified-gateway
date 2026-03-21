@@ -7,21 +7,15 @@ vars:
   CONFORMANCE_COREDNS_IMAGE: "registry.k8s.io/coredns/coredns:v1.12.2"
 
 tasks:
+
+### -----------------
+### Tasks for CI
+### -----------------
   conformance-pull-images:
     desc: "pre-pull images required by conformance tests"
     cmds:
       - docker pull {{.CONFORMANCE_ECHO_IMAGE}}
       - docker pull {{.CONFORMANCE_COREDNS_IMAGE}}
-
-  conformance-create:
-    desc: "create a Kind cluster for conformance testing"
-    cmds:
-      - task: kind-create-cluster
-        vars:
-          KIND_CONFIG: "kind-config-conformance.yaml"
-      - task: "{{ .CONTROLLER_BUILD_TASK | default \"kind-build-controller-image-build-in-docker\" }}"
-      - task: conformance-pull-images
-      - task: conformance-deploy
 
   conformance-create-ci:
     desc: "create a Kind cluster for conformance testing in Docker-in-Docker CI"
@@ -39,8 +33,11 @@ tasks:
       # The dind service is reachable via the "docker" hostname on port 7443.
       - /{{.kubectl}} config set-cluster kind-{{.CLUSTER_NAME}} --server=https://docker:7443 --insecure-skip-tls-verify=true
       - task: conformance-deploy
+      # Run the routing fix here
+      - task: conformance-setup-routing-ci
 
-  conformance-deploy:
+  ## This task is specific for CI as it deploys hug-conformance-ci/controller.yaml
+  conformance-deploy-ci:
     desc: "deploy HUG and prerequisites for conformance testing"
     deps:
       - task: check-kubectl
@@ -65,13 +62,71 @@ tasks:
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/rbac.yaml
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/hugconf.yaml
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/global.yaml
-      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug-dev/controller.yaml
+      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug-conformance-ci/controller.yaml
       # Wait for controller
       - /{{.kubectl}} wait --for=condition=ready --timeout=120s pod -l run=haproxy-unified-gateway -n haproxy-unified-gateway
       # Create GatewayClass for conformance
       - /{{.kubectl}} apply -f test/conformance/manifests/gatewayclass.yaml
       - echo "HUG deployed. Ready for conformance tests."
 
+
+  conformance-setup-routing-ci:
+    internal: true
+    desc: "Dynamically redirect NodeIP traffic to the reachable Docker host port"
+    deps:
+      - task: check-kubectl
+    vars:
+      kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
+    cmds:
+      - |
+        echo kubectl /{{.kubectl}}
+        # 1. Get the reachable IP of the 'docker' service (the DinD host)
+        DOCKER_HOST_IP=$(getent hosts docker | awk '{ print $1 }')
+        echo "Docker Host (Reachable): ${DOCKER_HOST_IP}"
+
+
+        # 2. Dynamically find the Internal IP of the Kind Control Plane node
+        # This is the IP the Controller puts in the Gateway status
+        TARGET_NODE_IP=$(/{{.kubectl}} get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' | awk '{print $1}')
+
+        echo "--- Network Info ---"
+        echo "DinD Host (Reachable): ${DOCKER_HOST_IP}"
+        echo "Kind Node (Internal):  ${TARGET_NODE_IP}"
+        echo "--------------------"
+
+        if [ -z "$TARGET_NODE_IP" ]; then
+          echo "Error: Could not find Kind Node IP. Is the cluster up?"
+          exit 1
+        fi
+
+        echo "Redirecting traffic: ${TARGET_NODE_IP}:80 -> ${DOCKER_HOST_IP}:8080"
+        echo "Redirecting traffic: ${TARGET_NODE_IP}:443 -> ${DOCKER_HOST_IP}:8443"
+
+        # 3. Apply DNAT rules for HTTP and HTTPS
+        # We use -I (Insert) to ensure these rules hit before any default rejections
+        iptables -t nat -I OUTPUT -d ${TARGET_NODE_IP} -p tcp --dport 80 -j DNAT --to-destination ${DOCKER_HOST_IP}:8080
+        iptables -t nat -I OUTPUT -d ${TARGET_NODE_IP} -p tcp --dport 443 -j DNAT --to-destination ${DOCKER_HOST_IP}:8443
+
+        # 4. Apply Masquerade to ensure the return path works in DinD
+        iptables -t nat -I POSTROUTING -j MASQUERADE
+
+        # 5. Log the active rules for CI debugging
+        iptables -t nat -L OUTPUT -n -v
+
+        # 6. Debug
+        SVC=$(/{{.kubectl}} get svc haproxy-unified-gateway-ci -n haproxy-unified-gateway -o jsonpath='{.spec.ports[0].nodePort}')
+        echo "SVC: ${SVC}"
+
+
+
+### -----------------
+### Tasks common for CI and local tests
+### -----------------
+
+  ## To run a specific test: set env variable
+  ##    CONFORMANCE_RUN_TEST
+  ## To skip some tests and run all others: set env variable CONFORMANCE_SKIP_TESTS (comma separated list of ShortNames)
+  ##    CONFORMANCE_SKIP_TESTS
   conformance-run:
     desc: "run Gateway API conformance tests (cluster must be ready)"
     deps:
@@ -101,9 +156,3 @@ tasks:
             {{if .CONFORMANCE_SKIP_TESTS}}-skip-tests '{{.CONFORMANCE_SKIP_TESTS}}'{{end}}
       - echo "Conformance report written to {{.CONFORMANCE_REPORT_OUTPUT}}"
       - echo "JUnit report written to {{.CONFORMANCE_JUNIT_OUTPUT}}"
-
-  conformance:
-    desc: "create cluster, deploy HUG, and run conformance tests"
-    cmds:
-      - task: conformance-create
-      - task: conformance-run
