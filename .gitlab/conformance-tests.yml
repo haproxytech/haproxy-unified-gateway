@@ -5,6 +5,7 @@ conformance-MR-GW-API-1_3_0:
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'push'
   image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
   services:
     - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
