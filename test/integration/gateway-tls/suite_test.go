@@ -18,11 +18,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/status"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/base"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -49,6 +52,8 @@ func (s *GatewayTLSSuite) expectGwConditionsUpdated(ctx context.Context, namespa
 	expectedListenerStatuses []gatewayv1.ListenerStatus,
 ) {
 	gw := &gatewayv1.Gateway{}
+	var gotConditions conditions.Conditions
+
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		if err := s.Test().Client.Get(
 			s.Test().Ctx,
@@ -64,6 +69,8 @@ func (s *GatewayTLSSuite) expectGwConditionsUpdated(ctx context.Context, namespa
 
 		return status.ListenerStatusesEqual(gw.Status.Listeners, expectedListenerStatuses)
 	}) {
-		s.T().Fatal("conditions not correct")
+		opts := cmpopts.IgnoreTypes(v1.Time{})
+		diffConds := cmp.Diff(expectedConditions, gotConditions, opts)
+		s.T().Fatalf("conditions not correct %s", diffConds)
 	}
 }
