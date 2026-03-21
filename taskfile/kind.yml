@@ -116,8 +116,6 @@ tasks:
 
   kind-create:
     desc: "create a standard KinD cluster"
-    vars:
-      KIND_CONFIG: "kind-config.yaml"
     cmds:
       - task: kind-create-internal
         vars:
@@ -125,8 +123,6 @@ tasks:
 
   kind-create-debug:
     desc: "create a KinD cluster for local debug (start Hug in local) (no host port maps)"
-    vars:
-      KIND_CONFIG: "kind-config-dev.yaml"
     cmds:
       - task: kind-create-internal
         vars:

@@ -16,28 +16,28 @@ task conformance-create   # create cluster + build + deploy
 task conformance-run      # run conformance tests (cluster must exist)
 ```
 
-The standalone script can also be used:
-
-```bash
-./test/conformance/scripts/setup.sh --all
-```
 
 ## Running a single test
 
-Use the `RUN` variable to filter which conformance test(s) to execute:
+Use the `CONFORMANCE_RUN_TEST` variable to filter which conformance test(s) to execute:
 
 ```bash
 # Run a single test
-task conformance-run RUN="TestConformance/HTTPRouteServiceTypes"
-
-# Run several tests (regex)
-task conformance-run RUN="TestConformance/(HTTPRouteServiceTypes|HTTPRouteSimpleSameNamespace)"
+task conformance-run CONFORMANCE_RUN_TEST="HTTPRouteServiceTypes"
 ```
 
-The value is passed to `go test -run`, which filters on Go subtests.
-Note that the conformance suite still runs full setup (applying all manifests)
-regardless of the filter — only the actual test execution is skipped for
-non-matching tests.
+where `HTTPRouteServiceTypes` is the shortname of the test.
+
+## Skipping some tests
+
+Use the `CONFORMANCE_SKIP_TESTS` variable to filter which conformance test(s) to execute:
+
+Where `CONFORMANCE_SKIP_TESTS` contains a list of comma separated shortnames of tests to skip:
+
+```bash
+task conformance-run CONFORMANCE_SKIP_TESTS="HTTPRouteHeaderMatching,HTTPRouteInvalidBackendRefUnknownKind"
+```
+
 
 ## What the tests produce
 
@@ -72,30 +72,10 @@ can be added to `test/conformance/conformance_test.go` as HUG gains support.
 | Variable | Default | Description |
 |---|---|---|
 | `HUG_GATEWAY_CLASS` | `haproxy` | GatewayClass name used in tests |
-| `HUG_HTTP_PORT` | `31080` | NodePort for HTTP traffic |
-| `HUG_HTTPS_PORT` | `31443` | NodePort for HTTPS traffic |
 | `HUG_TEST_TLS` | _(unset)_ | Set to `1` to enable the GATEWAY-TLS profile |
-| `CONFORMANCE_REPORT_OUTPUT` | `conformance-report.yaml` | Path for the conformance report |
+| `CONFORMANCE_REPORT_OUTPUT` | `conformance-report.yaml` | Path for the conformance report
 
 ## Architecture
-
-### Port remapping
-
-HUG serves traffic on NodePort ports (31080/31443), but the conformance tests
-create Gateways with standard ports (80/443). A custom `DialContext` on the
-`DefaultRoundTripper` transparently remaps connections:
-
-```
-test connects to <node-ip>:80  →  DialContext rewrites to <node-ip>:31080
-test connects to <node-ip>:443 →  DialContext rewrites to <node-ip>:31443
-```
-
-### Gateway address patching
-
-HUG does not currently set `Gateway.Status.Addresses`. The conformance framework
-requires an address to send traffic. A background goroutine watches for Gateways
-with the conformance GatewayClass and patches their status with the Kind node's
-InternalIP.
 
 ### Report always written
 
