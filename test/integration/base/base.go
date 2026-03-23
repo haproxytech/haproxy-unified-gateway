@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
 	futils "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/fileutils"
 	dto "github.com/prometheus/client_model/go"
@@ -508,7 +509,7 @@ func (*BaseSuite) areCrtListContentEqual(expected, got []string) bool {
 }
 
 func (b *BaseSuite) ExpectFrontends(ctx context.Context, expectationPath string, expectedFrontends []string) {
-	var diffs map[string][]any
+	var diffs string
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		frontends, err := b.test.HaproxyClient.FrontendsGet()
 		if err != nil {
@@ -531,7 +532,7 @@ func (b *BaseSuite) ExpectFrontends(ctx context.Context, expectationPath string,
 			expectedFrontend := b.FrontendFromManifest(expectationPath, expectedFeName)
 			areSame := expectedFrontend.Equal(*gotFrontend)
 			if !areSame {
-				diffs = expectedFrontend.Diff(*gotFrontend)
+				diffs = cmp.Diff(expectedFrontend, *gotFrontend)
 				return false
 			}
 		}
@@ -553,7 +554,7 @@ func (b *BaseSuite) FrontendFromManifest(manifestPath, manifestName string) *mod
 }
 
 func (b *BaseSuite) ExpectBackends(ctx context.Context, expectationPath string, expectedBackends []string) {
-	var diffs map[string][]any
+	var diffs string
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		backends, err := b.test.HaproxyClient.BackendsGet()
 		if err != nil {
@@ -576,7 +577,7 @@ func (b *BaseSuite) ExpectBackends(ctx context.Context, expectationPath string, 
 			expectedBackend := b.BackendFromManifest(expectationPath, expectedBeName)
 			areSame := expectedBackend.Equal(*gotBackend)
 			if !areSame {
-				diffs = expectedBackend.Diff(*gotBackend)
+				diffs = cmp.Diff(expectedBackend, *gotBackend)
 				return false
 			}
 		}
