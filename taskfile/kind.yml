@@ -115,18 +115,11 @@ tasks:
       - "/{{.kind}} delete cluster --name {{.CLUSTER_NAME}}"
 
   kind-create:
-    desc: "create a standard KinD cluster"
+    desc: "create a KinD cluster for local debug (start Hug in local) (no host port maps as we have a LoadBalancer service)"
     cmds:
       - task: kind-create-internal
         vars:
           KIND_CONFIG: "kind-config.yaml"
-
-  kind-create-debug:
-    desc: "create a KinD cluster for local debug (start Hug in local) (no host port maps)"
-    cmds:
-      - task: kind-create-internal
-        vars:
-          KIND_CONFIG: "kind-config-dev.yaml"
 
   kind-create-internal:
     internal: true

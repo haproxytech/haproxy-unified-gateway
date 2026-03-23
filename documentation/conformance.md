@@ -25,7 +25,6 @@ Use the standard Kind cluster tasks — no special conformance-specific cluster 
 
 ```bash
 task kind-create          # standard cluster with HUG and an example app
-task kind-create-debug    # cluster without host port maps (HUG started locally)
 ```
 
 ### 2. Run the tests
