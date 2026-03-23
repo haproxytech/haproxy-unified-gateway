@@ -32,7 +32,7 @@ tasks:
       # are not reachable by their internal IP from the CI runner.
       # The dind service is reachable via the "docker" hostname on port 7443.
       - /{{.kubectl}} config set-cluster kind-{{.CLUSTER_NAME}} --server=https://docker:7443 --insecure-skip-tls-verify=true
-      - task: conformance-deploy
+      - task: conformance-deploy-ci
       # Run the routing fix here
       - task: conformance-setup-routing-ci
 
