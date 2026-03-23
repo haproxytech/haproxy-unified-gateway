@@ -29,7 +29,7 @@ kubectl apply -f .
 ### HTTP: For the route route-echo-http
 
 ```sh
-GW_IP=$(kubectl get gateway hug-gateway -n default -o jsonpath='{.status.addresses[0].value}')
+GW_IP=$(kubectl get gateway hug-gateway -n example -o jsonpath='{.status.addresses[0].value}')
 curl --header "Host: offload.haproxy" http://$GW_IP:31080/all
 {
   "http": {
