@@ -64,7 +64,7 @@ conformance-GW-API-1_3_0:
     CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.3.0.xml"
   before_script:
     - export PATH=$PATH:/root/go/bin
-    - docker login -u="$app" -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
+    - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
     - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
     - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
     - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
@@ -106,7 +106,7 @@ conformance-GW-API-1_3_0:
 #     CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.4.0.xml"
 #   before_script:
 #     - export PATH=$PATH:/root/go/bin
-#     - docker login -u="$app" -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
+#     - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
 #     - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
 #     - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
 #     - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
@@ -148,7 +148,7 @@ conformance-GW-API-1_3_0:
 #     CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.5.0.xml"
 #   before_script:
 #     - export PATH=$PATH:/root/go/bin
-#     - docker login -u="$app" -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
+#     - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
 #     - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
 #     - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
 #     - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
