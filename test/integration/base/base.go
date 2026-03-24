@@ -47,8 +47,9 @@ import (
 )
 
 const (
-	timeout  = time.Second * 15
-	interval = time.Second * 1
+	timeout               = time.Second * 15
+	interval              = time.Second * 1
+	TestMapThroughRuntime = true
 )
 
 type BaseSuite struct {
