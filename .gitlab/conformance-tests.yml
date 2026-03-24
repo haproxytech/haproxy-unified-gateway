@@ -17,6 +17,7 @@ conformance-MR-GW-API-1_3_0:
     CLUSTER_NAME: "conformance-mr-1-3-0"
     CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.3.0.yaml"
     CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.3.0.xml"
+    CONFORMANCE_JUNIT_HTML_OUTPUT: "conformance-junit-1.3.0.html"
     CONFORMANCE_RUN_TEST: ""
     CONFORMANCE_SKIP_TESTS: "HTTPRouteHeaderMatching,HTTPRouteInvalidBackendRefUnknownKind,HTTPRouteInvalidCrossNamespaceBackendRef,HTTPRouteInvalidCrossNamespaceParentRef,HTTPRouteInvalidNonExistentBackendRef,HTTPRouteListenerHostnameMatching,HTTPRouteMatching,HTTPRouteMatchingAcrossRoutes,HTTPRouteObservedGenerationBump,HTTPRoutePathMatchOrder,HTTPRouteRedirectHostAndStatus,HTTPRouteRequestHeaderModifier,HTTPRouteServiceTypes,HTTPRouteSimpleSameNamespace,HTTPRouteWeight,GatewaySecretInvalidReferenceGrant,GatewaySecretMissingReferenceGrant,GatewaySecretReferenceGrantAllInNamespace,GatewaySecretReferenceGrantSpecific,HTTPRouteInvalidReferenceGrant,HTTPRoutePartiallyInvalidViaInvalidReferenceGrant,HTTPRouteReferenceGrant"
   before_script:
@@ -39,6 +40,7 @@ conformance-MR-GW-API-1_3_0:
     paths:
       - conformance-report-1.3.0.yaml
       - conformance-junit-1.3.0.xml
+      - conformance-junit-1.3.0.html
     reports:
       junit: conformance-junit-1.3.0.xml
 
@@ -62,6 +64,7 @@ conformance-GW-API-1_3_0:
     CLUSTER_NAME: "conformance-1-3-0"
     CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.3.0.yaml"
     CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.3.0.xml"
+    CONFORMANCE_JUNIT_HTML_OUTPUT: "conformance-junit-1.3.0.html"
   before_script:
     - export PATH=$PATH:/root/go/bin
     - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
@@ -82,6 +85,7 @@ conformance-GW-API-1_3_0:
     paths:
       - conformance-report-1.3.0.yaml
       - conformance-junit-1.3.0.xml
+      - conformance-junit-1.3.0.html
     reports:
       junit: conformance-junit-1.3.0.xml
 

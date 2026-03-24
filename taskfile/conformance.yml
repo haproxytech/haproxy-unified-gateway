@@ -137,6 +137,7 @@ tasks:
       FORMAT: '{{default "testdox" .FORMAT}}'
       CONFORMANCE_REPORT_OUTPUT: '{{default "conformance-report.yaml" .CONFORMANCE_REPORT_OUTPUT}}'
       CONFORMANCE_JUNIT_OUTPUT: '{{default "conformance-junit.xml" .CONFORMANCE_JUNIT_OUTPUT}}'
+      CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "conformance-junit.html" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
       CONFORMANCE_RUN_TEST: '{{default "" .CONFORMANCE_RUN_TEST}}'
       CONFORMANCE_SKIP_TESTS: '{{default "" .CONFORMANCE_SKIP_TESTS}}'
     cmds:
@@ -156,3 +157,15 @@ tasks:
             {{if .CONFORMANCE_SKIP_TESTS}}-skip-tests '{{.CONFORMANCE_SKIP_TESTS}}'{{end}}
       - echo "Conformance report written to {{.CONFORMANCE_REPORT_OUTPUT}}"
       - echo "JUnit report written to {{.CONFORMANCE_JUNIT_OUTPUT}}"
+      - task: conformance-report
+        vars:
+          CONFORMANCE_JUNIT_OUTPUT: '{{.CONFORMANCE_JUNIT_OUTPUT}}'
+          CONFORMANCE_JUNIT_HTML_OUTPUT: '{{.CONFORMANCE_JUNIT_HTML_OUTPUT}}'
+
+  conformance-report:
+    desc: "print passed/skipped/failed summary from a JUnit XML report"
+    vars:
+      CONFORMANCE_JUNIT_OUTPUT: '{{default "conformance-junit.xml" .CONFORMANCE_JUNIT_OUTPUT}}'
+      CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "conformance-junit.html" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
+    cmds:
+      - go run ./cmd/junit-report/main.go {{.CONFORMANCE_JUNIT_OUTPUT}} {{.CONFORMANCE_JUNIT_HTML_OUTPUT}}
