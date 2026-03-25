@@ -62,10 +62,21 @@ func NewGatewayAcceptedInvalidConditions(msg string) generic.Conditions {
 func NewGatewayAcceptedInvalidParameters(err *field.Error) generic.Conditions {
 	return generic.Conditions{
 		generic.ConditionType(gatewayv1.GatewayConditionAccepted): {
-			Type:    generic.ConditionType(gatewayv1.GatewayReasonInvalidParameters),
+			Type:    generic.ConditionType(gatewayv1.GatewayConditionAccepted),
 			Status:  metav1.ConditionFalse,
 			Reason:  string(gatewayv1.GatewayReasonInvalidParameters),
 			Message: fmt.Sprintf("invalid parametersRef: %s", err),
+		},
+	}
+}
+
+func NewGatewayAcceptedListenersNotValid(msg string) generic.Conditions {
+	return generic.Conditions{
+		generic.ConditionType(gatewayv1.GatewayConditionAccepted): {
+			Type:    generic.ConditionType(gatewayv1.GatewayConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(gatewayv1.GatewayReasonListenersNotValid),
+			Message: msg,
 		},
 	}
 }
@@ -112,6 +123,17 @@ func NewGatewayProgrammedInvalidParameters(msg string) generic.Conditions {
 			Type:    generic.ConditionType(gatewayv1.GatewayConditionProgrammed),
 			Status:  metav1.ConditionFalse,
 			Reason:  string(gatewayv1.GatewayReasonInvalidParameters),
+			Message: msg,
+		},
+	}
+}
+
+func NewGatewayProgrammedListenersNotValid(msg string) generic.Conditions {
+	return generic.Conditions{
+		generic.ConditionType(gatewayv1.GatewayConditionProgrammed): {
+			Type:    generic.ConditionType(gatewayv1.GatewayConditionProgrammed),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(gatewayv1.GatewayReasonListenersNotValid),
 			Message: msg,
 		},
 	}

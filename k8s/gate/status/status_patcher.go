@@ -14,16 +14,21 @@
 package status
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
+	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 
 	"github.com/google/go-cmp/cmp"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -36,9 +41,10 @@ type StatusPatcher interface {
 
 // ---------------------------
 // GatewayClass
-func newGatewayClassStatusPatcher(gwc *tree.GatewayClass) StatusPatcher {
+func newGatewayClassStatusPatcher(gwc *tree.GatewayClass, logger *slog.Logger) StatusPatcher {
 	return &gatewayClassStatusPatcher{
 		conditions: gwc.Conditions,
+		logger:     logger,
 	}
 }
 
@@ -46,6 +52,7 @@ var _ StatusPatcher = &gatewayClassStatusPatcher{}
 
 type gatewayClassStatusPatcher struct {
 	conditions generic.Conditions
+	logger     *slog.Logger
 }
 
 func (sp *gatewayClassStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
@@ -71,7 +78,7 @@ func (sp *gatewayClassStatusPatcher) SetStatus(obj client.Object) error {
 
 // ---------------------------
 // Gateway
-func newGatewayStatusPatcher(gw *tree.Gateway, addresses []gatewayv1.GatewayStatusAddress) StatusPatcher {
+func newGatewayStatusPatcher(gw *tree.Gateway, addresses []gatewayv1.GatewayStatusAddress, extractGVK utilsk8s.ExtractGVK, logger *slog.Logger) StatusPatcher {
 	listenerStatuses := make([]gatewayv1.ListenerStatus, 0, len(gw.Listeners))
 	if gw.Valid {
 		// If the Gateway is invalid, the listeners status should be empty
@@ -90,6 +97,8 @@ func newGatewayStatusPatcher(gw *tree.Gateway, addresses []gatewayv1.GatewayStat
 		conditions:       gw.Conditions,
 		listenerStatuses: listenerStatuses,
 		addresses:        addresses,
+		logger:           logger,
+		extractGVK:       extractGVK,
 	}
 }
 
@@ -97,6 +106,8 @@ var _ StatusPatcher = &gatewayStatusPatcher{}
 
 type gatewayStatusPatcher struct {
 	conditions       generic.Conditions
+	logger           *slog.Logger
+	extractGVK       utilsk8s.ExtractGVK
 	listenerStatuses []gatewayv1.ListenerStatus
 	addresses        []gatewayv1.GatewayStatusAddress
 }
@@ -151,6 +162,11 @@ func (sp *gatewayStatusPatcher) SetStatus(obj client.Object) error {
 		Listeners:  sp.listenerStatuses,
 		Addresses:  sp.addresses,
 	}
+
+	sp.logger.LogAttrs(context.Background(), slog.LevelDebug, "[UPDATE] Gateway Status",
+		logging.LogAttrResource(gw, sp.extractGVK(gw)))
+	sp.logger.LogAttrs(context.Background(), slog.LevelDebug, fmt.Sprintf("listener status: %v", gw.Status.Listeners))
+
 	return nil
 }
 
@@ -353,4 +369,102 @@ func FilterTLSRouteStatusByControllerName(tlsRouteStatus v1alpha2.TLSRouteStatus
 	return v1alpha2.TLSRouteStatus{
 		RouteStatus: gatewayv1.RouteStatus{Parents: filtered},
 	}
+}
+
+// ---------------------------
+// Gateway listener feedback (Programmed conditions only, sourced from the tree)
+
+// newGatewayListenerFeedbackStatusPatcher snapshots the Programmed condition
+// from each listener in gw at call time. SetStatus applies those conditions to
+// the live k8s gateway status.
+func newGatewayListenerFeedbackStatusPatcher(gw *tree.Gateway, logger *slog.Logger) StatusPatcher {
+	condType := generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
+	snapshot := make(map[gatewayv1.SectionName]generic.Condition, len(gw.Listeners))
+	logger.LogAttrs(context.Background(), slog.LevelDebug, "[feedback] gateway",
+		logging.LogAttrObjectKey(gw.K8sResource))
+	for _, listener := range gw.Listeners {
+		if cond, ok := listener.Conditions.GetCondition(condType); ok {
+			snapshot[listener.K8sResource.Name] = cond
+			logger.LogAttrs(context.Background(), slog.LevelDebug, "[feedback] listener",
+				slog.String("listener ", string(listener.K8sResource.Name)),
+				slog.Any("cond", cond))
+		}
+	}
+	return &gatewayListenerFeedbackStatusPatcher{listenerProgrammedConditions: snapshot, logger: logger}
+}
+
+var _ StatusPatcher = &gatewayListenerFeedbackStatusPatcher{}
+
+type gatewayListenerFeedbackStatusPatcher struct {
+	// listenerProgrammedConditions maps listener name → snapshotted Programmed condition.
+	listenerProgrammedConditions map[gatewayv1.SectionName]generic.Condition
+	logger                       *slog.Logger
+}
+
+// StatusEqual returns true (skip update) when all live listener Programmed
+// conditions already match the snapshot or are newer (stale result guard).
+func (sp *gatewayListenerFeedbackStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
+	gw, ok := obj.(*gatewayv1.Gateway)
+	if !ok {
+		return false, fmt.Errorf("wrong type %T", obj)
+	}
+	for _, listener := range gw.Status.Listeners {
+		want, ok := sp.listenerProgrammedConditions[listener.Name]
+		if !ok {
+			continue
+		}
+		found := false
+		for _, cond := range listener.Conditions {
+			if cond.Type != string(gatewayv1.ListenerConditionProgrammed) {
+				continue
+			}
+			found = true
+			// Live has a higher generation: our snapshot is stale — skip all.
+			if want.ObservedGeneration < cond.ObservedGeneration {
+				return true, nil
+			}
+			if cond.Status != want.Status || cond.Reason != want.Reason {
+				return false, nil
+			}
+		}
+		if !found {
+			return false, nil // condition absent in k8s, needs to be written
+		}
+	}
+	return true, nil
+}
+
+// SetStatus patches only the Programmed condition on each listener whose name
+// is present in the snapshot. The rest of the gateway status is left untouched.
+func (sp *gatewayListenerFeedbackStatusPatcher) SetStatus(obj client.Object) error {
+	gw, ok := obj.(*gatewayv1.Gateway)
+	if !ok {
+		return fmt.Errorf("wrong type %T", obj)
+	}
+	for i, listener := range gw.Status.Listeners {
+		want, ok := sp.listenerProgrammedConditions[listener.Name]
+		if !ok {
+			continue
+		}
+		newCond := metav1.Condition{
+			Type:               string(gatewayv1.ListenerConditionProgrammed),
+			Status:             want.Status,
+			Reason:             want.Reason,
+			Message:            want.Message,
+			ObservedGeneration: want.ObservedGeneration,
+			LastTransitionTime: metav1.Now(),
+		}
+		replaced := false
+		for j, c := range gw.Status.Listeners[i].Conditions {
+			if c.Type == string(gatewayv1.ListenerConditionProgrammed) {
+				gw.Status.Listeners[i].Conditions[j] = newCond
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			gw.Status.Listeners[i].Conditions = append(gw.Status.Listeners[i].Conditions, newCond)
+		}
+	}
+	return nil
 }

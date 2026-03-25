@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
@@ -52,6 +53,9 @@ type GateTree struct {
 	PreviousVirtualListeners map[string]*VirtualListener // map[virtualListener.name()]VirtualListener
 	Global                   *Global
 	Defaults                 *DefaultsCR
+	// mu protects concurrent access to gateway listener conditions, which may
+	// be written by the feedback path (forwardFeedback) from a separate goroutine.
+	mu sync.RWMutex
 }
 
 type ReferencedObjects struct {

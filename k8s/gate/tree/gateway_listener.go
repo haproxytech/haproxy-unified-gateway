@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -242,11 +243,17 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 	}
 
 	listener := l.K8sResource
-	if listener.TLS == nil || len(listener.TLS.CertificateRefs) == 0 {
-		l.CheckSecret = CheckResult{
-			Valid: true,
+
+	// Check if we miss the TLS section for HTTPS protocol
+	if listener.Protocol == gatewayv1.HTTPSProtocolType {
+		if listener.TLS == nil || len(listener.TLS.CertificateRefs) == 0 {
+			msg := fmt.Sprintf("listener %s has protocol HTTPS but no TLS section", listener.Name)
+			l.CheckSecret = CheckResult{
+				Valid:      false,
+				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+			}
+			return
 		}
-		return
 	}
 
 	// Check is the secret exists
@@ -421,7 +428,40 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	}
 
 	if shouldProgramm {
-		l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedPending())
+		// If the Gateway k8s resource already has a listener Programmed condition  Status!=Pending and the same
+		// ObservedGeneration as the gateway, do not reset the status to Pending.
+		// Probable cause is a startup phase where HAProxy is already programmed.
+		existingProgrammed := false
+		for _, listenerStatus := range treeGw.K8sResource.Status.Listeners {
+			if listenerStatus.Name != l.K8sResource.Name {
+				continue
+			}
+			for _, cond := range listenerStatus.Conditions {
+				if cond.Type != string(gatewayv1.ListenerConditionProgrammed) {
+					continue
+				}
+				if cond.Status == metav1.ConditionUnknown {
+					// If the condition is in Unknown status, we consider that the listener is not programmed
+					// and we set the condition to Pending to trigger a status update when the controller will process this listener.
+					continue
+				}
+
+				if cond.ObservedGeneration == treeGw.K8sResource.GetGeneration() &&
+					!cond.LastTransitionTime.Time.Before(treeGw.K8sResource.GetCreationTimestamp().Time) {
+					l.Conditions[generic.ConditionType(gatewayv1.ListenerConditionProgrammed)] = generic.Condition{
+						Type:               generic.ConditionType(gatewayv1.ListenerConditionProgrammed),
+						Status:             cond.Status,
+						Reason:             cond.Reason,
+						Message:            cond.Message,
+						ObservedGeneration: cond.ObservedGeneration,
+					}
+					existingProgrammed = true
+				}
+			}
+		}
+		if !existingProgrammed {
+			l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedPending())
+		}
 	}
 
 	l.Valid = shouldProgramm

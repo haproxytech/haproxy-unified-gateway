@@ -102,9 +102,6 @@ func (h *AppManagerImpl) Run() {
 						logging.LogAttrError(err),
 					)
 				}
-				if haproxyCfg.Done != nil {
-					close(haproxyCfg.Done)
-				}
 			}
 		}
 	})
@@ -396,6 +393,27 @@ func (h *AppManagerImpl) confUpdateProcessed(haproxyCfgDiffs diffs.HaproxyConfDi
 
 	h.logger.LogAttrs(context.Background(), slog.LevelInfo, "Haproxy configuration update result",
 		slog.Any("result", result))
+
+	if haproxyCfgDiffs.Done != nil {
+		h.logger.LogAttrs(context.Background(), slog.LevelInfo, "[sending] HUG => CONTROLLER: DIFFS (Done)")
+		close(haproxyCfgDiffs.Done)
+	}
+
+	if haproxyCfgDiffs.ResultCh != nil {
+		confResult := diffs.HaproxyConfResult{
+			Err:                        err,
+			GatewayObservedGenerations: haproxyCfgDiffs.GatewayObservedGenerations(),
+		}
+		h.logger.LogAttrs(context.Background(), slog.LevelInfo, "[sending] HUG => CONTROLLER: haproxy conf update result", slog.Any("result", confResult))
+		select {
+		case haproxyCfgDiffs.ResultCh <- confResult:
+		default:
+			// TODO: check with the team
+			h.logger.LogAttrs(context.Background(), slog.LevelError,
+				"dropping haproxy conf result: ResultCh is full",
+			)
+		}
+	}
 }
 
 func addFrontendMetadataToResult(meta map[string]any, fe *models.Frontend) {

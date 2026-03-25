@@ -15,6 +15,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -191,14 +192,17 @@ func (el *EventLoop) stopTimer() {
 
 func (el *EventLoop) logEvent(e any) {
 	var o client.Object
+	eventType := ""
 	switch obj := e.(type) {
 	case *events.UpsertEvent:
 		o = obj.Resource
+		eventType = "UpsertEvent"
 	case *events.DeleteEvent:
 		o = obj.Type
+		eventType = "DeleteEvent"
 	}
 	el.logger.LogAttrs(context.Background(), slog.LevelDebug,
-		"added an event to the batch",
+		fmt.Sprintf("added an event to the batch %s", eventType),
 		logging.LogAttrBatch(el.nextBatch.BatchID, len(el.nextBatch.Events)),
 		logging.LogAttrResource(o, el.extractGVK(o)),
 	)

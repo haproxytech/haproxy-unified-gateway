@@ -99,8 +99,8 @@ func (g *Gateway) SetAsUpserted(logger *slog.Logger, newK8sResource *gatewayv1.G
 	g.reset()
 }
 
-func (g *Gateway) SetAsDeleted(logger *slog.Logger) {
-	setResourceStatus(logger, g, nil, store.StatusDeleted)
+func (g *Gateway) SetAsDeleted(logger *slog.Logger, oldK8sResource *gatewayv1.Gateway) {
+	setResourceStatus(logger, g, oldK8sResource, store.StatusDeleted)
 	g.K8sResource = nil
 	g.reset()
 }
@@ -288,7 +288,7 @@ func (g *Gateway) BuildConditions() {
 	if !g.CheckParamsRef.Valid {
 		g.Conditions.MergeOverrideConditions(g.CheckParamsRef.Conditions)
 		// retrieve condition type accepted to get the appropriate message
-		messageInvalidParams := g.Conditions.GetMessage(generic.ConditionType(gatewayv1.GatewayClassConditionStatusAccepted))
+		messageInvalidParams := g.Conditions.GetMessage(generic.ConditionType(gatewayv1.GatewayConditionAccepted))
 		g.Conditions.MergeOverrideConditions(conditions.NewGatewayProgrammedInvalidParameters(messageInvalidParams))
 		g.Conditions.SetGeneration(g.K8sResource.GetGeneration())
 		return

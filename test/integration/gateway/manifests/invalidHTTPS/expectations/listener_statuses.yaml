@@ -1,0 +1,42 @@
+- attachedRoutes: 0
+  conditions:
+  - message: Listener is accepted
+    observedGeneration: 1
+    reason: Accepted
+    status: "True"
+    type: Accepted
+  - message: Listener references have been resolved
+    observedGeneration: 1
+    reason: ResolvedRefs
+    status: "True"
+    type: ResolvedRefs
+  - message: Listener is programmed in Haproxy
+    observedGeneration: 1
+    reason: Programmed
+    status: "True"
+    type: Programmed
+  name: http
+  supportedKinds:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+- attachedRoutes: 0
+  conditions:
+  - message: listener https has protocol HTTPS but no TLS section
+    observedGeneration: 1
+    reason: InvalidCertificateRef
+    status: "False"
+    type: ResolvedRefs
+  - message: Listener is accepted
+    observedGeneration: 1
+    reason: Accepted
+    status: "True"
+    type: Accepted
+  - message: Listener is invalid
+    observedGeneration: 1
+    reason: Invalid
+    status: "False"
+    type: Programmed
+  name: https
+  supportedKinds:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute

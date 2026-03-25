@@ -10,10 +10,6 @@ spec:
     protocol: HTTP
     hostname: "*.haproxy.local"
   - name: https
-    protocol: HTTP
-    port: 8081
-  infrastructure:
-    parametersRef:
-      group: gate.v3.haproxy.org
-      kind: HugGate
-      name: huggate2
+    protocol: HTTPS
+    port: 8443
+   # tls missing with protocol HTTPS

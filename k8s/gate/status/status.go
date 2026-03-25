@@ -16,17 +16,18 @@ package status
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/diffs"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -57,6 +58,11 @@ type StatusUpdater interface {
 	// UpdateStatus dispatches a previously prepared batch of writes to the
 	// background goroutine. Any stale pending batch is replaced by the new one.
 	UpdateStatus(ctx context.Context, updates PreparedStatusUpdates)
+	// PrepareFeedbackStatusUpdate builds status updates for gateway listener
+	// Programmed conditions from the tree's current listener state (already
+	// updated by UpdateListenerProgrammedCondition). Only gateways present in
+	// result.GatewayObservedGenerations are updated.
+	PrepareFeedbackStatusUpdate(result diffs.HaproxyConfResult, gateways map[types.NamespacedName]*tree.Gateway) PreparedStatusUpdates
 }
 
 type StatusUpdaterConf struct {
@@ -155,7 +161,7 @@ func (s *StatusUpdaterImpl) prepareGatewayClassUpdates(gatewayClasses map[types.
 		params := StatusUpdateParams[*gatewayv1.GatewayClass]{
 			Object:        objtypes.ObjectTypeGatewayClass,
 			NsName:        types.NamespacedName{Name: gwc.K8sResource.Name, Namespace: gwc.K8sResource.Namespace},
-			StatusPatcher: newGatewayClassStatusPatcher(gwc),
+			StatusPatcher: newGatewayClassStatusPatcher(gwc, s.config.logger),
 			Getter:        s.config.client,
 			StatusUpdater: s.config.client.Status(),
 			Logger:        s.config.logger,
@@ -176,17 +182,27 @@ func (s *StatusUpdaterImpl) prepareGatewayUpdates(ctx context.Context, gateways 
 			continue
 		}
 		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
-			"Preparing status update for resource",
+			"Preparing status update",
 			logging.LogAttrResource(gw.K8sResource, s.config.extractGVK(gw.K8sResource)),
 		)
 		var gwAddresses []gatewayv1.GatewayStatusAddress
 		if gw.Valid {
 			gwAddresses = controllerAddresses
 		}
+
+		s.config.logger.LogAttrs(ctx, slog.LevelDebug, "[PREPARE] Gateway Status update",
+			logging.LogAttrResource(gw.K8sResource, s.config.extractGVK(gw.K8sResource)))
+
+		for _, lc := range gw.Listeners {
+			s.config.logger.LogAttrs(ctx, slog.LevelDebug, "[PREPARE] conditions",
+				slog.Any("listener", lc.K8sResource.Name),
+				slog.Any("conditions: %v", lc.Conditions))
+		}
+
 		params := StatusUpdateParams[*gatewayv1.Gateway]{
 			Object:        objtypes.ObjectTypeGateway,
 			NsName:        types.NamespacedName{Name: gw.K8sResource.Name, Namespace: gw.K8sResource.Namespace},
-			StatusPatcher: newGatewayStatusPatcher(gw, gwAddresses),
+			StatusPatcher: newGatewayStatusPatcher(gw, gwAddresses, s.config.extractGVK, s.config.logger),
 			Getter:        s.config.client,
 			StatusUpdater: s.config.client.Status(),
 			Logger:        s.config.logger,
@@ -206,7 +222,7 @@ func (s *StatusUpdaterImpl) prepareHTTPRouteUpdates(httpRoutes map[types.Namespa
 			continue
 		}
 		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
-			"Preparing status update for resource",
+			"Preparing status update",
 			logging.LogAttrResource(route.K8sResource, s.config.extractGVK(route.K8sResource)),
 		)
 		params := StatusUpdateParams[*gatewayv1.HTTPRoute]{
@@ -232,7 +248,7 @@ func (s *StatusUpdaterImpl) prepareTLSRouteUpdates(tlsRoutes map[types.Namespace
 			continue
 		}
 		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
-			"Preparing status update for resource",
+			"Preparing status update",
 			logging.LogAttrResource(tlsRoute.K8sResource, s.config.extractGVK(tlsRoute.K8sResource)),
 		)
 		params := StatusUpdateParams[*v1alpha2.TLSRoute]{
@@ -498,7 +514,7 @@ func TryPatchStatusFunc[T client.Object](param StatusUpdateParams[T]) func(ctx c
 
 		if statusAlreadyUpToDate {
 			param.Logger.LogAttrs(context.Background(), slog.LevelDebug,
-				"Status already up to date",
+				"Status [patch] already up to date",
 				objAttr)
 			return true, nil
 		}
@@ -519,16 +535,22 @@ func TryPatchStatusFunc[T client.Object](param StatusUpdateParams[T]) func(ctx c
 			return false, nil
 		}
 		client.MergeFrom(clusterObj)
-		if err := param.StatusUpdater.Patch(ctx, clusterObj, client.MergeFrom(originalObj)); err != nil {
-			param.Logger.LogAttrs(context.Background(), slog.LevelError,
-				"Encountered error when updating status",
+		patch := client.MergeFrom(originalObj)
+		if data, err := patch.Data(clusterObj); err == nil {
+			param.Logger.LogAttrs(context.Background(), slog.LevelDebug,
+				fmt.Sprintf("Status patch for %s: %s", objAttr, string(data)),
+			)
+		}
+		if err := param.StatusUpdater.Patch(ctx, clusterObj, patch); err != nil {
+			param.Logger.LogAttrs(context.Background(), slog.LevelDebug, // Debug is OK as we will retry- Proper error logged if all retry fail
+				"Encountered error when setting status [patch]",
 				objAttr,
 				logging.LogAttrError(err))
 			return false, nil
 		}
 
 		param.Logger.LogAttrs(context.Background(), slog.LevelDebug,
-			"Successfully updated status",
+			"Successfully updating status [patch]",
 			objAttr,
 		)
 		return true, nil
@@ -551,9 +573,9 @@ func getClusterObj[T client.Object](ctx context.Context, param StatusUpdateParam
 		Name:      param.NsName.Name,
 	}, clusterObj)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return clusterObj, nil
-		}
+		// if apierrors.IsNotFound(err) {
+		// 	return clusterObj, nil
+		// }
 		param.Logger.LogAttrs(context.Background(), slog.LevelError,
 			"Encountered error when getting resource to update status",
 			objAttr)

@@ -65,6 +65,32 @@ func (s *GatewayTestSuite) Test_Gateway_InvalidRef() {
 	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
 }
 
+func (s *GatewayTestSuite) Test_Gateway_InvalidHTTPS() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "invalidHTTPS"
+
+	fixturePath := path.Join(fixtureDirPath, fixtureDir)
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	// Expected Conditions
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "conditions.yaml")
+	expectedConditions := s.YamlToConditions(expectedCondPath)
+	expectedListenerStatusesPath := path.Join(expectationsPath, "listener_statuses.yaml")
+	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
+
+	gwName := "gateway"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+
+	// Check Maps
+	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
+	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.Eventually(func() bool {
+		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
+	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+}
+
 func (s *GatewayTestSuite) Test_Gateway_validRef() {
 	fixtureDirPath := utils.GetCRDFixturePath()
 	fixtureDir := "validRef"

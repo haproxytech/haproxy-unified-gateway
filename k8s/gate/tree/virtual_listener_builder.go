@@ -15,8 +15,11 @@ package tree
 
 import (
 	"cmp"
+	"context"
+	"log/slog"
 	"slices"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 )
@@ -67,13 +70,23 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 				continue
 			}
 
+			// Skip invalid listeners
+			if !listener.Valid {
+				b.Logger.LogAttrs(context.Background(), slog.LevelInfo, "Skipping invalid listener",
+					logging.LogAttrKey(listener.Owner),
+					slog.String("listener", string(listener.K8sResource.Name)),
+				)
+				continue
+			}
+
 			// Check the Gateway validity before adding the listener to the virtual listener
 			// Only add a VirtualListener if the Gateway it belongs to is valid
 			gateway := b.ControllerStore.GetGatewayForListener(listener)
 			if gateway == nil || !gateway.Valid {
-				continue
-			}
-			if !listener.Valid {
+				b.Logger.LogAttrs(context.Background(), slog.LevelInfo, "Skipping invalid listener as invalid Gateway",
+					logging.LogAttrKey(listener.Owner),
+					slog.String("listener", string(listener.K8sResource.Name)),
+				)
 				continue
 			}
 			// Add the listener to the virtual listener

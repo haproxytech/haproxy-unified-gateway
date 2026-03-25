@@ -48,7 +48,7 @@ func (c *Configuration) resetDiffs() {
 	}
 }
 
-func (c *Configuration) upsertFrontend(logger *slog.Logger, fe *models.Frontend) error {
+func (c *Configuration) upsertFrontend(logger *slog.Logger, fe *models.Frontend, reprogramm bool) error {
 	if fe == nil {
 		logger.LogAttrs(context.Background(), slog.LevelError, "nil frontend")
 		return errors.New("nil frontend")
@@ -56,7 +56,7 @@ func (c *Configuration) upsertFrontend(logger *slog.Logger, fe *models.Frontend)
 
 	if previousFe, ok := c.structured.Frontends[fe.Name]; ok {
 		// Check if they are the same
-		if previousFe.Equal(*fe) {
+		if previousFe.Equal(*fe) && !reprogramm {
 			logger.LogAttrs(context.Background(), slog.LevelDebug, "Frontend [same]",
 				logging.LogAttrFrontendName(fe.Name),
 			)
@@ -64,7 +64,8 @@ func (c *Configuration) upsertFrontend(logger *slog.Logger, fe *models.Frontend)
 		}
 
 		// Update existing frontend
-		logger.LogAttrs(context.Background(), slog.LevelInfo, "Frontend [UPDATE]",
+		msg := fmt.Sprintf("Frontend [UPDATE] (%t)", reprogramm)
+		logger.LogAttrs(context.Background(), slog.LevelInfo, msg,
 			logging.LogAttrFrontendName(fe.Name),
 		)
 

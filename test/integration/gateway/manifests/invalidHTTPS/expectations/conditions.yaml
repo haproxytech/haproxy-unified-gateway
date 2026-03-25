@@ -1,0 +1,10 @@
+  - message: Gateway is accepted
+    observedGeneration: 1
+    reason: Accepted
+    status: "True"
+    type: Accepted
+  - message: Gateway is programmed
+    observedGeneration: 1
+    reason: Programmed
+    status: "True"
+    type: Programmed

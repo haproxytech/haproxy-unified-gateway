@@ -19,11 +19,14 @@ import (
 	"log/slog"
 
 	"github.com/haproxytech/client-native/v6/models"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func (b *HaproxyConfMgrImpl) getFrontendName(vListenerName string) string {
@@ -70,7 +73,20 @@ func (b *HaproxyConfMgrImpl) upsertFrontends(vListenerName string, vListener *tr
 	if b.firstSync.flag {
 		b.firstSync.frontends[newFe.Name] = struct{}{}
 	}
-	if err := b.configuration.upsertFrontend(b.logger, newFe); err != nil {
+	// if 1 of the Listeners has a Status Programmed Unknown, we consider the FE as being updated
+	reprogram := false
+	for _, l := range vListener.Listeners {
+		progCond, exists := l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionProgrammed))
+		if !exists || progCond.Status == metav1.ConditionUnknown {
+			reprogram = true
+			b.logger.LogAttrs(context.Background(), slog.LevelDebug, "Reprogramming frontend due to unknown programmed condition on listener",
+				logging.LogAttrFrontendName(newFe.Name),
+				logging.LogAttrKey(l.Owner),
+			)
+			break
+		}
+	}
+	if err := b.configuration.upsertFrontend(b.logger, newFe, reprogram); err != nil {
 		b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to upsert frontend",
 			logging.LogAttrFrontendName(newFe.Name),
 			logging.LogAttrError(err))

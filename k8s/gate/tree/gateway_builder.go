@@ -123,7 +123,7 @@ func (b *GatewayBuilderImpl) computeTreeGatewayUpdate(gwKey client.ObjectKey, gw
 
 	case store.StatusDeleted:
 		if treeGw != nil {
-			treeGw.SetAsDeleted(b.Logger)
+			treeGw.SetAsDeleted(b.Logger, gwUpdate.OldObject)
 		}
 		// else nothing to do
 		// It did not exists, it's deleted, noop

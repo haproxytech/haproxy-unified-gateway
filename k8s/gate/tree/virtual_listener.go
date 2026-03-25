@@ -21,8 +21,10 @@ import (
 	"strconv"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -102,6 +104,16 @@ func (vl *VirtualListener) Equal(other *VirtualListener) bool {
 	// Compare each Listener's K8sResource
 	for i := range vl.Listeners {
 		if !cmp.Equal(vl.Listeners[i].K8sResource, other.Listeners[i].K8sResource) {
+			return false
+		}
+	}
+
+	// if condition Programmed is Unknown,
+	// we consider the VirtualListener as not equal
+	//  to trigger a status update to Pending and avoid keeping a stale Programmed condition on the listeners of this VirtualListener
+	for _, l := range vl.Listeners {
+		progCond, exists := l.Conditions.GetCondition(generic.ConditionType(v1.ListenerConditionProgrammed))
+		if !exists || progCond.Status == metav1.ConditionUnknown {
 			return false
 		}
 	}

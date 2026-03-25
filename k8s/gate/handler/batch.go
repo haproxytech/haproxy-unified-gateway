@@ -194,17 +194,6 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 	}
 	haproxyConfDiffs := h.haproxyConfBuilder.GetDiffs()
 	h.recordDiffMetrics(haproxyConfDiffs)
-	if !haproxyConfDiffs.IsEmpty() || haproxyConfDiffs.ReloadNeed {
-		if h.config.TransferHaproxyConfChannel != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelInfo, "DIFFS CONTROLLER => HUG")
-			haproxyConfDiffs.Done = make(chan struct{})
-			transferStart := time.Now()
-			h.config.TransferHaproxyConfChannel <- haproxyConfDiffs
-			<-haproxyConfDiffs.Done
-			metrics.ConfigTransferDuration.Observe(time.Since(transferStart).Seconds())
-			h.logger.LogAttrs(context.Background(), slog.LevelInfo, "DIFFS HUG => CONTROLLER")
-		}
-	}
 
 	// -------------
 	// Status updates
@@ -217,6 +206,22 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 	statusUpdates := h.statusUpdater.PrepareStatusUpdate(ctx, gatetree.GatewayClasses, gatetree.Gateways, gatetree.HTTPRoutes, gatetree.TLSRoutes)
 	// Now process them
 	h.statusUpdater.UpdateStatus(ctx, statusUpdates)
+
+	if !haproxyConfDiffs.IsEmpty() || haproxyConfDiffs.ReloadNeed {
+		if h.config.TransferHaproxyConfChannel != nil {
+			h.logger.LogAttrs(context.Background(), slog.LevelInfo, "[sending] CONTROLLER => HUG: DIFFS")
+			haproxyConfDiffs.Done = make(chan struct{})
+			haproxyConfDiffs.ResultCh = make(chan diffs.HaproxyConfResult, 1)
+			transferStart := time.Now()
+			h.config.TransferHaproxyConfChannel <- haproxyConfDiffs
+			h.waitDone(haproxyConfDiffs.Done)
+			metrics.ConfigTransferDuration.Observe(time.Since(transferStart).Seconds())
+			h.logger.LogAttrs(context.Background(), slog.LevelInfo, "[received] HUG => CONTROLLER: DIFFS (Done)")
+
+			// Forward the HUG result back as status feedback to the relevant Gateway/Route objects.
+			h.forwardFeedback(ctx, haproxyConfDiffs.ResultCh)
+		}
+	}
 
 	// Reconcile Hug service Ports
 	h.hugServiceReconciler.ReconcilePorts(ctx, gatetree.VirtualListeners)
@@ -253,6 +258,50 @@ func (h *eventHandlerImpl) updateClusterStore(event any) {
 		)
 		metrics.EventsProcessed.WithLabelValues("delete").Inc()
 		h.clusterStoreUpdater.Delete(obj.Type, obj.NamespacedName)
+	}
+}
+
+// waitDoneTimeout is the maximum time to wait for Done to be closed after
+// sending diffs to HUG.
+const waitDoneTimeout = 30 * time.Second
+
+// waitDone blocks until done is closed or waitDoneTimeout elapses, logging a
+// warning in the latter case.
+func (h *eventHandlerImpl) waitDone(done <-chan struct{}) {
+	select {
+	case <-done:
+	case <-time.After(waitDoneTimeout):
+		h.logger.LogAttrs(context.Background(), slog.LevelWarn,
+			"timed out waiting for Done signal from HUG",
+		)
+	}
+}
+
+// forwardFeedbackTimeout is the maximum time to wait for a result on ResultCh
+// after Done has been closed. The result may arrive slightly after Done in some
+// implementations, so we give a short grace period before giving up.
+const forwardFeedbackTimeout = 5 * time.Second
+
+// forwardFeedback waits up to forwardFeedbackTimeout for a result on resultCh,
+// prepares the feedback status updates, and dispatches them through the shared
+// statusUpdater channel.
+func (h *eventHandlerImpl) forwardFeedback(ctx context.Context, resultCh chan diffs.HaproxyConfResult) {
+	select {
+	case result := <-resultCh:
+		h.logger.LogAttrs(ctx, slog.LevelInfo, "[received] HUG => CONTROLLER: haproxy conf update result ", slog.Any("result", result))
+		gatetree := h.treeBuilder.GetTree()
+		for gwKey, gen := range result.GatewayObservedGenerations {
+			gatetree.UpdateListenerProgrammedCondition(gwKey, gen, result.Err)
+		}
+		gateways := gatetree.RLockGateways()
+		updates := h.statusUpdater.PrepareFeedbackStatusUpdate(result, gateways)
+		gatetree.RUnlockGateways()
+		h.statusUpdater.UpdateStatus(ctx, updates)
+	case <-time.After(forwardFeedbackTimeout):
+		// TODO: check with the team
+		h.logger.LogAttrs(context.Background(), slog.LevelWarn,
+			"timed out waiting for result from HUG on ResultCh",
+		)
 	}
 }
 
