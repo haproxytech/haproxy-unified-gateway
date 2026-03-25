@@ -21,6 +21,7 @@ import (
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
+	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
@@ -29,10 +30,33 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
+const (
+	updateStatusChanSize = 50
+)
+
+// PreparedStatusUpdates holds status write operations prepared from a tree
+// snapshot. It is produced synchronously by PrepareStatusUpdate and consumed
+// asynchronously by UpdateStatus.
+type PreparedStatusUpdates []func(context.Context)
+
 type StatusUpdater interface {
-	UpdateStatus(ctx context.Context)
+	// Start launches the background goroutine that processes status writes.
+	// It must be called once before UpdateStatus.
+	Start(ctx context.Context)
+	// PrepareStatusUpdate must be called synchronously in the batch loop while
+	// the tree is still valid. It snapshots all relevant state from the tree
+	// nodes into self-contained write operations and returns them.
+	PrepareStatusUpdate(ctx context.Context,
+		gatewayClasses map[types.NamespacedName]*tree.GatewayClass,
+		gateways map[types.NamespacedName]*tree.Gateway,
+		httpRoutes map[types.NamespacedName]*tree.HTTPRoute,
+		tlsRoutes map[types.NamespacedName]*tree.TLSRoute) PreparedStatusUpdates
+	// UpdateStatus dispatches a previously prepared batch of writes to the
+	// background goroutine. Any stale pending batch is replaced by the new one.
+	UpdateStatus(ctx context.Context, updates PreparedStatusUpdates)
 }
 
 type StatusUpdaterConf struct {
@@ -45,26 +69,15 @@ type StatusUpdaterConf struct {
 }
 
 type StatusUpdaterImpl struct {
-	GatewayClasses map[types.NamespacedName]*tree.GatewayClass
-	Gateways       map[types.NamespacedName]*tree.Gateway
-	HTTPRoutes     map[types.NamespacedName]*tree.HTTPRoute
-	TLSRoutes      map[types.NamespacedName]*tree.TLSRoute
-	config         StatusUpdaterConf
+	updates chan PreparedStatusUpdates
+	config  StatusUpdaterConf
 }
 
-func NewStatusUpdater(
-	cfg StatusUpdaterConf,
-	gatewayClasses map[types.NamespacedName]*tree.GatewayClass,
-	gateways map[types.NamespacedName]*tree.Gateway,
-	httpRoutes map[types.NamespacedName]*tree.HTTPRoute,
-	tlsRoutes map[types.NamespacedName]*tree.TLSRoute,
-) StatusUpdater {
+func NewStatusUpdater(cfg StatusUpdaterConf) StatusUpdater {
+	cfg.logger = cfg.logger.With(logging.LogAttrCategory(logging.LogCategoryStatus))
 	return &StatusUpdaterImpl{
-		config:         cfg,
-		GatewayClasses: gatewayClasses,
-		Gateways:       gateways,
-		HTTPRoutes:     httpRoutes,
-		TLSRoutes:      tlsRoutes,
+		config:  cfg,
+		updates: make(chan PreparedStatusUpdates, updateStatusChanSize),
 	}
 }
 
@@ -77,7 +90,7 @@ func NewStatusUpdaterConf(
 	disableIPv6 bool,
 ) StatusUpdaterConf {
 	return StatusUpdaterConf{
-		logger:         logger.With(logging.LogAttrCategory(logging.LogCategoryStatus)),
+		logger:         logger,
 		extractGVK:     extractGVK,
 		client:         k8sClient,
 		controllerName: controllerName,
@@ -87,6 +100,174 @@ func NewStatusUpdaterConf(
 }
 
 var _ StatusUpdater = &StatusUpdaterImpl{}
+
+// Start launches a background goroutine that drains the updates channel and
+// executes each write using the provided context for its lifetime.
+func (s *StatusUpdaterImpl) Start(ctx context.Context) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case writes, ok := <-s.updates:
+				if !ok {
+					return
+				}
+				for _, write := range writes {
+					write(ctx)
+				}
+			}
+		}
+	}()
+}
+
+// PrepareStatusUpdate must be called synchronously in the batch loop while the
+// tree is still valid. It snapshots all relevant state from the tree nodes into
+// self-contained write operations and returns them as a PreparedStatusUpdates
+// batch ready to be dispatched via UpdateStatus.
+func (s *StatusUpdaterImpl) PrepareStatusUpdate(ctx context.Context,
+	gatewayClasses map[types.NamespacedName]*tree.GatewayClass,
+	gateways map[types.NamespacedName]*tree.Gateway,
+	httpRoutes map[types.NamespacedName]*tree.HTTPRoute,
+	tlsRoutes map[types.NamespacedName]*tree.TLSRoute,
+) PreparedStatusUpdates {
+	var writes PreparedStatusUpdates
+	writes = append(writes, s.prepareGatewayClassUpdates(gatewayClasses)...)
+	writes = append(writes, s.prepareGatewayUpdates(ctx, gateways)...)
+	writes = append(writes, s.prepareHTTPRouteUpdates(httpRoutes)...)
+	writes = append(writes, s.prepareTLSRouteUpdates(tlsRoutes)...)
+	return writes
+}
+
+func (s *StatusUpdaterImpl) prepareGatewayClassUpdates(gatewayClasses map[types.NamespacedName]*tree.GatewayClass) PreparedStatusUpdates {
+	var writes PreparedStatusUpdates
+	for _, gwc := range gatewayClasses {
+		if gwc.TreeStatus.Status == store.StatusDeleted || gwc.TreeStatus.Status == "" {
+			continue
+		}
+		if !gwc.Managed {
+			continue
+		}
+		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+			"Preparing status update",
+			logging.LogAttrResource(gwc.K8sResource, s.config.extractGVK(gwc.K8sResource)),
+		)
+		params := StatusUpdateParams[*gatewayv1.GatewayClass]{
+			Object:        objtypes.ObjectTypeGatewayClass,
+			NsName:        types.NamespacedName{Name: gwc.K8sResource.Name, Namespace: gwc.K8sResource.Namespace},
+			StatusPatcher: newGatewayClassStatusPatcher(gwc),
+			Getter:        s.config.client,
+			StatusUpdater: s.config.client.Status(),
+			Logger:        s.config.logger,
+			extractGVK:    s.config.extractGVK,
+		}
+		writes = append(writes, func(ctx context.Context) {
+			s.writeGatewayClassStatus(ctx, params)
+		})
+	}
+	return writes
+}
+
+func (s *StatusUpdaterImpl) prepareGatewayUpdates(ctx context.Context, gateways map[types.NamespacedName]*tree.Gateway) PreparedStatusUpdates {
+	controllerAddresses := s.fetchControllerAddresses(ctx)
+	var writes PreparedStatusUpdates
+	for _, gw := range gateways {
+		if gw.TreeStatus.Status == store.StatusDeleted || gw.TreeStatus.Status == "" {
+			continue
+		}
+		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+			"Preparing status update for resource",
+			logging.LogAttrResource(gw.K8sResource, s.config.extractGVK(gw.K8sResource)),
+		)
+		var gwAddresses []gatewayv1.GatewayStatusAddress
+		if gw.Valid {
+			gwAddresses = controllerAddresses
+		}
+		params := StatusUpdateParams[*gatewayv1.Gateway]{
+			Object:        objtypes.ObjectTypeGateway,
+			NsName:        types.NamespacedName{Name: gw.K8sResource.Name, Namespace: gw.K8sResource.Namespace},
+			StatusPatcher: newGatewayStatusPatcher(gw, gwAddresses),
+			Getter:        s.config.client,
+			StatusUpdater: s.config.client.Status(),
+			Logger:        s.config.logger,
+			extractGVK:    s.config.extractGVK,
+		}
+		writes = append(writes, func(ctx context.Context) {
+			s.writeGatewayStatus(ctx, params)
+		})
+	}
+	return writes
+}
+
+func (s *StatusUpdaterImpl) prepareHTTPRouteUpdates(httpRoutes map[types.NamespacedName]*tree.HTTPRoute) PreparedStatusUpdates {
+	var writes PreparedStatusUpdates
+	for _, route := range httpRoutes {
+		if route.TreeStatus.Status == store.StatusDeleted || route.TreeStatus.Status == "" {
+			continue
+		}
+		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+			"Preparing status update for resource",
+			logging.LogAttrResource(route.K8sResource, s.config.extractGVK(route.K8sResource)),
+		)
+		params := StatusUpdateParams[*gatewayv1.HTTPRoute]{
+			Object:        objtypes.ObjectTypeHTTPRoute,
+			NsName:        types.NamespacedName{Name: route.K8sResource.Name, Namespace: route.K8sResource.Namespace},
+			StatusPatcher: newHTTPRouteStatusPatcher(route),
+			Getter:        s.config.client,
+			StatusUpdater: s.config.client.Status(),
+			Logger:        s.config.logger,
+			extractGVK:    s.config.extractGVK,
+		}
+		writes = append(writes, func(ctx context.Context) {
+			s.writeHTTPRouteStatus(ctx, params)
+		})
+	}
+	return writes
+}
+
+func (s *StatusUpdaterImpl) prepareTLSRouteUpdates(tlsRoutes map[types.NamespacedName]*tree.TLSRoute) PreparedStatusUpdates {
+	var writes PreparedStatusUpdates
+	for _, tlsRoute := range tlsRoutes {
+		if tlsRoute.TreeStatus.Status == store.StatusDeleted || tlsRoute.TreeStatus.Status == "" {
+			continue
+		}
+		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+			"Preparing status update for resource",
+			logging.LogAttrResource(tlsRoute.K8sResource, s.config.extractGVK(tlsRoute.K8sResource)),
+		)
+		params := StatusUpdateParams[*v1alpha2.TLSRoute]{
+			Object:        objtypes.ObjectTypeTLSRoute,
+			NsName:        types.NamespacedName{Name: tlsRoute.K8sResource.Name, Namespace: tlsRoute.K8sResource.Namespace},
+			StatusPatcher: newTLSRouteStatusPatcher(tlsRoute),
+			Getter:        s.config.client,
+			StatusUpdater: s.config.client.Status(),
+			Logger:        s.config.logger,
+			extractGVK:    s.config.extractGVK,
+		}
+		writes = append(writes, func(ctx context.Context) {
+			s.writeTLSRouteStatus(ctx, params)
+		})
+	}
+	return writes
+}
+
+// UpdateStatus dispatches a previously prepared batch of writes to the
+// background goroutine. If the channel buffer is full the batch is discarded
+// and a warning is logged so the reconciler never blocks on status writes.
+func (s *StatusUpdaterImpl) UpdateStatus(ctx context.Context, updates PreparedStatusUpdates) {
+	if len(updates) == 0 {
+		return
+	}
+
+	select {
+	case s.updates <- updates:
+	case <-ctx.Done():
+	default:
+		s.config.logger.LogAttrs(ctx, slog.LevelWarn,
+			"Status update channel full, discarding update batch",
+		)
+	}
+}
 
 func (s *StatusUpdaterImpl) fetchControllerAddresses(ctx context.Context) []gatewayv1.GatewayStatusAddress {
 	svcList := &corev1.ServiceList{}
@@ -239,102 +420,6 @@ func (s *StatusUpdaterImpl) isIPAllowed(ip string) bool {
 		return false
 	}
 	return true
-}
-
-func (s *StatusUpdaterImpl) UpdateStatus(ctx context.Context) {
-	// this is just a beginning, needs to be better design
-	// let's start with something very basic that updates only GatewayClass status for now
-
-	// GatewayClasses
-	for _, gwc := range s.GatewayClasses {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		// Do not set Status for Deleted or unchanged GatewayClasses
-		if gwc.TreeStatus.Status == store.StatusDeleted || gwc.TreeStatus.Status == "" {
-			continue
-		}
-		// Do not set Status for Not managed GatewayClasses
-		if !gwc.Managed {
-			continue
-		}
-
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
-			"Updating status for resource",
-			logging.LogAttrResource(gwc.K8sResource, s.config.extractGVK(gwc.K8sResource)),
-		)
-
-		s.writeGatewayClassStatus(ctx, gwc)
-	}
-
-	// Gateways
-	controllerAddresses := s.fetchControllerAddresses(ctx)
-	for _, gw := range s.Gateways {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		// Do not set Status for Deleted or unchanged Gateways
-		if gw.TreeStatus.Status == store.StatusDeleted || gw.TreeStatus.Status == "" {
-			continue
-		}
-
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
-			"Updating status for resource",
-			logging.LogAttrResource(gw.K8sResource, s.config.extractGVK(gw.K8sResource)),
-		)
-
-		var gwAddresses []gatewayv1.GatewayStatusAddress
-		if gw.Valid {
-			gwAddresses = controllerAddresses
-		}
-		s.writeGatewayStatus(ctx, gw, gwAddresses)
-	}
-
-	// HTTPRoutes
-	for _, route := range s.HTTPRoutes {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		// Do not set Status for Deleted or unchanged HTTPRoutes
-		if route.TreeStatus.Status == store.StatusDeleted || route.TreeStatus.Status == "" {
-			continue
-		}
-
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
-			"Updating status for resource",
-			logging.LogAttrResource(route.K8sResource, s.config.extractGVK(route.K8sResource)),
-		)
-		s.writeHTTPRouteStatus(ctx, route)
-	}
-
-	// TLSRoutes
-	for _, tlsRoute := range s.TLSRoutes {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		// Do not set Status for Deleted or unchanged HTTPRoutes
-		if tlsRoute.TreeStatus.Status == store.StatusDeleted || tlsRoute.TreeStatus.Status == "" {
-			continue
-		}
-
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
-			"Updating status for resource",
-			logging.LogAttrResource(tlsRoute.K8sResource, s.config.extractGVK(tlsRoute.K8sResource)),
-		)
-		s.writeTLSRouteStatus(ctx, tlsRoute)
-	}
 }
 
 type StatusUpdateParams[T client.Object] struct {

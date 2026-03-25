@@ -16,6 +16,7 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	hapi "github.com/haproxytech/haproxy-unified-gateway/hug/haproxy/api"
@@ -79,10 +80,12 @@ type GateTreeConfig struct {
 type eventHandlerImpl struct {
 	clusterStoreUpdater  store.ClusterStoreUpdater
 	haproxyConfBuilder   haproxy.HaproxyConfMgr
+	statusUpdater        status.StatusUpdater
 	hugServiceReconciler *hugservice.ServiceReconciler
 	logger               *slog.Logger
-	config               GateTreeConfig
 	treeBuilder          GateTreeBuilder
+	config               GateTreeConfig
+	statusOnce           sync.Once
 }
 
 // NewEventHandlerImpl creates a new eventHandlerImpl.
@@ -137,7 +140,15 @@ func NewEventHandlerImpl(
 		clusterStoreUpdater:  clusterStoreUpdater,
 		haproxyConfBuilder:   haproxyConfMgr,
 		hugServiceReconciler: hugservice.New(gateTreeConfig.K8sClient, gateTreeConfig.BaseLogger),
-		logger:               gateTreeConfig.BaseLogger.With(logging.LogAttrCategory(logging.LogCategoryBatch)),
+		statusUpdater: status.NewStatusUpdater(status.NewStatusUpdaterConf(
+			gateTreeConfig.K8sClient,
+			gateTreeConfig.ExtractGVK,
+			gateTreeConfig.ControllerName,
+			gateTreeConfig.BaseLogger,
+			gateTreeConfig.DisableIPv4,
+			gateTreeConfig.DisableIPv6,
+		)),
+		logger: gateTreeConfig.BaseLogger.With(logging.LogAttrCategory(logging.LogCategoryBatch)),
 	}
 
 	return handler
@@ -195,23 +206,19 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 		}
 	}
 
-	statusUpdater := status.NewStatusUpdater(
-		status.NewStatusUpdaterConf(
-			h.treeBuilder.cfg.K8sClient,
-			h.config.ExtractGVK,
-			h.config.ControllerName,
-			h.config.BaseLogger,
-			h.config.DisableIPv4,
-			h.config.DisableIPv6,
-		),
-		gatetree.GatewayClasses,
-		gatetree.Gateways,
-		gatetree.HTTPRoutes,
-		gatetree.TLSRoutes,
-	)
+	// -------------
+	// Status updates
+	// Note: status updates are performed asynchronously — they are prepared here
+	// and dispatched to a background worker started by statusOnce.Do, so they
+	// do not block the current reconciliation loop.
+	// ---------------
+	h.statusOnce.Do(func() { h.statusUpdater.Start(ctx) })
+	// Prepare the status updates from the Tree
+	statusUpdates := h.statusUpdater.PrepareStatusUpdate(ctx, gatetree.GatewayClasses, gatetree.Gateways, gatetree.HTTPRoutes, gatetree.TLSRoutes)
+	// Now process them
+	h.statusUpdater.UpdateStatus(ctx, statusUpdates)
 
-	statusUpdater.UpdateStatus(ctx)
-
+	// Reconcile Hug service Ports
 	h.hugServiceReconciler.ReconcilePorts(ctx, gatetree.VirtualListeners)
 }
 

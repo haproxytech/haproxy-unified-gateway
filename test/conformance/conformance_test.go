@@ -112,7 +112,6 @@ func TestConformance(t *testing.T) {
 		SupportedFeatures:    supportedFeatures,
 		ConformanceProfiles:  conformanceProfiles,
 		TimeoutConfig:        conformanceconfig.DefaultTimeoutConfig(),
-		// RoundTripper:         rt,
 		AllowCRDsMismatch:    true,
 		SkipProvisionalTests: true,
 		Implementation: confv1.Implementation{

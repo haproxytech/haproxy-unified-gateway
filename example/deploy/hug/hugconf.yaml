@@ -21,6 +21,8 @@ spec:
         level: "Info"
       - category: "hugservice"
         level: "Info"
+      - category: "status"
+        level: "Debug"
   globalRef:
     group: gate.v3.haproxy.org
     kind: Global

@@ -20,24 +20,11 @@ import (
 	"time"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
-	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func (s *StatusUpdaterImpl) writeHTTPRouteStatus(ctx context.Context, route *tree.HTTPRoute) {
-	updateOptions := StatusUpdateParams[*gatewayv1.HTTPRoute]{
-		Object:        objtypes.ObjectTypeHTTPRoute,
-		NsName:        types.NamespacedName{Name: route.K8sResource.Name, Namespace: route.K8sResource.Namespace},
-		StatusPatcher: newHTTPRouteStatusPatcher(route),
-		Getter:        s.config.client,
-		StatusUpdater: s.config.client.Status(),
-		Logger:        s.config.logger,
-		extractGVK:    s.config.extractGVK,
-	}
-
+func (s *StatusUpdaterImpl) writeHTTPRouteStatus(ctx context.Context, params StatusUpdateParams[*gatewayv1.HTTPRoute]) {
 	err := wait.ExponentialBackoffWithContext(
 		ctx,
 		wait.Backoff{
@@ -47,13 +34,12 @@ func (s *StatusUpdaterImpl) writeHTTPRouteStatus(ctx context.Context, route *tre
 			Steps:    4,
 			Cap:      time.Millisecond * 3000,
 		},
-		// Function returns true if the condition is satisfied, or an error if the loop should be aborted.
-		TryPatchStatusFunc(updateOptions),
+		TryPatchStatusFunc(params),
 	)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		s.config.logger.LogAttrs(context.Background(), slog.LevelError,
+		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug, // Debug is ok as we will retry with the latest k8s resource
 			"Failed to update status",
-			logging.LogAttrResource(route.K8sResource, s.config.extractGVK(route.K8sResource)),
+			logging.LogAttrKeyGVK(params.NsName, params.extractGVK(params.Object)),
 			logging.LogAttrError(err),
 		)
 	}
