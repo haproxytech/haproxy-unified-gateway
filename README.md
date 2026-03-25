@@ -8,8 +8,6 @@
 
 HUG provides a free open-source solution for cloud-native application routing, featuring unified integration with the latest Kubernetes [Gateway API](https://gateway-api.sigs.k8s.io/) and (coming next year) the existing Ingress API, all built on HAProxy’s legendary performance, reliability, and flexibility – so you can trust it to operate dependably at the largest scale.
 
-Current releases are considered BETA as they do not yet provide full coverage of the Gateway API.
-
 ### Usage
 
 Docker image is available on [Docker Hub](https://hub.docker.com/r/haproxytech/haproxy-unified-gateway)
