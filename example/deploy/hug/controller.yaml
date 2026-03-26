@@ -20,7 +20,7 @@ spec:
       containers:
         - name: haproxy-unified-gateway
           # specify the container image, tag and pull policy
-          image: docker.io/haproxytech/haproxy-unified-gateway:latest
+          image: docker.io/haproxytech/haproxy-unified-gateway:v1.0
           # image: haproxytech/haproxy-unified-gateway:latest
           # imagePullPolicy: this is set to never for kind cluster usage
           imagePullPolicy: Always
