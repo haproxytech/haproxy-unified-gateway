@@ -14,6 +14,9 @@
 package filters
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/haproxytech/client-native/v6/models"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -41,6 +44,11 @@ func ToHAProxyRules(httpFilters []gatewayv1.HTTPRouteFilter, matchPrefix string)
 				rules := responseHeaderModifierRules(filter.ResponseHeaderModifier)
 				result.HTTPResponseRules = append(result.HTTPResponseRules, rules...)
 			}
+		case gatewayv1.HTTPRouteFilterURLRewrite:
+			if filter.URLRewrite != nil {
+				rules := urlRewriteRules(filter.URLRewrite, matchPrefix)
+				result.HTTPRequestRules = append(result.HTTPRequestRules, rules...)
+			}
 		// RequestMirror and ExtensionRef are handled separately.
 		}
 	}
@@ -54,11 +62,68 @@ func HasSideEffects(httpFilters []gatewayv1.HTTPRouteFilter) bool {
 	for _, f := range httpFilters {
 		switch f.Type {
 		case gatewayv1.HTTPRouteFilterRequestHeaderModifier,
-			gatewayv1.HTTPRouteFilterResponseHeaderModifier:
+			gatewayv1.HTTPRouteFilterResponseHeaderModifier,
+			gatewayv1.HTTPRouteFilterURLRewrite:
 			return true
 		}
 	}
 	return false
+}
+
+// urlRewriteRules converts an HTTPURLRewriteFilter to http-request rules.
+func urlRewriteRules(f *gatewayv1.HTTPURLRewriteFilter, matchPrefix string) models.HTTPRequestRules {
+	var rules models.HTTPRequestRules
+
+	if f.Hostname != nil {
+		rules = append(rules, &models.HTTPRequestRule{
+			Type:      "set-header",
+			HdrName:   "Host",
+			HdrFormat: string(*f.Hostname),
+		})
+	}
+
+	if f.Path != nil {
+		switch f.Path.Type {
+		case gatewayv1.FullPathHTTPPathModifier:
+			if f.Path.ReplaceFullPath != nil {
+				rules = append(rules, &models.HTTPRequestRule{
+					Type:    "set-path",
+					PathFmt: *f.Path.ReplaceFullPath,
+				})
+			}
+		case gatewayv1.PrefixMatchHTTPPathModifier:
+			if f.Path.ReplacePrefixMatch != nil && matchPrefix != "" {
+				replacement := strings.TrimRight(*f.Path.ReplacePrefixMatch, "/")
+				if matchPrefix == "/" {
+					rules = append(rules, &models.HTTPRequestRule{
+						Type:    "set-path",
+						PathFmt: fmt.Sprintf("%s%%[path,regsub(^/$,)]", replacement),
+					})
+				} else {
+					escapedPrefix := regexEscapePath(matchPrefix)
+					rules = append(rules, &models.HTTPRequestRule{
+						Type:      "replace-path",
+						PathMatch: fmt.Sprintf("^%s(/.*)?$", escapedPrefix),
+						PathFmt:   fmt.Sprintf("%s\\1", replacement),
+					})
+				}
+			}
+		}
+	}
+	return rules
+}
+
+// regexEscapePath escapes path characters that are special in POSIX extended regex.
+func regexEscapePath(s string) string {
+	const specialChars = `\.+*?()|[]{}^$`
+	var b strings.Builder
+	for _, c := range s {
+		if strings.ContainsRune(specialChars, c) {
+			_, _ = b.WriteRune('\\')
+		}
+		_, _ = b.WriteRune(c)
+	}
+	return b.String()
 }
 
 // requestHeaderModifierRules converts an HTTPHeaderFilter to http-request rules.
