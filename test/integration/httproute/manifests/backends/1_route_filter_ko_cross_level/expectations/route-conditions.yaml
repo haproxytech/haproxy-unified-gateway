@@ -1,0 +1,18 @@
+parents:
+- conditions:
+  - message: rule URLRewrite and backendRef RequestRedirect cannot be used together
+    observedGeneration: 1
+    reason: IncompatibleFilters
+    status: "False"
+    type: Accepted
+  - message: References resolved
+    observedGeneration: 1
+    reason: ResolvedRefs
+    status: "True"
+    type: ResolvedRefs
+  controllerName: gate.haproxy.org/hug
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+    sectionName: http

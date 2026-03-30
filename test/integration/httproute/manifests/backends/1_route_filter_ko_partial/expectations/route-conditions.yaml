@@ -1,0 +1,23 @@
+parents:
+- conditions:
+  - message: Route Accepted
+    observedGeneration: 1
+    reason: Accepted
+    status: "True"
+    type: Accepted
+  - message: References resolved
+    observedGeneration: 1
+    reason: ResolvedRefs
+    status: "True"
+    type: ResolvedRefs
+  - message: "Dropped Rule (rule 1: rule URLRewrite and backendRef RequestRedirect cannot be used together)"
+    observedGeneration: 1
+    reason: IncompatibleFilters
+    status: "True"
+    type: PartiallyInvalid
+  controllerName: gate.haproxy.org/hug
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+    sectionName: http
