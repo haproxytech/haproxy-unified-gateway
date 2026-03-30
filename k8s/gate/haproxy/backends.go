@@ -66,6 +66,8 @@ type BackendImpactedInCycle struct {
 	// RuleFilters holds the rule-level HTTPRoute filters that apply to this backend.
 	RuleFilters       []gatewayv1.HTTPRouteFilter
 	ResourceCandidate ResourceCandidate
+	// IsRedirect indicates this is a redirect-only pseudo-backend with no servers.
+	IsRedirect bool
 }
 
 type BackendsImpactedInCycle struct {
@@ -196,11 +198,27 @@ func (b *HaproxyConfMgrImpl) upsertHTTPRouteBackends(routeKey k8stypes.Namespace
 	var errs utils.Errors
 	upsertedBackendsReferencedByRoute := make(map[string]struct{})
 	for ruleIndex, rule := range route.Rules {
-		if !rule.Valid {
+		k8sRule := rule.K8sResource
+
+		// Rules with a RequestRedirect filter are redirect-only: no real backend
+		// proxying takes place.  We create a redirect pseudo-backend instead.
+		// Handle this before the rule.Valid check since such rules may have no
+		// backendRefs (which would cause rule.Valid to be false).
+		if hasRedirectFilter(k8sRule.Filters) {
+			beName := b.getRedirectBackendName(k8sRule.Filters)
+			if err := b.backendOwners.addHTTPRoute(beName, routeKey, route.K8sResource); err != nil {
+				errs.Add(err)
+				continue
+			}
+			b.addImpactedHTTPRedirectBackendUpserted(beName, routeKey, k8sRule.Filters,
+				extractFirstPathPrefix(k8sRule.Matches))
+			upsertedBackendsReferencedByRoute[beName] = struct{}{}
 			continue
 		}
 
-		k8sRule := rule.K8sResource
+		if !rule.Valid {
+			continue
+		}
 
 		// Extract the first PathPrefix match value for URLRewrite prefix rewriting.
 		matchPrefix := extractFirstPathPrefix(k8sRule.Matches)
@@ -405,6 +423,26 @@ func (b *HaproxyConfMgrImpl) addImpactedHTTPBackendUpserted(backendName string, 
 		b.backendsImpactedInCycle.Upserted[backendName] = make(map[client.ObjectKey]BackendImpactedInCycle)
 	}
 	b.backendsImpactedInCycle.Upserted[backendName][routeKey] = impactedBe
+}
+
+func (b *HaproxyConfMgrImpl) addImpactedHTTPRedirectBackendUpserted(backendName string, routeKey client.ObjectKey,
+	ruleFilters []gatewayv1.HTTPRouteFilter, matchPrefix string,
+) {
+	impactedBe := BackendImpactedInCycle{
+		Name:         backendName,
+		HTTPRouteKey: routeKey,
+		RuleFilters:  ruleFilters,
+		MatchPrefix:  matchPrefix,
+		IsRedirect:   true,
+	}
+	if _, ok := b.backendsImpactedInCycle.Upserted[backendName]; !ok {
+		b.backendsImpactedInCycle.Upserted[backendName] = make(map[client.ObjectKey]BackendImpactedInCycle)
+	}
+	b.backendsImpactedInCycle.Upserted[backendName][routeKey] = impactedBe
+}
+
+func (b *HaproxyConfMgrImpl) getRedirectBackendName(filters []gatewayv1.HTTPRouteFilter) string {
+	return fmt.Sprintf("%s_redirect_%s", b.params.LinkID, getRedirectFilterHash(filters))
 }
 
 func (b *HaproxyConfMgrImpl) addImpactedLTSBackendUpserted(backendName string, routeKey client.ObjectKey,
@@ -621,6 +659,28 @@ func (b *HaproxyConfMgrImpl) newBackend(backendName string, md metadata.MetaData
 	return newBackend, errs.Result()
 }
 
+// newRedirectBackend creates a backend that only issues an HTTP redirect with
+// no real servers.  HAProxy executes the http-request redirect rule before any
+// server selection, so an empty server list is valid here.
+func (b *HaproxyConfMgrImpl) newRedirectBackend(backendName string, md metadata.MetaData,
+	ruleFilters []gatewayv1.HTTPRouteFilter, matchPrefix string,
+) (*models.Backend, error) {
+	filterResult := haproxyfilters.ToHAProxyRules(ruleFilters, matchPrefix)
+	if !filterResult.IsRedirect || len(filterResult.RedirectRules) == 0 {
+		return nil, fmt.Errorf("redirect backend %q has no redirect rule", backendName)
+	}
+	be := &models.Backend{
+		BackendBase: models.BackendBase{
+			Metadata: md,
+			Name:     backendName,
+			Mode:     "http",
+			From:     b.params.DefaultsSectionName,
+		},
+		HTTPRequestRuleList: filterResult.RedirectRules,
+	}
+	return be, nil
+}
+
 func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBackendRef, newBackend *models.Backend, namespace string) utils.Errors {
 	var errs utils.Errors
 
@@ -678,6 +738,26 @@ func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBacken
 		}
 	}
 	return errs
+}
+
+// getRedirectFilterHash produces a hash identifying a redirect-only backend.
+func getRedirectFilterHash(filters []gatewayv1.HTTPRouteFilter) string {
+	jsonData, err := json.Marshal(filters)
+	if err != nil {
+		return "unknown"
+	}
+	hash := md5.Sum(jsonData)
+	return hex.EncodeToString(hash[:])
+}
+
+// hasRedirectFilter reports whether any filter in the slice is a RequestRedirect.
+func hasRedirectFilter(filters []gatewayv1.HTTPRouteFilter) bool {
+	for _, f := range filters {
+		if f.Type == gatewayv1.HTTPRouteFilterRequestRedirect {
+			return true
+		}
+	}
+	return false
 }
 
 // getFilterHash produces a hash that uniquely identifies the backend
@@ -794,10 +874,28 @@ func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 		var backendRef gatewayv1.HTTPBackendRef
 		var ruleFilters []gatewayv1.HTTPRouteFilter
 		var matchPrefix string
+		var isRedirect bool
 		for _, impactedBE := range mapImpactedBEs {
 			backendRef = impactedBE.BackendRef
 			ruleFilters = impactedBE.RuleFilters
 			matchPrefix = impactedBE.MatchPrefix
+			isRedirect = impactedBE.IsRedirect
+		}
+
+		if isRedirect {
+			be, err := b.newRedirectBackend(backendName, beMd, ruleFilters, matchPrefix)
+			if err != nil {
+				errs.Add(err)
+				continue
+			}
+			if err := b.configuration.upsertBackend(b.logger, be); err != nil {
+				errs.Add(err)
+				continue
+			}
+			if b.firstSync.flag {
+				b.firstSync.backends[be.Name] = struct{}{}
+			}
+			continue
 		}
 
 		var persistenceCandidates []ResourceCandidate

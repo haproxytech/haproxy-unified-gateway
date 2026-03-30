@@ -23,8 +23,15 @@ import (
 
 // Result holds the HAProxy rules derived from Gateway API HTTPRoute filters.
 type Result struct {
+	// RedirectRules holds the http-request redirect rule(s).  Usually one rule,
+	// but a ReplacePrefixMatch on the root path "/" requires two conditional rules
+	// to correctly handle both the exact root and paths with a suffix.
+	RedirectRules     models.HTTPRequestRules
 	HTTPRequestRules  models.HTTPRequestRules
 	HTTPResponseRules models.HTTPResponseRules
+	// IsRedirect is true when the filters contain a RequestRedirect filter.
+	// When true, the backend acts as a redirect-only backend with no real servers.
+	IsRedirect bool
 }
 
 // ToHAProxyRules converts a slice of HTTPRouteFilters into HAProxy HTTP rules.
@@ -49,6 +56,11 @@ func ToHAProxyRules(httpFilters []gatewayv1.HTTPRouteFilter, matchPrefix string)
 				rules := urlRewriteRules(filter.URLRewrite, matchPrefix)
 				result.HTTPRequestRules = append(result.HTTPRequestRules, rules...)
 			}
+		case gatewayv1.HTTPRouteFilterRequestRedirect:
+			if filter.RequestRedirect != nil {
+				result.IsRedirect = true
+				result.RedirectRules = requestRedirectRules(filter.RequestRedirect, matchPrefix)
+			}
 		// RequestMirror and ExtensionRef are handled separately.
 		}
 	}
@@ -63,7 +75,8 @@ func HasSideEffects(httpFilters []gatewayv1.HTTPRouteFilter) bool {
 		switch f.Type {
 		case gatewayv1.HTTPRouteFilterRequestHeaderModifier,
 			gatewayv1.HTTPRouteFilterResponseHeaderModifier,
-			gatewayv1.HTTPRouteFilterURLRewrite:
+			gatewayv1.HTTPRouteFilterURLRewrite,
+			gatewayv1.HTTPRouteFilterRequestRedirect:
 			return true
 		}
 	}
@@ -124,6 +137,89 @@ func regexEscapePath(s string) string {
 		_, _ = b.WriteRune(c)
 	}
 	return b.String()
+}
+
+// requestRedirectRules converts an HTTPRequestRedirectFilter to one or two
+// http-request redirect rules.  Two rules are needed when a ReplacePrefixMatch
+// is applied to the root path "/": one for the exact root and one for paths
+// that have a suffix (see the urlRewriteRules comment for the full rationale).
+func requestRedirectRules(f *gatewayv1.HTTPRequestRedirectFilter, matchPrefix string) models.HTTPRequestRules {
+	statusCode := int64(302)
+	if f.StatusCode != nil {
+		statusCode = int64(*f.StatusCode)
+	}
+
+	// Scheme-only redirect: HAProxy handles this natively and preserves the
+	// original host, path, and query string automatically.
+	if f.Scheme != nil && f.Hostname == nil && f.Port == nil && f.Path == nil {
+		return models.HTTPRequestRules{{
+			Type:       "redirect",
+			RedirType:  "scheme",
+			RedirValue: *f.Scheme,
+			RedirCode:  &statusCode,
+		}}
+	}
+
+	// Build the authority prefix (scheme://host:port) shared by all location rules.
+	var authority strings.Builder
+	if f.Scheme != nil {
+		_, _ = authority.WriteString(*f.Scheme)
+		_, _ = authority.WriteString("://")
+	}
+	if f.Hostname != nil {
+		_, _ = authority.WriteString(string(*f.Hostname))
+	} else if f.Scheme != nil || f.Port != nil {
+		_, _ = authority.WriteString("%[req.hdr(host),host_only]")
+	}
+	if f.Port != nil {
+		_, _ = authority.WriteString(fmt.Sprintf(":%d", *f.Port))
+	}
+	pfx := authority.String()
+
+	redirect := func(location, cond, condTest string) *models.HTTPRequestRule {
+		r := &models.HTTPRequestRule{
+			Type:       "redirect",
+			RedirType:  "location",
+			RedirValue: location,
+			RedirCode:  &statusCode,
+		}
+		if cond != "" {
+			r.Cond = cond
+			r.CondTest = condTest
+		}
+		return r
+	}
+
+	if f.Path == nil {
+		return models.HTTPRequestRules{redirect(pfx+"%[path]", "", "")}
+	}
+
+	switch f.Path.Type {
+	case gatewayv1.FullPathHTTPPathModifier:
+		pathValue := "%[path]"
+		if f.Path.ReplaceFullPath != nil {
+			pathValue = *f.Path.ReplaceFullPath
+		}
+		return models.HTTPRequestRules{redirect(pfx+pathValue, "", "")}
+
+	case gatewayv1.PrefixMatchHTTPPathModifier:
+		if f.Path.ReplacePrefixMatch == nil || matchPrefix == "" {
+			return models.HTTPRequestRules{redirect(pfx+"%[path]", "", "")}
+		}
+		replacement := strings.TrimRight(*f.Path.ReplacePrefixMatch, "/")
+		if matchPrefix == "/" {
+			return models.HTTPRequestRules{
+				redirect(fmt.Sprintf("%s%s%%[path,regsub(^/$,)]", pfx, replacement), "", ""),
+			}
+		}
+		escapedPrefix := regexEscapePath(matchPrefix)
+		return models.HTTPRequestRules{
+			redirect(fmt.Sprintf("%s%%[path,regsub(^%s(/.*)?$,%s\\1)]",
+				pfx, escapedPrefix, replacement), "", ""),
+		}
+	}
+
+	return models.HTTPRequestRules{redirect(pfx+"%[path]", "", "")}
 }
 
 // requestHeaderModifierRules converts an HTTPHeaderFilter to http-request rules.

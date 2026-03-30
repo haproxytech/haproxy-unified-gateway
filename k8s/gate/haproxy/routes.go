@@ -218,6 +218,58 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(_ k8stypes.NamespacedName, route
 	}
 
 	for _, rule := range route.Rules {
+		// Rules with a RequestRedirect filter map directly to a redirect pseudo-backend.
+		// Handle this before the rule.Valid check since redirect rules may have no
+		// backendRefs (which causes rule.Valid to be false).
+		if hasRedirectFilter(rule.K8sResource.Filters) {
+			redirectBeName := b.topManager.getRedirectBackendName(rule.K8sResource.Filters)
+			for _, hostname := range acceptedHostnamesForRoute {
+				for _, match := range rule.K8sResource.Matches {
+					path := "/"
+					if match.Path != nil && match.Path.Value != nil {
+						path = *match.Path.Value
+					}
+					var pathType gatewayv1.PathMatchType
+					if match.Path == nil || match.Path.Type == nil {
+						pathType = gatewayv1.PathMatchPathPrefix
+					} else {
+						pathType = *match.Path.Type
+					}
+					originalHostname := hostname
+					hostname = sanitizeHostname(hostname, pathType)
+					mapDesiredBackends := desiredBackendsPathExactByHostnameAndPath
+					switch pathType {
+					case gatewayv1.PathMatchExact:
+						if isDomainWildcard(string(originalHostname)) {
+							mapDesiredBackends = desiredBackendsDomainWildcardByHostnameAndPath
+						}
+					case gatewayv1.PathMatchPathPrefix:
+						if isDomainWildcard(originalHostname) {
+							mapDesiredBackends = desiredBackendsRegexByHostnameAndPath
+							path += ".*"
+							path = sanitizeRegexp(path)
+							hostname = sanitizeRegexp(hostname)
+						} else {
+							mapDesiredBackends = desiredBackendsPathPrefixByHostnameAndPath
+						}
+					case gatewayv1.PathMatchRegularExpression:
+						mapDesiredBackends = desiredBackendsRegexByHostnameAndPath
+						path = strings.TrimPrefix(path, "^")
+						path = sanitizeRegexp(path)
+						hostname = sanitizeRegexp(hostname)
+					}
+					entryKey := maps.EntryKey{Hostname: hostname, Path: path}
+					desiredBackendsByPath := mapDesiredBackends[entryKey]
+					if desiredBackendsByPath == nil {
+						desiredBackendsByPath = map[string]*maps.WeightedBackend{}
+						mapDesiredBackends[entryKey] = desiredBackendsByPath
+					}
+					desiredBackendsByPath[redirectBeName] = &maps.WeightedBackend{BackendName: redirectBeName}
+				}
+			}
+			continue
+		}
+
 		if !rule.Valid {
 			continue
 		}
