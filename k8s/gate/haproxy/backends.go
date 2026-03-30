@@ -770,7 +770,8 @@ func getFilterHash(ruleFilters, backendRefFilters []gatewayv1.HTTPRouteFilter) s
 		switch f.Type {
 		case gatewayv1.HTTPRouteFilterRequestHeaderModifier,
 			gatewayv1.HTTPRouteFilterResponseHeaderModifier,
-			gatewayv1.HTTPRouteFilterURLRewrite:
+			gatewayv1.HTTPRouteFilterURLRewrite,
+			gatewayv1.HTTPRouteFilterCORS:
 			combined = append(combined, f)
 		}
 	}

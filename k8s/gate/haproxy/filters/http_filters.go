@@ -15,6 +15,7 @@ package filters
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/haproxytech/client-native/v6/models"
@@ -61,10 +62,15 @@ func ToHAProxyRules(httpFilters []gatewayv1.HTTPRouteFilter, matchPrefix string)
 				result.IsRedirect = true
 				result.RedirectRules = requestRedirectRules(filter.RequestRedirect, matchPrefix)
 			}
-		// RequestMirror and ExtensionRef are handled separately.
+		case gatewayv1.HTTPRouteFilterCORS:
+			if filter.CORS != nil {
+				reqRules, respRules := corsRules(filter.CORS)
+				result.HTTPRequestRules = append(result.HTTPRequestRules, reqRules...)
+				result.HTTPResponseRules = append(result.HTTPResponseRules, respRules...)
+			}
+			// RequestMirror and ExtensionRef are handled separately.
 		}
 	}
-	_ = matchPrefix
 	return result
 }
 
@@ -76,11 +82,195 @@ func HasSideEffects(httpFilters []gatewayv1.HTTPRouteFilter) bool {
 		case gatewayv1.HTTPRouteFilterRequestHeaderModifier,
 			gatewayv1.HTTPRouteFilterResponseHeaderModifier,
 			gatewayv1.HTTPRouteFilterURLRewrite,
-			gatewayv1.HTTPRouteFilterRequestRedirect:
+			gatewayv1.HTTPRouteFilterRequestRedirect,
+			gatewayv1.HTTPRouteFilterCORS:
 			return true
 		}
 	}
 	return false
+}
+
+// corsOriginConfig holds the computed origin-matching strategy for a CORS filter.
+type corsOriginConfig struct {
+	// headerValue is the Access-Control-Allow-Origin header value: "*" or
+	// "%[req.hdr(Origin)]" (HAProxy fetch expression that echoes the request origin).
+	headerValue string
+	// condTest is the HAProxy ACL test for "origin matches".  Empty means
+	// unconditional (used when headerValue is "*" and credentials are not required).
+	condTest string
+}
+
+// buildCORSOriginConfig derives the origin matching strategy from the filter spec.
+func buildCORSOriginConfig(origins []gatewayv1.CORSOrigin, allowCredentials bool) corsOriginConfig {
+	isWildcardAll := len(origins) == 0
+	for _, o := range origins {
+		if string(o) == "*" {
+			isWildcardAll = true
+			break
+		}
+	}
+	if isWildcardAll {
+		if !allowCredentials {
+			return corsOriginConfig{headerValue: "*", condTest: ""}
+		}
+		return corsOriginConfig{
+			headerValue: "%[req.hdr(Origin)]",
+			condTest:    "{ hdr_cnt(Origin) gt 0 }",
+		}
+	}
+	patterns := make([]string, 0, len(origins))
+	for _, o := range origins {
+		patterns = append(patterns, originToPattern(string(o)))
+	}
+	return corsOriginConfig{
+		headerValue: "%[req.hdr(Origin)]",
+		condTest:    fmt.Sprintf("{ req.hdr(Origin) -m reg ^(%s)$ }", strings.Join(patterns, "|")),
+	}
+}
+
+// originToPattern converts a CORSOrigin string to a POSIX ERE pattern fragment.
+func originToPattern(origin string) string {
+	var b strings.Builder
+	for _, c := range origin {
+		switch c {
+		case '.':
+			_, _ = b.WriteString(`\.`)
+		case '*':
+			_, _ = b.WriteString(`.*`)
+		default:
+			_, _ = b.WriteRune(c)
+		}
+	}
+	return b.String()
+}
+
+// corsRules converts an HTTPCORSFilter into http-request and http-response rules.
+// A set-var-fmt rule captures the validated Origin into txn.cors_origin so that
+// response rules can reference var(txn.cors_origin) instead of req.hdr(Origin),
+// which HAProxy's config checker disallows in http-response context.
+func corsRules(f *gatewayv1.HTTPCORSFilter) (models.HTTPRequestRules, models.HTTPResponseRules) {
+	allowCredentials := f.AllowCredentials != nil && *f.AllowCredentials
+	originCfg := buildCORSOriginConfig(f.AllowOrigins, allowCredentials)
+
+	var reqRules models.HTTPRequestRules
+
+	responseOriginValue := originCfg.headerValue
+	if originCfg.condTest != "" {
+		reqRules = append(reqRules, &models.HTTPRequestRule{
+			Type:      "set-var-fmt",
+			VarScope:  "txn",
+			VarName:   "cors_origin",
+			VarFormat: "%[req.hdr(Origin)]",
+			Cond:      "if",
+			CondTest:  originCfg.condTest,
+		})
+		responseOriginValue = "%[var(txn.cors_origin)]"
+	}
+
+	preflightHdrs := corsPreflightHeaders(f, originCfg, allowCredentials)
+	var preflightCondTest string
+	if originCfg.condTest == "" {
+		preflightCondTest = "{ method OPTIONS } { hdr_cnt(Origin) gt 0 }"
+	} else {
+		preflightCondTest = "{ method OPTIONS } " + originCfg.condTest
+	}
+	statusCode := int64(204)
+	reqRules = append(reqRules, &models.HTTPRequestRule{
+		Type:             "return",
+		ReturnStatusCode: &statusCode,
+		ReturnHeaders:    preflightHdrs,
+		Cond:             "if",
+		CondTest:         preflightCondTest,
+	})
+
+	responseRules := corsResponseRules(f, originCfg, allowCredentials, responseOriginValue)
+	return reqRules, responseRules
+}
+
+// corsPreflightHeaders builds the ReturnHeader slice for the preflight http-request
+// return rule.  Multi-value strings such as "GET, POST" must be double-quoted so that
+// HAProxy's config-parser treats the comma-separated list as a single token.
+func corsPreflightHeaders(f *gatewayv1.HTTPCORSFilter, originCfg corsOriginConfig, allowCredentials bool) []*models.ReturnHeader {
+	strPtr := func(s string) *string { return &s }
+	quoteFmt := func(s string) string {
+		if strings.Contains(s, " ") {
+			return `"` + s + `"`
+		}
+		return s
+	}
+
+	hdrs := []*models.ReturnHeader{
+		{Name: strPtr("Access-Control-Allow-Origin"), Fmt: strPtr(originCfg.headerValue)},
+	}
+	if allowCredentials {
+		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Allow-Credentials"), Fmt: strPtr("true")})
+	}
+	if len(f.AllowMethods) > 0 {
+		methods := make([]string, len(f.AllowMethods))
+		for i, m := range f.AllowMethods {
+			methods[i] = string(m)
+		}
+		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Allow-Methods"), Fmt: strPtr(quoteFmt(strings.Join(methods, ", ")))})
+	}
+	if len(f.AllowHeaders) > 0 {
+		headers := make([]string, len(f.AllowHeaders))
+		for i, h := range f.AllowHeaders {
+			headers[i] = string(h)
+		}
+		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Allow-Headers"), Fmt: strPtr(quoteFmt(strings.Join(headers, ", ")))})
+	}
+	maxAge := int32(5)
+	if f.MaxAge != 0 {
+		maxAge = f.MaxAge
+	}
+	hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Max-Age"), Fmt: strPtr(strconv.Itoa(int(maxAge)))})
+	return hdrs
+}
+
+// corsResponseRules builds the http-response add-header rules for regular (non-OPTIONS)
+// cross-origin requests.  A !{ method OPTIONS } guard prevents duplicate headers.
+// When origins are specific, the condition uses var(txn.cors_origin) instead of
+// req.hdr(Origin) because HAProxy rejects req.* fetches in http-response context.
+func corsResponseRules(f *gatewayv1.HTTPCORSFilter, originCfg corsOriginConfig, allowCredentials bool, originValue string) models.HTTPResponseRules {
+	quoteFmt := func(s string) string {
+		if strings.Contains(s, " ") {
+			return `"` + s + `"`
+		}
+		return s
+	}
+
+	// Use var(txn.cors_origin) presence as condition when origins are specific:
+	// the var is only set when the request Origin matched, so checking it avoids
+	// using req.hdr which HAProxy forbids in http-response rules.
+	var condTest string
+	if originCfg.condTest == "" {
+		condTest = "!{ method OPTIONS }"
+	} else {
+		condTest = "{ var(txn.cors_origin) -m found } !{ method OPTIONS }"
+	}
+
+	addRule := func(name, value string) *models.HTTPResponseRule {
+		return &models.HTTPResponseRule{
+			Type:      "add-header",
+			HdrName:   name,
+			HdrFormat: value,
+			Cond:      "if",
+			CondTest:  condTest,
+		}
+	}
+
+	rules := models.HTTPResponseRules{addRule("Access-Control-Allow-Origin", originValue)}
+	if allowCredentials {
+		rules = append(rules, addRule("Access-Control-Allow-Credentials", "true"))
+	}
+	if len(f.ExposeHeaders) > 0 {
+		headers := make([]string, len(f.ExposeHeaders))
+		for i, h := range f.ExposeHeaders {
+			headers[i] = string(h)
+		}
+		rules = append(rules, addRule("Access-Control-Expose-Headers", quoteFmt(strings.Join(headers, ", "))))
+	}
+	return rules
 }
 
 // urlRewriteRules converts an HTTPURLRewriteFilter to http-request rules.
