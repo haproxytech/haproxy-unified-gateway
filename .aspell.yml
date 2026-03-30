@@ -102,3 +102,6 @@ allowed:
   - kubernetes
   - amd
   - buildx
+  - misconfiguration
+  - upsert
+  - upserted

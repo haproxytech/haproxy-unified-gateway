@@ -14,4 +14,8 @@ default_server:
   check: enabled
 forwardfor:
   enabled: enabled
+http_request_rule_list:
+- type: set-header
+  hdr_name: X-Canary-Flag
+  hdr_format: active
 server_timeout: 50000

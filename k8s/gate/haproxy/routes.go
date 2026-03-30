@@ -221,6 +221,7 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(_ k8stypes.NamespacedName, route
 		if !rule.Valid {
 			continue
 		}
+
 		for _, backend := range rule.K8sResource.BackendRefs {
 			checkResult, ok := rule.CheckBackendRef.Get(backend.BackendObjectReference)
 			if !ok || !checkResult.Valid {
@@ -242,7 +243,7 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(_ k8stypes.NamespacedName, route
 			if backend.Port != nil {
 				svcPort = int32(*backend.Port)
 			}
-			filterHash := getFilterHash(backend.Filters)
+			filterHash := getFilterHash(rule.K8sResource.Filters, backend.Filters)
 			backendName, err := b.topManager.getBackendName(svckey, int32(svcPort), filterHash)
 			if err != nil {
 				b.topManager.logger.LogAttrs(context.Background(), slog.LevelError, "Processing HTTPRoute [map update]",

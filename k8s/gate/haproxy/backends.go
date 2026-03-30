@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/haproxytech/client-native/v6/models"
+	haproxyfilters "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/filters"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/metadata"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/templates"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
@@ -56,9 +57,14 @@ type BackendReferencedBy struct {
 }
 
 type BackendImpactedInCycle struct {
-	HTTPRouteKey      client.ObjectKey
-	Name              string
-	BackendRef        gatewayv1.HTTPBackendRef
+	HTTPRouteKey client.ObjectKey
+	Name         string
+	// MatchPrefix is the first PathPrefix value found in the rule's matches,
+	// used for URLRewrite/RequestRedirect ReplacePrefixMatch path modifiers.
+	MatchPrefix string
+	BackendRef  gatewayv1.HTTPBackendRef
+	// RuleFilters holds the rule-level HTTPRoute filters that apply to this backend.
+	RuleFilters       []gatewayv1.HTTPRouteFilter
 	ResourceCandidate ResourceCandidate
 }
 
@@ -190,51 +196,57 @@ func (b *HaproxyConfMgrImpl) upsertHTTPRouteBackends(routeKey k8stypes.Namespace
 	var errs utils.Errors
 	upsertedBackendsReferencedByRoute := make(map[string]struct{})
 	for ruleIndex, rule := range route.Rules {
-		if rule.Valid {
-			k8sRule := rule.K8sResource
-			// Iterate now on each referenced Backend
-			for backendRefIndex, backendRef := range k8sRule.BackendRefs {
-				filterHash := getFilterHash(backendRef.Filters)
-				var svcPort int32
-				svcNsName := tree.ServiceNsNameKey(route.K8sResource.Namespace, backendRef.BackendObjectReference)
-				if backendRef.Port != nil {
-					svcPort = int32(*backendRef.Port)
-				}
-				beName, err := b.getBackendName(svcNsName, svcPort, filterHash)
-				if err != nil {
-					b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to compute backendName",
-						logging.LogAttrError(err))
-					errs.Add(err)
-					continue
-				}
+		if !rule.Valid {
+			continue
+		}
 
-				// Check if backendRef is valid
-				checkResult, ok := rule.CheckBackendRef.Get(backendRef.BackendObjectReference)
-				if !ok {
-					b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to check backendRef")
-					continue
-				}
-				// If the specific backendCheck result is ok, add the BE
-				if !checkResult.Valid {
-					continue
-				}
-				err = b.backendOwners.addHTTPRoute(beName, routeKey, route.K8sResource)
-				if err != nil {
-					errs.Add(err)
-					continue
-				}
-				persistenceCandidate := ResourceCandidate{
-					CreationTimestamp:  route.K8sResource.CreationTimestamp.Time,
-					Namespace:          route.K8sResource.Namespace,
-					RouteName:          route.K8sResource.Name,
-					RuleIndex:          ruleIndex,
-					BackendIndex:       backendRefIndex,
-					SessionPersistence: k8sRule.SessionPersistence,
-					HTTPTimeouts:       k8sRule.Timeouts,
-				}
-				b.addImpactedHTTPBackendUpserted(beName, routeKey, backendRef, persistenceCandidate)
-				upsertedBackendsReferencedByRoute[beName] = struct{}{}
+		k8sRule := rule.K8sResource
+
+		// Extract the first PathPrefix match value for URLRewrite prefix rewriting.
+		matchPrefix := extractFirstPathPrefix(k8sRule.Matches)
+
+		// Iterate now on each referenced Backend.
+		for backendRefIndex, backendRef := range k8sRule.BackendRefs {
+			filterHash := getFilterHash(k8sRule.Filters, backendRef.Filters)
+			var svcPort int32
+			svcNsName := tree.ServiceNsNameKey(route.K8sResource.Namespace, backendRef.BackendObjectReference)
+			if backendRef.Port != nil {
+				svcPort = int32(*backendRef.Port)
 			}
+			beName, err := b.getBackendName(svcNsName, svcPort, filterHash)
+			if err != nil {
+				b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to compute backendName",
+					logging.LogAttrError(err))
+				errs.Add(err)
+				continue
+			}
+
+			// Check if backendRef is valid
+			checkResult, ok := rule.CheckBackendRef.Get(backendRef.BackendObjectReference)
+			if !ok {
+				b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to check backendRef")
+				continue
+			}
+			// If the specific backendCheck result is ok, add the BE
+			if !checkResult.Valid {
+				continue
+			}
+			err = b.backendOwners.addHTTPRoute(beName, routeKey, route.K8sResource)
+			if err != nil {
+				errs.Add(err)
+				continue
+			}
+			persistenceCandidate := ResourceCandidate{
+				CreationTimestamp:  route.K8sResource.CreationTimestamp.Time,
+				Namespace:          route.K8sResource.Namespace,
+				RouteName:          route.K8sResource.Name,
+				RuleIndex:          ruleIndex,
+				BackendIndex:       backendRefIndex,
+				SessionPersistence: k8sRule.SessionPersistence,
+				HTTPTimeouts:       k8sRule.Timeouts,
+			}
+			b.addImpactedHTTPBackendUpserted(beName, routeKey, backendRef, k8sRule.Filters, matchPrefix, persistenceCandidate)
+			upsertedBackendsReferencedByRoute[beName] = struct{}{}
 		}
 	}
 
@@ -377,12 +389,15 @@ func (b *HaproxyConfMgrImpl) onInvalidTLSRouteUpserted(routeKey k8stypes.Namespa
 }
 
 func (b *HaproxyConfMgrImpl) addImpactedHTTPBackendUpserted(backendName string, routeKey client.ObjectKey,
-	httpBackendRef gatewayv1.HTTPBackendRef, resourceCandidate ResourceCandidate,
+	httpBackendRef gatewayv1.HTTPBackendRef, ruleFilters []gatewayv1.HTTPRouteFilter,
+	matchPrefix string, resourceCandidate ResourceCandidate,
 ) {
 	impactedBe := BackendImpactedInCycle{
 		Name:              backendName,
 		HTTPRouteKey:      routeKey,
 		BackendRef:        httpBackendRef,
+		RuleFilters:       ruleFilters,
+		MatchPrefix:       matchPrefix,
 		ResourceCandidate: resourceCandidate,
 	}
 
@@ -505,7 +520,8 @@ func (b *HaproxyConfMgrImpl) cleanupUnreferencedBackendsForHTTPRoutes(ownerType 
 
 //revive:disable:flag-parameter
 func (b *HaproxyConfMgrImpl) newBackend(backendName string, md metadata.MetaData,
-	backendRef gatewayv1.HTTPBackendRef, sessionPersistence *gatewayv1.SessionPersistence,
+	backendRef gatewayv1.HTTPBackendRef, ruleFilters []gatewayv1.HTTPRouteFilter, matchPrefix string,
+	sessionPersistence *gatewayv1.SessionPersistence,
 	httpTimeouts *gatewayv1.HTTPRouteTimeouts, namespace string, isHTTPBackend bool,
 ) (*models.Backend, error) {
 	// First, we merge the Backend CRDs from filters, if there are some
@@ -593,6 +609,15 @@ func (b *HaproxyConfMgrImpl) newBackend(backendName string, md metadata.MetaData
 		}
 	}
 
+	// Apply HTTP rules derived from rule-level and backendRef-level filters.
+	// Rule-level filters are applied first so that backendRef filters can override them.
+	allFilters := make([]gatewayv1.HTTPRouteFilter, 0, len(ruleFilters)+len(backendRef.Filters))
+	allFilters = append(allFilters, ruleFilters...)
+	allFilters = append(allFilters, backendRef.Filters...)
+	filterResult := haproxyfilters.ToHAProxyRules(allFilters, matchPrefix)
+	newBackend.HTTPRequestRuleList = append(newBackend.HTTPRequestRuleList, filterResult.HTTPRequestRules...)
+	newBackend.HTTPResponseRuleList = append(newBackend.HTTPResponseRuleList, filterResult.HTTPResponseRules...)
+
 	return newBackend, errs.Result()
 }
 
@@ -655,21 +680,44 @@ func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBacken
 	return errs
 }
 
-func getFilterHash(filters []gatewayv1.HTTPRouteFilter) string {
-	if len(filters) == 0 {
+// getFilterHash produces a hash that uniquely identifies the backend
+// configuration derived from rule-level and backendRef-level filters.
+// Rule-level RequestHeaderModifier filters are combined with backendRef filters;
+// RequestRedirect and RequestMirror are excluded because they are handled separately.
+func getFilterHash(ruleFilters, backendRefFilters []gatewayv1.HTTPRouteFilter) string {
+	var combined []gatewayv1.HTTPRouteFilter
+	for _, f := range ruleFilters {
+		switch f.Type {
+		case gatewayv1.HTTPRouteFilterRequestHeaderModifier:
+			combined = append(combined, f)
+		}
+	}
+	combined = append(combined, backendRefFilters...)
+
+	if len(combined) == 0 {
 		return "_"
 	}
-	// Marshal the filters to JSON
-	jsonData, err := json.Marshal(filters)
+	jsonData, err := json.Marshal(combined)
 	if err != nil {
-		// This should ideally not happen with valid Gateway API objects.
 		return "_"
 	}
-
-	// Compute MD5 hash
 	hash := md5.Sum(jsonData)
-
 	return hex.EncodeToString(hash[:])
+}
+
+// extractFirstPathPrefix returns the Value of the first PathPrefix match found,
+// or an empty string if none exists.  This is used by URLRewrite and
+// RequestRedirect filters that operate on the matched prefix.
+func extractFirstPathPrefix(matches []gatewayv1.HTTPRouteMatch) string {
+	for _, m := range matches {
+		if m.Path == nil || m.Path.Type == nil || m.Path.Value == nil {
+			continue
+		}
+		if *m.Path.Type == gatewayv1.PathMatchPathPrefix {
+			return *m.Path.Value
+		}
+	}
+	return ""
 }
 
 func DeepCopyBackend(original *models.Backend) (*models.Backend, error) {
@@ -737,10 +785,17 @@ func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 		}
 		beMd := b.metadataManager.BackendMetaData(routesInfo)
 
+		// All entries for a given backend name share the same filters and match prefix
+		// (because the name is derived from their hash).
+		// All entries for a given backend name share the same filters and match prefix
+		// (because the name is derived from their hash).
 		var backendRef gatewayv1.HTTPBackendRef
+		var ruleFilters []gatewayv1.HTTPRouteFilter
+		var matchPrefix string
 		for _, impactedBE := range mapImpactedBEs {
-			// They should all have the same filters as the backend name is computed from the Backend + Filters hash
 			backendRef = impactedBE.BackendRef
+			ruleFilters = impactedBE.RuleFilters
+			matchPrefix = impactedBE.MatchPrefix
 		}
 
 		var persistenceCandidates []ResourceCandidate
@@ -770,7 +825,7 @@ func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 			break
 		}
 
-		be, err := b.newBackend(backendName, beMd, backendRef, sessionPersistence, httpTimeouts, namespace, isHTTPBackend)
+		be, err := b.newBackend(backendName, beMd, backendRef, ruleFilters, matchPrefix, sessionPersistence, httpTimeouts, namespace, isHTTPBackend)
 		if err != nil {
 			errs.Add(err)
 			continue
