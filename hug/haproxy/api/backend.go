@@ -31,8 +31,7 @@ func (c *clientNative) BackendCreate(backend models.Backend) error {
 	if err != nil {
 		return err
 	}
-	b := &models.Backend{BackendBase: backend.BackendBase}
-	errCreate := configuration.CreateStructuredBackend(b, c.activeTransaction, 0)
+	errCreate := configuration.CreateStructuredBackend(&backend, c.activeTransaction, 0)
 	if errCreate != nil {
 		// ... maybe it's already existing, so just edit it.
 		if err := configuration.EditStructuredBackend(backend.Name, &backend, c.activeTransaction, 0); err != nil {
