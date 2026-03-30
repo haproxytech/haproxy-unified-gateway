@@ -72,8 +72,9 @@ func (b *HTTPRouteBuilderImpl) computeGateTreeUpdates() {
 			b.buildRules(httpRoute)
 		}
 
-		// Merge the backendRef conditions
+		// Merge the backendRef conditions, then filter conditions
 		httpRoute.mergeBackendConditions()
+		httpRoute.mergeFilterConditions()
 		httpRoute.Conditions.SetGeneration(httpRoute.K8sResource.Generation)
 	}
 }
@@ -180,5 +181,6 @@ func (b *HTTPRouteBuilderImpl) buildRules(httpRoute *HTTPRoute) {
 	// Performs all needed checks
 	for _, rule := range httpRoute.Rules {
 		rule.checkBackendRef(httpRoute, *b.ControllerStore)
+		rule.checkFilters()
 	}
 }
