@@ -118,18 +118,42 @@ check-committer:
         case "$EMAIL" in
           *@haproxy.com) ;;
           *)
-            BAD_EMAILS="${BAD_EMAILS}${EMAIL}\n"
+            SHORT=$(echo "$COMMIT" | cut -c1-8)
+            BAD_EMAILS="${BAD_EMAILS}${SHORT} ${MSG} (${EMAIL})\n"
             junit-report add --status=failed --file="$EMAIL" --message="$EMAIL: $MSG" --description="$(printf "committer email not @haproxy.com\n\n%s\n%s" "$MSG" "$EMAIL")"
             ;;
         esac
       done
+      CO_AUTHORED=""
+      for COMMIT in $(git log --format='%H' origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}...HEAD); do
+        BODY=$(git log -1 --format='%b' "$COMMIT")
+        MSG=$(git log -1 --format='%s' "$COMMIT")
+        MATCHED=$(echo "$BODY" | grep -i 'Co-authored-by' || true)
+        if [ -n "$MATCHED" ]; then
+          SHORT=$(echo "$COMMIT" | cut -c1-8)
+          CO_AUTHORED="${CO_AUTHORED}${SHORT} ${MSG}\n$(echo "$MATCHED" | sed 's/^/  /')\n"
+          junit-report add --status=failed --file="co-authored-by" --message="$MSG" --description="$(printf "commit contains Co-authored-by trailer\n\n%s\n%s" "$MSG" "$MATCHED")"
+        fi
+      done
+      FAILED=""
       if [ -n "$BAD_EMAILS" ]; then
         echo "The following committer emails are not @haproxy.com:"
         printf "$BAD_EMAILS"
-        exit 1
+        FAILED=1
       else
         echo "All committer emails end with @haproxy.com."
         junit-report add --status=ok --file=committer-email --description="all emails valid" --message="All committer emails end with @haproxy.com."
+      fi
+      if [ -n "$CO_AUTHORED" ]; then
+        echo "The following commits contain Co-authored-by:"
+        printf "$CO_AUTHORED"
+        FAILED=1
+      else
+        echo "No commits contain Co-authored-by."
+        junit-report add --status=ok --file=co-authored-by --description="no co-authored-by found" --message="No commits contain Co-authored-by."
+      fi
+      if [ -n "$FAILED" ]; then
+        exit 1
       fi
   artifacts:
     when: on_failure
