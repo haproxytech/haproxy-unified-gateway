@@ -1,0 +1,18 @@
+parents:
+- conditions:
+  - message: Route Accepted
+    observedGeneration: 1
+    reason: Accepted
+    status: "True"
+    type: Accepted
+  - message: References resolved
+    observedGeneration: 1
+    reason: ResolvedRefs
+    status: "True"
+    type: ResolvedRefs
+  controllerName: gate.haproxy.org/hug
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+    sectionName: http

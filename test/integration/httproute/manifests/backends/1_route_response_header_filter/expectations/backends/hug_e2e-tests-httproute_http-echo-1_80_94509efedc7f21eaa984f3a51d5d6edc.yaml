@@ -1,0 +1,34 @@
+{
+    "from": "haproxytech",
+    "metadata": {
+        "hug": {
+            "HTTPRoute": {
+                "e2e-tests-httproute/route-echo-1": {
+                    "Generation": 1,
+                    "LinkID": "hug"
+                }
+            }
+        }
+    },
+    "mode": "http",
+    "name": "hug_e2e-tests-httproute_http-echo-1_80_94509efedc7f21eaa984f3a51d5d6edc",
+    "abortonclose": "disabled",
+    "balance": {
+        "algorithm": "roundrobin"
+    },
+    "default_server": {
+        "check": "enabled"
+    },
+    "forwardfor": {
+        "enabled": "enabled"
+    },
+    "http_response_rule_list": [
+        {
+            "hdr_format": "hello",
+            "hdr_name": "X-Custom-Response",
+            "index": 0,
+            "type": "set-header"
+        }
+    ],
+    "server_timeout": 50000
+}

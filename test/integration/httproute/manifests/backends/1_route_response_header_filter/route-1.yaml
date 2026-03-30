@@ -1,0 +1,24 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-echo-1
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "example.haproxy"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /route1
+    filters:
+    - type: ResponseHeaderModifier
+      responseHeaderModifier:
+        set:
+        - name: X-Custom-Response
+          value: "hello"
+    backendRefs:
+    - name: http-echo-1
+      port: 80
