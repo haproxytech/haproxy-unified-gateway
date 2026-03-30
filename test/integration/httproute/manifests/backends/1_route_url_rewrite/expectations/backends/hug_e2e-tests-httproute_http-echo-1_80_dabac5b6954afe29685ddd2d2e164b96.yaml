@@ -1,0 +1,33 @@
+{
+    "from": "haproxytech",
+    "metadata": {
+        "hug": {
+            "HTTPRoute": {
+                "e2e-tests-httproute/route-echo-1": {
+                    "Generation": 1,
+                    "LinkID": "hug"
+                }
+            }
+        }
+    },
+    "mode": "http",
+    "name": "hug_e2e-tests-httproute_http-echo-1_80_dabac5b6954afe29685ddd2d2e164b96",
+    "abortonclose": "disabled",
+    "balance": {
+        "algorithm": "roundrobin"
+    },
+    "default_server": {
+        "check": "enabled"
+    },
+    "forwardfor": {
+        "enabled": "enabled"
+    },
+    "http_request_rule_list": [
+        {
+            "index": 0,
+            "path_fmt": "/new-path",
+            "type": "set-path"
+        }
+    ],
+    "server_timeout": 50000
+}

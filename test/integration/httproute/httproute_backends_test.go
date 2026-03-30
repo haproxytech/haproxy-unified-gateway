@@ -114,6 +114,33 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_response_header_filt
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
+func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_url_rewrite() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "backends"
+	mapFileRelativePath := "hug_http_8080"
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "1_route_url_rewrite")
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFileRelativePath})
+
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+
+	httpRouteName := "route-echo-1"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+
+	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+
+	backendsExpectationsPath := path.Join(expectationsPath, "backends")
+	expectedBackends := []string{
+		"hug_e2e-tests-httproute_http-echo-1_80_dabac5b6954afe29685ddd2d2e164b96",
+	}
+	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+
+	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
+}
+
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_dynamic_delete_1_backend() {
 	fixtureDirPath := utils.GetCRDFixturePath()
 	fixtureDir := "backends"
