@@ -36,6 +36,11 @@ func ToHAProxyRules(httpFilters []gatewayv1.HTTPRouteFilter, matchPrefix string)
 				rules := requestHeaderModifierRules(filter.RequestHeaderModifier)
 				result.HTTPRequestRules = append(result.HTTPRequestRules, rules...)
 			}
+		case gatewayv1.HTTPRouteFilterResponseHeaderModifier:
+			if filter.ResponseHeaderModifier != nil {
+				rules := responseHeaderModifierRules(filter.ResponseHeaderModifier)
+				result.HTTPResponseRules = append(result.HTTPResponseRules, rules...)
+			}
 		// RequestMirror and ExtensionRef are handled separately.
 		}
 	}
@@ -48,7 +53,8 @@ func ToHAProxyRules(httpFilters []gatewayv1.HTTPRouteFilter, matchPrefix string)
 func HasSideEffects(httpFilters []gatewayv1.HTTPRouteFilter) bool {
 	for _, f := range httpFilters {
 		switch f.Type {
-		case gatewayv1.HTTPRouteFilterRequestHeaderModifier:
+		case gatewayv1.HTTPRouteFilterRequestHeaderModifier,
+			gatewayv1.HTTPRouteFilterResponseHeaderModifier:
 			return true
 		}
 	}
@@ -74,6 +80,32 @@ func requestHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPReques
 	}
 	for _, name := range f.Remove {
 		rules = append(rules, &models.HTTPRequestRule{
+			Type:    "del-header",
+			HdrName: name,
+		})
+	}
+	return rules
+}
+
+// responseHeaderModifierRules converts an HTTPHeaderFilter to http-response rules.
+func responseHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPResponseRules {
+	var rules models.HTTPResponseRules
+	for _, h := range f.Set {
+		rules = append(rules, &models.HTTPResponseRule{
+			Type:      "set-header",
+			HdrName:   string(h.Name),
+			HdrFormat: h.Value,
+		})
+	}
+	for _, h := range f.Add {
+		rules = append(rules, &models.HTTPResponseRule{
+			Type:      "add-header",
+			HdrName:   string(h.Name),
+			HdrFormat: h.Value,
+		})
+	}
+	for _, name := range f.Remove {
+		rules = append(rules, &models.HTTPResponseRule{
 			Type:    "del-header",
 			HdrName: name,
 		})
