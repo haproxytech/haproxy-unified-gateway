@@ -117,6 +117,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Compare with baseline from target branch when in MR context.
+	if targetBranch := os.Getenv("CI_MERGE_REQUEST_TARGET_BRANCH_NAME"); targetBranch != "" {
+		projectID := os.Getenv("CI_PROJECT_ID")
+		if projectID != "" {
+			fmt.Printf("Fetching baseline metrics from branch %s...\n", targetBranch)
+			baselineJobs, pipelineID, err := loadBaselineJobs(projectID, targetBranch)
+			if err != nil {
+				fmt.Printf("Warning: could not load baseline: %v\n", err)
+			} else if len(baselineJobs) > 0 {
+				results := compareMetrics(baselineJobs, jobs)
+				comparison := formatComparisonReport(results, fmt.Sprintf("%d", pipelineID))
+				report = comparison + report
+			}
+		}
+	}
+
 	reportFile := filepath.Join(metricsDir, "metrics-report.md")
 	if err := os.WriteFile(reportFile, []byte(report), 0o644); err != nil {
 		fmt.Printf("Error writing report: %v\n", err)
