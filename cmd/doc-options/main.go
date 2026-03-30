@@ -201,4 +201,6 @@ func main() { //revive:disable:cognitive-complexity,unhandled-error,function-len
 	if err != nil {
 		log.Panic().Err(err).Msg("")
 	}
+
+	generateLifecycle()
 }
