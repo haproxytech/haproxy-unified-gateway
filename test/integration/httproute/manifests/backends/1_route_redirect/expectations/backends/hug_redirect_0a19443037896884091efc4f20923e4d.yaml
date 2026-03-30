@@ -1,0 +1,24 @@
+{
+    "from": "haproxytech",
+    "metadata": {
+        "hug": {
+            "HTTPRoute": {
+                "e2e-tests-httproute/route-echo-1": {
+                    "Generation": 1,
+                    "LinkID": "hug"
+                }
+            }
+        }
+    },
+    "mode": "http",
+    "name": "hug_redirect_0a19443037896884091efc4f20923e4d",
+    "http_request_rule_list": [
+        {
+            "index": 0,
+            "redir_code": 301,
+            "redir_type": "scheme",
+            "redir_value": "https",
+            "type": "redirect"
+        }
+    ]
+}
