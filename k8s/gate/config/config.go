@@ -142,7 +142,8 @@ func NewBaseLogger(handlerType logging.LogHandlerType, defaultLevel slog.Level, 
 		})
 	case logging.LogHandlerTypeText:
 		baseHandler = tint.NewHandler(os.Stdout, &tint.Options{
-			Level: slog.LevelDebug,
+			Level:   slog.LevelDebug,
+			NoColor: os.Getenv("NO_COLOR") != "",
 			// TimeFormat: time.Kitchen,
 			ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 				if a.Key == logging.LogCategoryKey || a.Key == "GVK" {
