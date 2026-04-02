@@ -85,6 +85,7 @@ func TestConformance(t *testing.T) {
 		features.SupportGateway,
 		features.SupportHTTPRoute,
 		features.SupportReferenceGrant,
+		features.SupportGatewayAddressEmpty,
 	)
 
 	conformanceProfiles := sets.New(
