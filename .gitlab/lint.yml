@@ -112,7 +112,7 @@ check-committer:
     - |
       git fetch origin ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
       BAD_EMAILS=""
-      for COMMIT in $(git log --format='%H' origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}...HEAD); do
+      for COMMIT in $(git log --format='%H' origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}..HEAD); do
         EMAIL=$(git log -1 --format='%ae' "$COMMIT")
         MSG=$(git log -1 --format='%s' "$COMMIT")
         case "$EMAIL" in
@@ -125,7 +125,7 @@ check-committer:
         esac
       done
       CO_AUTHORED=""
-      for COMMIT in $(git log --format='%H' origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}...HEAD); do
+      for COMMIT in $(git log --format='%H' origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}..HEAD); do
         BODY=$(git log -1 --format='%b' "$COMMIT")
         MSG=$(git log -1 --format='%s' "$COMMIT")
         MATCHED=$(echo "$BODY" | grep -i 'Co-authored-by' || true)

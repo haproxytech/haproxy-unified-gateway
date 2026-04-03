@@ -65,7 +65,7 @@ check-large-files:
     # List all files in the latest commit that are larger than 1MB
     - |
       git fetch origin ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
-      git diff --name-only origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}...HEAD | while read file; do
+      git diff --name-only origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}..HEAD | while read file; do
         if [ -f "$file" ] && [ $(stat -c%s "$file") -gt 1048576 ]; then
           echo "$file"
         fi
