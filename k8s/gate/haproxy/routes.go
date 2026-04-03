@@ -189,33 +189,8 @@ func (b *RouteMgrImpl) onDeletedHTTPRoute(namespacedName k8stypes.NamespacedName
 
 func (b *RouteMgrImpl) onValidHTTPRouteUpserted(_ k8stypes.NamespacedName, route *tree.HTTPRoute,
 	mapExact, mapPrefix, mapRegex, mapDomainWildcardPathExact *maps.MapFileState, acceptedHostnamesForRoute []string,
-) error { //revive:disable:function-length,cognitive-complexity
-	// Hostname + Path -> backend name -> weighted backend
-	desiredBackendsPathExactByHostnameAndPath := map[maps.EntryKey]map[string]*maps.WeightedBackend{}
-	desiredBackendsPathPrefixByHostnameAndPath := map[maps.EntryKey]map[string]*maps.WeightedBackend{}
-	desiredBackendsRegexByHostnameAndPath := map[maps.EntryKey]map[string]*maps.WeightedBackend{}
-	desiredBackendsDomainWildcardByHostnameAndPath := map[maps.EntryKey]map[string]*maps.WeightedBackend{}
-	associatedMapFilesAndDesiredBackends := []struct {
-		mapFile         *maps.MapFileState
-		desiredBackends map[maps.EntryKey]map[string]*maps.WeightedBackend
-	}{
-		{
-			mapFile:         mapExact,
-			desiredBackends: desiredBackendsPathExactByHostnameAndPath,
-		},
-		{
-			mapFile:         mapPrefix,
-			desiredBackends: desiredBackendsPathPrefixByHostnameAndPath,
-		},
-		{
-			mapFile:         mapRegex,
-			desiredBackends: desiredBackendsRegexByHostnameAndPath,
-		},
-		{
-			mapFile:         mapDomainWildcardPathExact,
-			desiredBackends: desiredBackendsDomainWildcardByHostnameAndPath,
-		},
-	}
+) error {
+	desired := newDesiredBackendsMaps()
 
 	for _, rule := range route.Rules {
 		// Rules with a RequestRedirect filter map directly to a redirect pseudo-backend.
@@ -230,46 +205,8 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(_ k8stypes.NamespacedName, route
 			redirectBeName := b.topManager.getRedirectBackendName(rule.K8sResource.Filters)
 			for _, hostname := range acceptedHostnamesForRoute {
 				for _, match := range rule.K8sResource.Matches {
-					path := "/"
-					if match.Path != nil && match.Path.Value != nil {
-						path = *match.Path.Value
-					}
-					var pathType gatewayv1.PathMatchType
-					if match.Path == nil || match.Path.Type == nil {
-						pathType = gatewayv1.PathMatchPathPrefix
-					} else {
-						pathType = *match.Path.Type
-					}
-					originalHostname := hostname
-					hostname = sanitizeHostname(hostname, pathType)
-					mapDesiredBackends := desiredBackendsPathExactByHostnameAndPath
-					switch pathType {
-					case gatewayv1.PathMatchExact:
-						if isDomainWildcard(string(originalHostname)) {
-							mapDesiredBackends = desiredBackendsDomainWildcardByHostnameAndPath
-						}
-					case gatewayv1.PathMatchPathPrefix:
-						if isDomainWildcard(originalHostname) {
-							mapDesiredBackends = desiredBackendsRegexByHostnameAndPath
-							path += ".*"
-							path = sanitizeRegexp(path)
-							hostname = sanitizeRegexp(hostname)
-						} else {
-							mapDesiredBackends = desiredBackendsPathPrefixByHostnameAndPath
-						}
-					case gatewayv1.PathMatchRegularExpression:
-						mapDesiredBackends = desiredBackendsRegexByHostnameAndPath
-						path = strings.TrimPrefix(path, "^")
-						path = sanitizeRegexp(path)
-						hostname = sanitizeRegexp(hostname)
-					}
-					entryKey := maps.EntryKey{Hostname: hostname, Path: path}
-					desiredBackendsByPath := mapDesiredBackends[entryKey]
-					if desiredBackendsByPath == nil {
-						desiredBackendsByPath = map[string]*maps.WeightedBackend{}
-						mapDesiredBackends[entryKey] = desiredBackendsByPath
-					}
-					desiredBackendsByPath[redirectBeName] = &maps.WeightedBackend{BackendName: redirectBeName}
+					bucket, _ := desired.resolveEntry(hostname, match)
+					bucket[redirectBeName] = &maps.WeightedBackend{BackendName: redirectBeName}
 				}
 			}
 			continue
@@ -308,62 +245,15 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(_ k8stypes.NamespacedName, route
 				)
 				continue
 			}
-			// For each accepted hostname ...
 			for _, hostname := range acceptedHostnamesForRoute {
 				for _, match := range rule.K8sResource.Matches {
-					// ... we collect each path ...
-					path := "/"
-					if match.Path.Value != nil {
-						path = *match.Path.Value
-					}
-					var pathType gatewayv1.PathMatchType
-					// ... and their path type ...
-					if match.Path.Type == nil {
-						pathType = gatewayv1.PathMatchPathPrefix
-					} else {
-						pathType = *match.Path.Type
-					}
-					mapDesiredBackends := desiredBackendsPathExactByHostnameAndPath
-					originalHostname := hostname
-					hostname = sanitizeHostname(hostname, pathType)
-					switch pathType {
-					case gatewayv1.PathMatchExact:
-						if isDomainWildcard(string(originalHostname)) {
-							mapDesiredBackends = desiredBackendsDomainWildcardByHostnameAndPath
-						}
-					case gatewayv1.PathMatchPathPrefix:
-						if isDomainWildcard(originalHostname) {
-							mapDesiredBackends = desiredBackendsRegexByHostnameAndPath
-							path += ".*"
-							path = sanitizeRegexp(path)
-							hostname = sanitizeRegexp(hostname)
-						} else {
-							mapDesiredBackends = desiredBackendsPathPrefixByHostnameAndPath
-						}
-					case gatewayv1.PathMatchRegularExpression:
-						mapDesiredBackends = desiredBackendsRegexByHostnameAndPath
-						path = strings.TrimPrefix(path, "^")
-						path = sanitizeRegexp(path)
-						hostname = sanitizeRegexp(hostname)
-					}
-
-					entryKey := maps.EntryKey{
-						Hostname: hostname,
-						Path:     path,
-					}
-					desiredBackendsByPath := mapDesiredBackends[entryKey]
-					if desiredBackendsByPath == nil {
-						desiredBackendsByPath = map[string]*maps.WeightedBackend{}
-						mapDesiredBackends[entryKey] = desiredBackendsByPath
-					}
-					// ... and we set the weighted backend
-					existing := desiredBackendsByPath[backendName]
+					bucket, _ := desired.resolveEntry(hostname, match)
+					existing := bucket[backendName]
 					if existing == nil {
-						existing = &maps.WeightedBackend{
+						bucket[backendName] = &maps.WeightedBackend{
 							BackendName: backendName,
 							Weight:      backend.Weight,
 						}
-						desiredBackendsByPath[backendName] = existing
 						continue
 					}
 					newWeight := utils.PointerDefaultValueIfNil(existing.Weight) +
@@ -374,15 +264,73 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(_ k8stypes.NamespacedName, route
 		}
 	}
 
-	for _, associatedMapFileAndDesiredBackends := range associatedMapFilesAndDesiredBackends {
-		associatedMapFileAndDesiredBackends.mapFile.ApplyRoute(
-			maps.ResourceOrigin{
-				Namespace: route.K8sResource.Namespace,
-				Name:      route.K8sResource.Name,
-			},
-			associatedMapFileAndDesiredBackends.desiredBackends)
-	}
+	origin := maps.ResourceOrigin{Namespace: route.K8sResource.Namespace, Name: route.K8sResource.Name}
+	mapExact.ApplyRoute(origin, desired.exact)
+	mapPrefix.ApplyRoute(origin, desired.prefix)
+	mapRegex.ApplyRoute(origin, desired.regex)
+	mapDomainWildcardPathExact.ApplyRoute(origin, desired.domainWildcard)
 	return nil
+}
+
+// desiredBackendsMaps groups the four (hostname, path) → backends maps that
+// correspond to the four HAProxy map files (exact, prefix, regex, domain-wildcard).
+type desiredBackendsMaps struct {
+	exact          map[maps.EntryKey]map[string]*maps.WeightedBackend
+	prefix         map[maps.EntryKey]map[string]*maps.WeightedBackend
+	regex          map[maps.EntryKey]map[string]*maps.WeightedBackend
+	domainWildcard map[maps.EntryKey]map[string]*maps.WeightedBackend
+}
+
+func newDesiredBackendsMaps() desiredBackendsMaps {
+	return desiredBackendsMaps{
+		exact:          map[maps.EntryKey]map[string]*maps.WeightedBackend{},
+		prefix:         map[maps.EntryKey]map[string]*maps.WeightedBackend{},
+		regex:          map[maps.EntryKey]map[string]*maps.WeightedBackend{},
+		domainWildcard: map[maps.EntryKey]map[string]*maps.WeightedBackend{},
+	}
+}
+
+// resolveEntry selects the correct bucket map and entry key for the given
+// hostname and HTTPRouteMatch, normalising hostname and path according to
+// the path-type routing rules.  The inner map is lazily initialised so the
+// caller can write to the returned map directly.
+func (d *desiredBackendsMaps) resolveEntry(hostname string, match gatewayv1.HTTPRouteMatch) (map[string]*maps.WeightedBackend, maps.EntryKey) {
+	path := "/"
+	if match.Path != nil && match.Path.Value != nil {
+		path = *match.Path.Value
+	}
+	pathType := gatewayv1.PathMatchPathPrefix
+	if match.Path != nil && match.Path.Type != nil {
+		pathType = *match.Path.Type
+	}
+	originalHostname := hostname
+	hostname = sanitizeHostname(hostname, pathType)
+	selected := d.exact
+	switch pathType {
+	case gatewayv1.PathMatchExact:
+		if isDomainWildcard(originalHostname) {
+			selected = d.domainWildcard
+		}
+	case gatewayv1.PathMatchPathPrefix:
+		if isDomainWildcard(originalHostname) {
+			selected = d.regex
+			path += ".*"
+			path = sanitizeRegexp(path)
+			hostname = sanitizeRegexp(hostname)
+		} else {
+			selected = d.prefix
+		}
+	case gatewayv1.PathMatchRegularExpression:
+		selected = d.regex
+		path = strings.TrimPrefix(path, "^")
+		path = sanitizeRegexp(path)
+		hostname = sanitizeRegexp(hostname)
+	}
+	key := maps.EntryKey{Hostname: hostname, Path: path}
+	if selected[key] == nil {
+		selected[key] = map[string]*maps.WeightedBackend{}
+	}
+	return selected[key], key
 }
 
 func (RouteMgrImpl) onInvalidHTTPRouteUpserted(namespacedName k8stypes.NamespacedName, _ *tree.HTTPRoute,
