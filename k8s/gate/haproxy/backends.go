@@ -205,6 +205,11 @@ func (b *HaproxyConfMgrImpl) upsertHTTPRouteBackends(routeKey k8stypes.Namespace
 		// Handle this before the rule.Valid check since such rules may have no
 		// backendRefs (which would cause rule.Valid to be false).
 		if hasRedirectFilter(k8sRule.Filters) {
+			// Skip rules that have incompatible filter combinations (e.g. URLRewrite + RequestRedirect).
+			// checkFilters() will have set Valid=false and generated an IncompatibleFilters condition.
+			if !rule.CheckFilters.Valid {
+				continue
+			}
 			beName := b.getRedirectBackendName(k8sRule.Filters)
 			if err := b.backendOwners.addHTTPRoute(beName, routeKey, route.K8sResource); err != nil {
 				errs.Add(err)
@@ -741,6 +746,10 @@ func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBacken
 }
 
 // getRedirectFilterHash produces a hash identifying a redirect-only backend.
+// JSON marshalling of Gateway API types should never fail in practice; if it
+// does all failed redirect rules would share the same "unknown" backend name,
+// which would cause them to overwrite each other. This is acceptable given the
+// extreme unlikelihood of the error.
 func getRedirectFilterHash(filters []gatewayv1.HTTPRouteFilter) string {
 	jsonData, err := json.Marshal(filters)
 	if err != nil {
@@ -780,6 +789,9 @@ func getFilterHash(ruleFilters, backendRefFilters []gatewayv1.HTTPRouteFilter) s
 	if len(combined) == 0 {
 		return "_"
 	}
+	// JSON marshalling of Gateway API types should never fail in practice; if it
+	// does the hash falls back to "_" (same as no-filter), which may cause two
+	// different filter configurations to share a backend name.
 	jsonData, err := json.Marshal(combined)
 	if err != nil {
 		return "_"
@@ -869,19 +881,16 @@ func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 		beMd := b.metadataManager.BackendMetaData(routesInfo)
 
 		// All entries for a given backend name share the same filters and match prefix
-		// (because the name is derived from their hash).
-		// All entries for a given backend name share the same filters and match prefix
-		// (because the name is derived from their hash).
-		var backendRef gatewayv1.HTTPBackendRef
-		var ruleFilters []gatewayv1.HTTPRouteFilter
-		var matchPrefix string
-		var isRedirect bool
+		// (because the name is derived from their hash). Pick any one entry.
+		var first BackendImpactedInCycle
 		for _, impactedBE := range mapImpactedBEs {
-			backendRef = impactedBE.BackendRef
-			ruleFilters = impactedBE.RuleFilters
-			matchPrefix = impactedBE.MatchPrefix
-			isRedirect = impactedBE.IsRedirect
+			first = impactedBE
+			break
 		}
+		backendRef := first.BackendRef
+		ruleFilters := first.RuleFilters
+		matchPrefix := first.MatchPrefix
+		isRedirect := first.IsRedirect
 
 		if isRedirect {
 			be, err := b.newRedirectBackend(backendName, beMd, ruleFilters, matchPrefix)
