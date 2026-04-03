@@ -222,6 +222,11 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(_ k8stypes.NamespacedName, route
 		// Handle this before the rule.Valid check since redirect rules may have no
 		// backendRefs (which causes rule.Valid to be false).
 		if hasRedirectFilter(rule.K8sResource.Filters) {
+			// Skip rules that have incompatible filter combinations (e.g. URLRewrite + RequestRedirect).
+			// checkFilters() will have set Valid=false and generated an IncompatibleFilters condition.
+			if !rule.CheckFilters.Valid {
+				continue
+			}
 			redirectBeName := b.topManager.getRedirectBackendName(rule.K8sResource.Filters)
 			for _, hostname := range acceptedHostnamesForRoute {
 				for _, match := range rule.K8sResource.Matches {
