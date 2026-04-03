@@ -445,10 +445,16 @@ func (r *HTTPRoute) mergeFilterConditions() {
 	var conds generic.Conditions
 	if len(invalidRules) == len(r.Rules) {
 		// All rules invalid — route is fully invalid.
-		conds = make(generic.Conditions)
-		for _, ir := range invalidRules {
-			conds.MergeOverrideConditions(ir.conds)
+		// Build a single message covering all invalid rules so no context is lost.
+		var msg strings.Builder
+		for i, ir := range invalidRules {
+			if i > 0 {
+				msg.WriteString("; ")
+			}
+			reason := ir.conds.GetMessage(generic.ConditionType(gatewayv1.RouteConditionAccepted))
+			msg.WriteString(fmt.Sprintf("rule %d: %s", ir.index, reason))
 		}
+		conds = rc.ConditionKOAcceptedIncompatibleFilters(msg.String())
 	} else {
 		// Only a portion of rules are invalid — drop them and signal PartiallyInvalid.
 		var msg strings.Builder

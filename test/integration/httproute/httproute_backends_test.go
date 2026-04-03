@@ -240,6 +240,21 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_partial() 
 	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
 }
 
+func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_all_rules_invalid() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "backends"
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "1_route_filter_ko_all_rules_invalid")
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+
+	httpRouteName := "route-echo-1"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+}
+
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_dynamic_delete_1_backend() {
 	fixtureDirPath := utils.GetCRDFixturePath()
 	fixtureDir := "backends"

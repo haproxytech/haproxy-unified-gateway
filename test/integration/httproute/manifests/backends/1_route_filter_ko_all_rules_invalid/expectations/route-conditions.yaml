@@ -1,6 +1,6 @@
 parents:
 - conditions:
-  - message: "rule 0: rule URLRewrite and backendRef RequestRedirect cannot be used together"
+  - message: "rule 0: rule URLRewrite and backendRef RequestRedirect cannot be used together; rule 1: rule URLRewrite and backendRef RequestRedirect cannot be used together"
     observedGeneration: 1
     reason: IncompatibleFilters
     status: "False"
