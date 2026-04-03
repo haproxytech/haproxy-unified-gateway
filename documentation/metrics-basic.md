@@ -5,6 +5,10 @@ Credentials are provided via CLI flags or environment variables.
 
 The endpoint is served over HTTPS with an auto-generated self-signed certificate.
 
+> **Important:** This mode serves metrics over **HTTPS** (not HTTP). If you are switching from the
+> default `none` mode, you must use `https://` in your curl commands and Prometheus scrape configs.
+> Using `http://` will result in: *"Client sent an HTTP request to an HTTPS server."*
+
 ## When to Use
 
 - External Prometheus instances scraping from outside the cluster

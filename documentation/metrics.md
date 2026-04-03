@@ -30,6 +30,10 @@ All flags can also be set via environment variables (e.g., `METRICS_AUTH=basic`)
 
 Both `kube-rbac` and `basic` modes automatically enable HTTPS with a self-signed certificate.
 
+> **Note:** Switching from `none` to `basic` or `kube-rbac` changes the protocol from HTTP to HTTPS.
+> You must update your curl commands (use `https://` and `-k` for self-signed certs) and Prometheus
+> scrape configs (set `scheme: https` with `insecure_skip_verify: true`) accordingly.
+
 For detailed setup instructions, see:
 - [metrics-none.md](metrics-none.md) - No authentication (default)
 - [metrics-kube-rbac.md](metrics-kube-rbac.md) - Kubernetes RBAC authentication
