@@ -24,7 +24,6 @@
     },
     "http_request_rule_list": [
         {
-            "index": 0,
             "path_fmt": "/new-path",
             "type": "set-path"
         }

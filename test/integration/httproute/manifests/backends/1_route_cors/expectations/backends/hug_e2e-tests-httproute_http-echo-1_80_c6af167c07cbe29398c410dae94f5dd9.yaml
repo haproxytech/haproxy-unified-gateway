@@ -26,7 +26,6 @@
         {
             "cond": "if",
             "cond_test": "{ req.hdr(Origin) -m reg ^(http://example\\.haproxy)$ }",
-            "index": 0,
             "type": "set-var-fmt",
             "var_format": "%[req.hdr(Origin)]",
             "var_name": "cors_origin",
@@ -35,12 +34,23 @@
         {
             "cond": "if",
             "cond_test": "{ method OPTIONS } { req.hdr(Origin) -m reg ^(http://example\\.haproxy)$ }",
-            "index": 1,
             "return_hdrs": [
-                {"fmt": "%[req.hdr(Origin)]", "name": "Access-Control-Allow-Origin"},
-                {"fmt": "\"GET, POST\"", "name": "Access-Control-Allow-Methods"},
-                {"fmt": "\"Content-Type, Authorization\"", "name": "Access-Control-Allow-Headers"},
-                {"fmt": "3600", "name": "Access-Control-Max-Age"}
+                {
+                    "fmt": "%[req.hdr(Origin)]",
+                    "name": "Access-Control-Allow-Origin"
+                },
+                {
+                    "fmt": "\"GET, POST\"",
+                    "name": "Access-Control-Allow-Methods"
+                },
+                {
+                    "fmt": "\"Content-Type, Authorization\"",
+                    "name": "Access-Control-Allow-Headers"
+                },
+                {
+                    "fmt": "3600",
+                    "name": "Access-Control-Max-Age"
+                }
             ],
             "return_status_code": 204,
             "type": "return"
@@ -52,7 +62,6 @@
             "cond_test": "{ var(txn.cors_origin) -m found } !{ method OPTIONS }",
             "hdr_format": "%[var(txn.cors_origin)]",
             "hdr_name": "Access-Control-Allow-Origin",
-            "index": 0,
             "type": "add-header"
         },
         {
@@ -60,7 +69,6 @@
             "cond_test": "{ var(txn.cors_origin) -m found } !{ method OPTIONS }",
             "hdr_format": "X-Request-Id",
             "hdr_name": "Access-Control-Expose-Headers",
-            "index": 1,
             "type": "add-header"
         }
     ],

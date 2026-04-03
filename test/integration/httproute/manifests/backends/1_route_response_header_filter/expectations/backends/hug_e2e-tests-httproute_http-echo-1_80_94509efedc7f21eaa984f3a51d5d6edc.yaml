@@ -26,7 +26,6 @@
         {
             "hdr_format": "hello",
             "hdr_name": "X-Custom-Response",
-            "index": 0,
             "type": "set-header"
         }
     ],
