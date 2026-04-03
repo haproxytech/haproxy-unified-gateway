@@ -74,22 +74,6 @@ func ToHAProxyRules(httpFilters []gatewayv1.HTTPRouteFilter, matchPrefix string)
 	return result
 }
 
-// HasSideEffects returns true when the filter slice contains filters that produce
-// HAProxy rules (i.e. anything other than ExtensionRef which is handled elsewhere).
-func HasSideEffects(httpFilters []gatewayv1.HTTPRouteFilter) bool {
-	for _, f := range httpFilters {
-		switch f.Type {
-		case gatewayv1.HTTPRouteFilterRequestHeaderModifier,
-			gatewayv1.HTTPRouteFilterResponseHeaderModifier,
-			gatewayv1.HTTPRouteFilterURLRewrite,
-			gatewayv1.HTTPRouteFilterRequestRedirect,
-			gatewayv1.HTTPRouteFilterCORS:
-			return true
-		}
-	}
-	return false
-}
-
 // corsOriginConfig holds the computed origin-matching strategy for a CORS filter.
 type corsOriginConfig struct {
 	// headerValue is the Access-Control-Allow-Origin header value: "*" or
@@ -187,17 +171,20 @@ func corsRules(f *gatewayv1.HTTPCORSFilter) (models.HTTPRequestRules, models.HTT
 	return reqRules, responseRules
 }
 
+// quoteFmt double-quotes s when it contains a space so that HAProxy's config-parser
+// treats comma-separated lists (e.g. "GET, POST") as a single token.
+func quoteFmt(s string) string {
+	if strings.Contains(s, " ") {
+		return `"` + s + `"`
+	}
+	return s
+}
+
 // corsPreflightHeaders builds the ReturnHeader slice for the preflight http-request
 // return rule.  Multi-value strings such as "GET, POST" must be double-quoted so that
 // HAProxy's config-parser treats the comma-separated list as a single token.
 func corsPreflightHeaders(f *gatewayv1.HTTPCORSFilter, originCfg corsOriginConfig, allowCredentials bool) []*models.ReturnHeader {
 	strPtr := func(s string) *string { return &s }
-	quoteFmt := func(s string) string {
-		if strings.Contains(s, " ") {
-			return `"` + s + `"`
-		}
-		return s
-	}
 
 	hdrs := []*models.ReturnHeader{
 		{Name: strPtr("Access-Control-Allow-Origin"), Fmt: strPtr(originCfg.headerValue)},
@@ -232,13 +219,6 @@ func corsPreflightHeaders(f *gatewayv1.HTTPCORSFilter, originCfg corsOriginConfi
 // When origins are specific, the condition uses var(txn.cors_origin) instead of
 // req.hdr(Origin) because HAProxy rejects req.* fetches in http-response context.
 func corsResponseRules(f *gatewayv1.HTTPCORSFilter, originCfg corsOriginConfig, allowCredentials bool, originValue string) models.HTTPResponseRules {
-	quoteFmt := func(s string) string {
-		if strings.Contains(s, " ") {
-			return `"` + s + `"`
-		}
-		return s
-	}
-
 	// Use var(txn.cors_origin) presence as condition when origins are specific:
 	// the var is only set when the request Origin matched, so checking it avoids
 	// using req.hdr which HAProxy forbids in http-response rules.
