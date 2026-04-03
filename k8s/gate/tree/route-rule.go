@@ -92,6 +92,8 @@ func (r *HTTPRouteRule) checkFilters() {
 			return
 		}
 		// Cross-level: rule URLRewrite + backendRef RequestRedirect is contradictory.
+		// The reverse (rule RequestRedirect + backendRef URLRewrite) cannot occur because
+		// the Gateway API CEL validation prevents backendRefs when RequestRedirect is present at rule level.
 		if ruleHasURLRewrite && filterListContains(backendRef.Filters, gatewayv1.HTTPRouteFilterRequestRedirect) {
 			r.CheckFilters = CheckResult{
 				Valid: false,
