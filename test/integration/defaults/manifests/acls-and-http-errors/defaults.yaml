@@ -13,9 +13,7 @@ spec:
       criterion: path
       value: /healthz
   http_error_rule_list:
-    - index: 0
-      status: 503
+    - status: 503
       type: status
-    - index: 1
-      status: 404
+    - status: 404
       type: status
