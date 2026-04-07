@@ -1,42 +1,28 @@
-{
-    "abortonclose": "disabled",
-    "balance": {
-        "algorithm": "roundrobin"
-    },
-    "default_server": {
-        "check": "enabled"
-    },
-    "forwardfor": {
-        "enabled": "enabled"
-    },
-    "from": "haproxytech",
-    "metadata": {
-        "hug": {
-            "HTTPRoute": {
-                "e2e-tests-httproute/route-echo-backend-cr-basic": {
-                    "Generation": 1,
-                    "LinkID": "hug"
-                }
-            }
-        }
-    },
-    "mode": "http",
-    "name": "hug_e2e-tests-httproute_http-echo_80_ef84fba452b3f62faf235c47b46c1e54",
-    "server_timeout": 70000,
-    "http_request_rule_list": [
-        {
-            "cond": "unless",
-            "cond_test": "{ src 192.168.1.0/16 }",
-            "hdr_format": "%T",
-            "hdr_name": "X-Haproxy-Current-Date",
-            "type": "add-header"
-        },
-        {
-            "cond": "unless",
-            "cond_test": "{ src 192.168.1.0/16 }",
-            "hdr_format": "%[ssl_fc]",
-            "hdr_name": "X_Is_Secure",
-            "type": "add-header"
-        }
-    ]
-}
+abortonclose: disabled
+balance:
+  algorithm: roundrobin
+default_server:
+  check: enabled
+forwardfor:
+  enabled: enabled
+from: haproxytech
+metadata:
+  hug:
+    HTTPRoute:
+      e2e-tests-httproute/route-echo-backend-cr-basic:
+        Generation: 1
+        LinkID: hug
+mode: http
+name: hug_e2e-tests-httproute_http-echo_80_ef84fba452b3f62faf235c47b46c1e54
+server_timeout: 70000
+http_request_rule_list:
+- cond: unless
+  cond_test: '{ src 192.168.1.0/16 }'
+  hdr_format: '%T'
+  hdr_name: X-Haproxy-Current-Date
+  type: add-header
+- cond: unless
+  cond_test: '{ src 192.168.1.0/16 }'
+  hdr_format: '%[ssl_fc]'
+  hdr_name: X_Is_Secure
+  type: add-header

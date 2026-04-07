@@ -1,21 +1,17 @@
-{
-    "from": "haproxytech",
-    "metadata":
-        {
-            "hug":
-                {
-                    "HTTPRoute":
-                        {
-                            "e2e-tests-httproute/route-echo":
-                                { "Generation": 2, "LinkID": "hug" },
-                        },
-                },
-        },
-    "name": "hug_e2e-tests-httproute_http-echo_80__",
-    "mode": "http",
-    "balance": { "algorithm": "roundrobin" },
-    "forwardfor": { "enabled": "enabled" },
-    "abortonclose": "disabled",
-    "server_timeout": 50000,
-    "default_server": { "check": "enabled" },
-}
+from: haproxytech
+metadata:
+  hug:
+    HTTPRoute:
+      e2e-tests-httproute/route-echo:
+        Generation: 2
+        LinkID: hug
+name: hug_e2e-tests-httproute_http-echo_80__
+mode: http
+balance:
+  algorithm: roundrobin
+forwardfor:
+  enabled: enabled
+abortonclose: disabled
+server_timeout: 50000
+default_server:
+  check: enabled

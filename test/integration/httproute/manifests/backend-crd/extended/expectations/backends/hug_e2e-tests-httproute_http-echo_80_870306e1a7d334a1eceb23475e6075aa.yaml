@@ -1,33 +1,21 @@
-{
-    "abortonclose": "disabled",
-    "balance": {
-        "algorithm": "roundrobin"
-    },
-    "default_server": {
-        "check": "enabled"
-    },
-    "forwardfor": {
-        "enabled": "enabled"
-    },
-    "from": "haproxytech",
-    "metadata": {
-        "hug": {
-            "HTTPRoute": {
-                "e2e-tests-httproute/route-echo-backend-cr-basic": {
-                    "Generation": 1,
-                    "LinkID": "hug"
-                }
-            }
-        }
-    },
-    "mode": "http",
-    "name": "hug_e2e-tests-httproute_http-echo_80_870306e1a7d334a1eceb23475e6075aa",
-    "server_timeout": 70000,
-    "http_request_rule_list": [
-        {
-            "hdr_format": "Staging",
-            "hdr_name": "X-Environment",
-            "type": "add-header"
-        }
-    ]
-}
+abortonclose: disabled
+balance:
+  algorithm: roundrobin
+default_server:
+  check: enabled
+forwardfor:
+  enabled: enabled
+from: haproxytech
+metadata:
+  hug:
+    HTTPRoute:
+      e2e-tests-httproute/route-echo-backend-cr-basic:
+        Generation: 1
+        LinkID: hug
+mode: http
+name: hug_e2e-tests-httproute_http-echo_80_870306e1a7d334a1eceb23475e6075aa
+server_timeout: 70000
+http_request_rule_list:
+- hdr_format: Staging
+  hdr_name: X-Environment
+  type: add-header

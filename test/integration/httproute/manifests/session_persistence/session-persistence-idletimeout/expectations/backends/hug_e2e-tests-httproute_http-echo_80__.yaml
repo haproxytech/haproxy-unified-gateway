@@ -1,33 +1,26 @@
-{
-    "from": "haproxytech",
-    "metadata":
-        {
-            "hug":
-                {
-                    "HTTPRoute":
-                        {
-                            "e2e-tests-httproute/route-echo":
-                                { "Generation": 1, "LinkID": "hug" },
-                        },
-                },
-        },
-    "name": "hug_e2e-tests-httproute_http-echo_80__",
-    "mode": "http",
-    "balance": { "algorithm": "roundrobin" },
-    "forwardfor": { "enabled": "enabled" },
-    "abortonclose": "disabled",
-    "server_timeout": 50000,
-    "default_server": { "check": "enabled" },
-
-    "cookie":
-        {
-            "name": "sticky-cookie",
-            "type": "insert",
-            "nocache": true,
-            "indirect": true,
-            "dynamic": true,
-            "maxidle": 60,
-            "domains": [],
-        },
-    "dynamic_cookie_key": "ohph7OoGhong",
-}
+from: haproxytech
+metadata:
+  hug:
+    HTTPRoute:
+      e2e-tests-httproute/route-echo:
+        Generation: 1
+        LinkID: hug
+name: hug_e2e-tests-httproute_http-echo_80__
+mode: http
+balance:
+  algorithm: roundrobin
+forwardfor:
+  enabled: enabled
+abortonclose: disabled
+server_timeout: 50000
+default_server:
+  check: enabled
+cookie:
+  name: sticky-cookie
+  type: insert
+  nocache: true
+  indirect: true
+  dynamic: true
+  maxidle: 60
+  domains: []
+dynamic_cookie_key: ohph7OoGhong
