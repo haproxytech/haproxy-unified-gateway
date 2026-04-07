@@ -35,7 +35,7 @@ func (c *clientNative) BackendCreate(backend models.Backend) error {
 	errCreate := configuration.CreateStructuredBackend(b, c.activeTransaction, 0)
 	if errCreate != nil {
 		// ... maybe it's already existing, so just edit it.
-		if err := configuration.EditBackend(backend.Name, &backend, c.activeTransaction, 0); err != nil {
+		if err := configuration.EditStructuredBackend(backend.Name, &backend, c.activeTransaction, 0); err != nil {
 			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit backend",
 				logging.LogAttrError(err),
 				slog.String("backend", backend.Name),
