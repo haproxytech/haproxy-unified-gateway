@@ -117,3 +117,5 @@ allowed:
   - backreference
   - backreferences
   - iowriter
+  - subresource
+  - GVK

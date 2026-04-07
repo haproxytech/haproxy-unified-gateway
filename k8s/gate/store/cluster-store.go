@@ -32,22 +32,23 @@ import (
 
 // ClusterStore includes cluster resources necessary to build the Tree.
 type ClusterStore struct {
-	GatewayClasses map[types.NamespacedName]*gatewayv1.GatewayClass
-	Gateways       map[types.NamespacedName]*gatewayv1.Gateway
-	HTTPRoutes     map[types.NamespacedName]*gatewayv1.HTTPRoute
-	TLSRoutes      map[types.NamespacedName]*gatewayv1alpha2.TLSRoute
-	Services       map[types.NamespacedName]*v1.Service
-	Namespaces     map[types.NamespacedName]*v1.Namespace
-	Secrets        map[types.NamespacedName]*v1.Secret
-	ConfigMaps     map[types.NamespacedName]*v1.ConfigMap
-	GatewayAPICRDs map[types.NamespacedName]*metav1.PartialObjectMetadata
-	HugGates       map[types.NamespacedName]*v3.HugGate
-	BackendCRs     map[types.NamespacedName]*v3.Backend
-	GlobalCRs      map[types.NamespacedName]*v3.Global
-	DefaultsCRs    map[types.NamespacedName]*v3.Defaults
-	HugConfs       map[types.NamespacedName]*v3.HugConf
-	EndpointSlices map[types.NamespacedName]*discoveryV1.EndpointSlice
-	Updates        ClusterUpdates
+	GatewayClasses  map[types.NamespacedName]*gatewayv1.GatewayClass
+	Gateways        map[types.NamespacedName]*gatewayv1.Gateway
+	HTTPRoutes      map[types.NamespacedName]*gatewayv1.HTTPRoute
+	TLSRoutes       map[types.NamespacedName]*gatewayv1alpha2.TLSRoute
+	Services        map[types.NamespacedName]*v1.Service
+	Namespaces      map[types.NamespacedName]*v1.Namespace
+	Secrets         map[types.NamespacedName]*v1.Secret
+	ConfigMaps      map[types.NamespacedName]*v1.ConfigMap
+	GatewayAPICRDs  map[types.NamespacedName]*metav1.PartialObjectMetadata
+	HugGates        map[types.NamespacedName]*v3.HugGate
+	BackendCRs      map[types.NamespacedName]*v3.Backend
+	GlobalCRs       map[types.NamespacedName]*v3.Global
+	DefaultsCRs     map[types.NamespacedName]*v3.Defaults
+	HugConfs        map[types.NamespacedName]*v3.HugConf
+	EndpointSlices  map[types.NamespacedName]*discoveryV1.EndpointSlice
+	ReferenceGrants map[types.NamespacedName]*gatewayv1.ReferenceGrant
+	Updates         ClusterUpdates
 }
 
 // ClusterStoreUpdater updates the cluster store.
@@ -91,6 +92,7 @@ func NewClusterStoreUpdaterImpl(
 				extractGVK(&v3.Defaults{}):                     newObjectStoreImpl(clusterStore.DefaultsCRs, clusterStore.Updates.DefaultsCRs, logger),
 				extractGVK(&v3.HugConf{}):                      newObjectStoreImpl(clusterStore.HugConfs, clusterStore.Updates.HugConfs, logger),
 				extractGVK(&discoveryV1.EndpointSlice{}):       newObjectStoreImpl(clusterStore.EndpointSlices, clusterStore.Updates.EndpointSlices, logger),
+				extractGVK(&gatewayv1.ReferenceGrant{}):        newObjectStoreImpl(clusterStore.ReferenceGrants, clusterStore.Updates.ReferenceGrants, logger),
 			},
 		},
 		extractGVK: extractGVK,

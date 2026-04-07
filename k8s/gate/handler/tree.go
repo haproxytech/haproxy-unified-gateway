@@ -81,6 +81,11 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 
 	defaultsCRBuilder := tree.NewDefaultsCRBuilder(controllerStore)
 
+	// --------------
+	// ReferenceGrant
+
+	referenceGrantBuilder := tree.NewReferenceGrantBuilder(controllerStore)
+
 	treeBuilder := GateTreeBuilder{
 		cfg:              cfg,
 		referenceManager: referenceManager,
@@ -95,6 +100,7 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 			httpRouteBuilder,
 			tlsRouteBuilder,
 			defaultsCRBuilder,
+			referenceGrantBuilder,
 		},
 	}
 
