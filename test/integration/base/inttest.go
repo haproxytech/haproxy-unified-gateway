@@ -257,7 +257,7 @@ func (test *IntTest) StartTestEnv(t *testing.T) { //revive:disable:function-leng
 	}
 	p := process.New(params, haproxyClient, gateconfig.Logger)
 	p.SetAPI(haproxyClient)
-	mapsStorage := storage.NewMapsStorageEx(gateconfig.Logger,
+	mapsStorage := storage.NewMapsStorage(gateconfig.Logger,
 		gateconfig.HaproxyParams.MapsDir)
 	// // ----------------
 	// // Start Haproxy App manager

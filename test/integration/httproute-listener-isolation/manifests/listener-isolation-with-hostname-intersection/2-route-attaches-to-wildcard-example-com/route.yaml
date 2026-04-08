@@ -1,0 +1,21 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-attaches-to-wildcard-example-com
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: wildcard-example-com
+  hostnames:
+  - "bar.com" # doesn't match wildcard-example-com listener
+  - "*.example.com"
+  - "*.foo.example.com" # request matching is prevented by the isolation of wildcard-foo-example-com listener
+  - "abc.foo.example.com" # request matching is prevented by the isolation of abc-foo-example-com listener
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /wildcard-example-com
+    backendRefs:
+    - name: http-echo
+      port: 80

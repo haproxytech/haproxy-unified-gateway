@@ -1,0 +1,20 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-attaches-to-abc-foo-example-com
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: abc-foo-example-com
+  hostnames:
+  - "bar.com" # doesn't match abc-foo-example-com listener
+  - "*.example.com" # becomes abc.foo.example.com as it cannot be less specific than abc.foo.example.com of the listener
+  - "*.foo.example.com" # becomes abc.foo.example.com as it cannot be less specific than abc.foo.example.com of the listener
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /abc-foo-example-com
+    backendRefs:
+    - name: http-echo
+      port: 80

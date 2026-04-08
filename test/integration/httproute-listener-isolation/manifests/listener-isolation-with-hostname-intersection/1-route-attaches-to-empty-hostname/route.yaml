@@ -1,0 +1,21 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-attaches-to-empty-hostname
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: empty-hostname
+  hostnames:
+  - "bar.com"
+  - "*.example.com" # request matching is prevented by the isolation wildcard-example-com listener
+  - "*.foo.example.com" # request matching is prevented by the isolation wildcard-foo-example-com listener
+  - "abc.foo.example.com" # request matching is prevented by the isolation of abc-foo-example-com listener
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /empty-hostname
+    backendRefs:
+    - name: http-echo
+      port: 80
