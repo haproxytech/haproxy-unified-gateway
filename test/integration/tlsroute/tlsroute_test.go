@@ -1,7 +1,6 @@
 package tlsroute
 
 import (
-	"fmt"
 	"path"
 
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
@@ -30,7 +29,5 @@ func (s *TLSRouteSuite) Test_TLSRoute_SSL_Passthrough() {
 	mapFilePath := "hug_tls_31445"
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFilePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFilePath))
+	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 }

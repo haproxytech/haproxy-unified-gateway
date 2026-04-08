@@ -16,7 +16,6 @@
 package gatewaytls
 
 import (
-	"fmt"
 	"path"
 	"testing"
 
@@ -57,14 +56,10 @@ func (s *GatewayTLSTestSuite) Test_Gateway_TLS_missingSecret() {
 	// Check Maps
 	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
 	mapFileRelativePath = "hug_" + s.Test().Namespace + "_gateway_https"
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
 func (s *GatewayTLSTestSuite) Test_Gateway_TLS_okSecret() {
@@ -88,14 +83,10 @@ func (s *GatewayTLSTestSuite) Test_Gateway_TLS_okSecret() {
 	// Check Maps
 	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
 	mapFileRelativePath = "hug_" + s.Test().Namespace + "_gateway_https"
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
 func (s *GatewayTLSTestSuite) Test_Gateway_TLS_Dynamic_ok_missing_ok_Secret() {
@@ -132,14 +123,10 @@ func (s *GatewayTLSTestSuite) Test_Gateway_TLS_Dynamic_ok_missing_ok_Secret() {
 	// Check Maps
 	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
 	mapFileRelativePath = "hug_" + s.Test().Namespace + "_gateway_https"
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
 func (s *GatewayTLSTestSuite) deleteSecret(name string) *v1.Secret {

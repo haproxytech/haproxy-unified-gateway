@@ -650,23 +650,23 @@ var StandardMaps = []string{
 
 func (b *BaseSuite) ExpectMapContents(mapFilePath, expectedMapPath string) {
 	b.Require().Eventually(func() bool {
-		check := b.CheckMapContents(mapFilePath, expectedMapPath)
+		check := b.checkMapContents(mapFilePath, expectedMapPath)
 		return check
 	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFilePath))
 }
 
-func (b *BaseSuite) CheckMapContents(mapFileRelativePath, expectedMapPath string) bool {
-	checkFile := b.CheckMapFileContents(mapFileRelativePath, expectedMapPath)
+func (b *BaseSuite) checkMapContents(mapFileRelativePath, expectedMapPath string) bool {
+	checkFile := b.checkMapFileContents(mapFileRelativePath, expectedMapPath)
 	if !checkFile {
 		return false
 	}
 	if TestMapThroughRuntime {
-		return b.CheckRuntimeMapContents(mapFileRelativePath, expectedMapPath)
+		return b.checkRuntimeMapContents(mapFileRelativePath, expectedMapPath)
 	}
 	return true
 }
 
-func (b *BaseSuite) CheckMapFileContents(mapFileRelativePath, expectedMapPath string) bool {
+func (b *BaseSuite) checkMapFileContents(mapFileRelativePath, expectedMapPath string) bool {
 	b.T().Logf("Checking map [file] in %s with expected map path %s", mapFileRelativePath, expectedMapPath)
 	for _, mapName := range StandardMaps {
 		expectedFilePath := path.Join(expectedMapPath, mapName)
@@ -876,7 +876,7 @@ func (b *BaseSuite) ConsistentlyNoReload(oldPid string, duration time.Duration) 
 	}
 }
 
-func (b *BaseSuite) CheckRuntimeMapContents(mapFileRelativePath, expectedMapPath string) bool {
+func (b *BaseSuite) checkRuntimeMapContents(mapFileRelativePath, expectedMapPath string) bool {
 	b.T().Logf("Checking map [runtime] for %s with expected map path %s", mapFileRelativePath, expectedMapPath)
 	socketPath := filepath.Join(b.test.HaproxyCfgDir, "haproxy-runtime-api.sock")
 

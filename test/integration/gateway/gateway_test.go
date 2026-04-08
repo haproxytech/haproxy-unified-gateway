@@ -16,7 +16,6 @@
 package gateway
 
 import (
-	"fmt"
 	"path"
 	"testing"
 	"time"
@@ -60,9 +59,7 @@ func (s *GatewayTestSuite) Test_Gateway_InvalidRef() {
 	// Check Maps
 	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
 func (s *GatewayTestSuite) Test_Gateway_InvalidHTTPS() {
@@ -86,9 +83,7 @@ func (s *GatewayTestSuite) Test_Gateway_InvalidHTTPS() {
 	// Check Maps
 	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
 func (s *GatewayTestSuite) Test_Gateway_validRef() {
@@ -112,9 +107,7 @@ func (s *GatewayTestSuite) Test_Gateway_validRef() {
 	// Check Maps
 	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
 func (s *GatewayTestSuite) Test_Gateway_conflict_at_least_1_listener_ok() {
@@ -153,19 +146,13 @@ func (s *GatewayTestSuite) Test_Gateway_conflict_at_least_1_listener_ok() {
 	// Check Maps
 	mapFileRelativePath := "hug_http_8080"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
 	mapFileRelativePath = "hug_http_8081"
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
 	mapFileRelativePath = "hug_http_9090"
-	s.Eventually(func() bool {
-		return s.CheckMapContents(mapFileRelativePath, expectedMapsPath)
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFileRelativePath))
+	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
 func (s *GatewayTestSuite) Test_Gateway_conflict_empty_hostname_no_conflict() {
