@@ -1,76 +1,49 @@
-{
-    "from": "haproxytech",
-    "metadata": {
-        "hug": {
-            "HTTPRoute": {
-                "e2e-tests-httproute/route-echo-1": {
-                    "Generation": 1,
-                    "LinkID": "hug"
-                }
-            }
-        }
-    },
-    "mode": "http",
-    "name": "hug_e2e-tests-httproute_http-echo-1_80_c6af167c07cbe29398c410dae94f5dd9",
-    "abortonclose": "disabled",
-    "balance": {
-        "algorithm": "roundrobin"
-    },
-    "default_server": {
-        "check": "enabled"
-    },
-    "forwardfor": {
-        "enabled": "enabled"
-    },
-    "http_request_rule_list": [
-        {
-            "cond": "if",
-            "cond_test": "{ req.hdr(Origin) -m reg ^(http://example\\.haproxy)$ }",
-            "type": "set-var-fmt",
-            "var_format": "%[req.hdr(Origin)]",
-            "var_name": "cors_origin",
-            "var_scope": "txn"
-        },
-        {
-            "cond": "if",
-            "cond_test": "{ method OPTIONS } { req.hdr(Origin) -m reg ^(http://example\\.haproxy)$ }",
-            "return_hdrs": [
-                {
-                    "fmt": "%[req.hdr(Origin)]",
-                    "name": "Access-Control-Allow-Origin"
-                },
-                {
-                    "fmt": "\"GET, POST\"",
-                    "name": "Access-Control-Allow-Methods"
-                },
-                {
-                    "fmt": "\"Content-Type, Authorization\"",
-                    "name": "Access-Control-Allow-Headers"
-                },
-                {
-                    "fmt": "3600",
-                    "name": "Access-Control-Max-Age"
-                }
-            ],
-            "return_status_code": 204,
-            "type": "return"
-        }
-    ],
-    "http_response_rule_list": [
-        {
-            "cond": "if",
-            "cond_test": "{ var(txn.cors_origin) -m found } !{ method OPTIONS }",
-            "hdr_format": "%[var(txn.cors_origin)]",
-            "hdr_name": "Access-Control-Allow-Origin",
-            "type": "add-header"
-        },
-        {
-            "cond": "if",
-            "cond_test": "{ var(txn.cors_origin) -m found } !{ method OPTIONS }",
-            "hdr_format": "X-Request-Id",
-            "hdr_name": "Access-Control-Expose-Headers",
-            "type": "add-header"
-        }
-    ],
-    "server_timeout": 50000
-}
+from: haproxytech
+metadata:
+  hug:
+    HTTPRoute:
+      e2e-tests-httproute/route-echo-1:
+        Generation: 1
+        LinkID: hug
+mode: http
+name: hug_e2e-tests-httproute_http-echo-1_80_c6af167c07cbe29398c410dae94f5dd9
+abortonclose: disabled
+balance:
+  algorithm: roundrobin
+default_server:
+  check: enabled
+forwardfor:
+  enabled: enabled
+http_request_rule_list:
+- cond: if
+  cond_test: '{ req.hdr(Origin) -m reg ^(http://example\.haproxy)$ }'
+  type: set-var-fmt
+  var_format: '%[req.hdr(Origin)]'
+  var_name: cors_origin
+  var_scope: txn
+- cond: if
+  cond_test: '{ method OPTIONS } { req.hdr(Origin) -m reg ^(http://example\.haproxy)$
+    }'
+  return_hdrs:
+  - fmt: '%[req.hdr(Origin)]'
+    name: Access-Control-Allow-Origin
+  - fmt: '"GET, POST"'
+    name: Access-Control-Allow-Methods
+  - fmt: '"Content-Type, Authorization"'
+    name: Access-Control-Allow-Headers
+  - fmt: '3600'
+    name: Access-Control-Max-Age
+  return_status_code: 204
+  type: return
+http_response_rule_list:
+- cond: if
+  cond_test: '{ var(txn.cors_origin) -m found } !{ method OPTIONS }'
+  hdr_format: '%[var(txn.cors_origin)]'
+  hdr_name: Access-Control-Allow-Origin
+  type: add-header
+- cond: if
+  cond_test: '{ var(txn.cors_origin) -m found } !{ method OPTIONS }'
+  hdr_format: X-Request-Id
+  hdr_name: Access-Control-Expose-Headers
+  type: add-header
+server_timeout: 50000
