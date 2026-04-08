@@ -116,7 +116,7 @@ func New(options config.GateConfigOptions) (Controller, error) {
 	return ctrl, nil
 }
 
-func (c *Controller) Run(ctx context.Context, wg *sync.WaitGroup, mapsStorage storage.MapsStorageEx) error {
+func (c *Controller) Run(ctx context.Context, wg *sync.WaitGroup, mapsStorage storage.MapsStorage) error {
 	wg.Add(1)
 	defer wg.Done()
 
@@ -141,7 +141,7 @@ func Add(
 	cfg config.Configuration,
 	haproxyClient hapi.HAProxyClient,
 	mgr manager.Manager,
-	mapsStorage storage.MapsStorageEx,
+	mapsStorage storage.MapsStorage,
 ) error {
 	// Check if the controller configuration is valid
 	if err := cfg.Check(); err != nil {

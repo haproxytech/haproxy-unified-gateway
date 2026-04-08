@@ -13,10 +13,7 @@
 // limitations under the License.
 package storage
 
-import (
-	futils "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/fileutils"
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
-)
+import "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 
 type StructureType string
 
@@ -41,15 +38,14 @@ type CertificateStorage interface {
 }
 
 type MapsStorage interface {
-	// MapPath returns the FilePath for a Map
-	MapPath(frontendName string, mapName string) futils.FilePath
-	// NewMapData returns the new Map
-	GetMapData(filePath futils.FilePath) *maps.MapData
-	EnsureMapData(filePath futils.FilePath)
-	GetMaps() map[string]*maps.MapData
-	WriteOnDisk(data maps.MapData) error
-	DeleteFromDisk(data maps.MapData) error
-	// DeleteEmptyMapsDir checks and deletes subdirectories directly
-	// under the maps Base Dir (namespace level)
-	DeleteEmptyMapsDir() error
+	DeleteMapsDirectoryForFrontend(frontendName string) error
+	DeleteMapsDirectory() error
+	GetPathExactMapFile(frontendName string) *maps.MapFileState
+	GetPathPrefixMapFile(frontendName string) *maps.MapFileState
+	GetPathRegexMapFile(frontendName string) *maps.MapFileState
+	GetSniMapFile(frontendName string) *maps.MapFileState
+	GetSniDomainWildcardMapFile(frontendName string) *maps.MapFileState
+	GetPathExactDomainWildcardMapFile(frontendName string) *maps.MapFileState
+	GetMaps() map[string]map[string]*maps.MapFileState
+	ProcessMapFiles()
 }

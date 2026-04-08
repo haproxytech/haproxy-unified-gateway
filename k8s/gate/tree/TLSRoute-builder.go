@@ -30,19 +30,19 @@ import (
 var _ Builder = &TLSRouteBuilderImpl{}
 
 type TLSRouteBuilderImpl struct {
-	mapsStorage storage.MapsStorageEx
+	mapsStorage storage.MapsStorage
 	*ControllerStore
 }
 
 type TLSRouteBuilderParams struct {
-	storage.MapsStorageEx
+	storage.MapsStorage
 	*ControllerStore
 }
 
 func NewTLSRouteBuilder(params TLSRouteBuilderParams) Builder {
 	return &TLSRouteBuilderImpl{
 		ControllerStore: params.ControllerStore,
-		mapsStorage:     params.MapsStorageEx,
+		mapsStorage:     params.MapsStorage,
 	}
 }
 

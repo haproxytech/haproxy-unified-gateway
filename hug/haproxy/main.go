@@ -43,7 +43,7 @@ type AppManagerImpl struct {
 	client       api.HAProxyClient
 	process      process.Process
 	ctx          context.Context
-	mapsStorage  storage.MapsStorageEx
+	mapsStorage  storage.MapsStorage
 	wg           *sync.WaitGroup
 	logger       *slog.Logger
 	haproxyCfgCh chan diffs.HaproxyConfDiffs
@@ -59,7 +59,7 @@ func NewAppManager(ctx context.Context, wg *sync.WaitGroup,
 	p process.Process,
 	param params.Params,
 	logger *slog.Logger,
-	mapsStorage storage.MapsStorageEx,
+	mapsStorage storage.MapsStorage,
 ) (AppManager, error) {
 	mylogger := logger.With(logging.LogAttrCategory(logging.LogCategoryApp))
 

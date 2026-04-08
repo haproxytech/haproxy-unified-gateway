@@ -95,7 +95,7 @@ func main() {
 	}
 	p := process.New(params, haproxyClient, gateconfig.Logger)
 	p.SetAPI(haproxyClient)
-	mapsStorage := storage.NewMapsStorageEx(cntlr.Configuration.Logger,
+	mapsStorage := storage.NewMapsStorage(cntlr.Configuration.Logger,
 		cntlr.Configuration.HaproxyParams.MapsDir)
 	// ----------------
 	// Start Haproxy App manager
