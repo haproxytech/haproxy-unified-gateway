@@ -1,0 +1,38 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: empty-hostname
+    port: 8080
+    protocol: HTTP
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  - name: wildcard-example-com
+    protocol: HTTP
+    port: 8080
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+    hostname: "*.example.com"
+  - name: wildcard-foo-example-com
+    protocol: HTTP
+    port: 8080
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+    hostname: "*.foo.example.com"
+  - name: abc-foo-example-com
+    protocol: HTTP
+    port: 8080
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+    hostname: "abc.foo.example.com"
