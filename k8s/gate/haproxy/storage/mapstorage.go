@@ -86,8 +86,6 @@ func (m *MapsStorageDefault) GetPathExactDomainWildcardMapFile(frontendName stri
 func (m *MapsStorageDefault) getMapFile(frontendName string, mapName string) *maps.MapFileState {
 	mapBaseDir := filepath.Join(m.MapsBaseDir, frontendName)
 	mapFileName := mapName + ".map"
-	mapFilePath := filepath.Join(mapBaseDir, mapFileName)
-	relativeMapPath := filepath.Join(frontendName, mapFileName)
 
 	mapFilesInDir := m.mapFiles[mapBaseDir]
 	if mapFilesInDir == nil {
@@ -96,7 +94,7 @@ func (m *MapsStorageDefault) getMapFile(frontendName string, mapName string) *ma
 	}
 	mapFile := mapFilesInDir[mapFileName]
 	if mapFile == nil {
-		mapFile = maps.NewMapFileState(relativeMapPath, mapFilePath, m.logger)
+		mapFile = maps.NewMapFileState(mapBaseDir, mapFileName, m.logger)
 		m.mapFiles[mapBaseDir][mapFileName] = mapFile
 	}
 	return mapFile

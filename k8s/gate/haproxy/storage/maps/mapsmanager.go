@@ -23,17 +23,20 @@ import (
 	"slices"
 	"strings"
 
+	futils "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/fileutils"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 )
 
 // NewMapFileState creates a new instance of MapFileState with the given filename and logger.
 // It returns a pointer to the new instance.
-func NewMapFileState(relativeMapPath, mapFilePath string, logger *slog.Logger) *MapFileState {
+func NewMapFileState(mapBaseDir, mapFileName string, logger *slog.Logger) *MapFileState {
 	mylogger := logger.With(logging.LogAttrCategory(logging.LogCategoryMapsStorage))
 	return &MapFileState{
-		FileName:          mapFilePath,
-		RelativeFileName:  relativeMapPath,
+		Path: futils.FilePath{
+			FileName: mapFileName,
+			Dir:      mapBaseDir,
+		},
 		Entries:           map[EntryKey]*EntryValue{},
 		EntriesByResource: map[ResourceOrigin]map[EntryKey]struct{}{},
 		logger:            mylogger,
@@ -50,7 +53,7 @@ func (m *MapFileState) ProcessMapFiles() {
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "Processing map file",
-		logging.LogAttrMapFilePath(m.RelativeFileName))
+		logging.LogAttrMapFilePath(m.Path.FileName))
 	// Iteration over each entry/intent for the filename
 	for _, entryValue := range m.Entries {
 		// We collect the operations for each backend, backend name -> weights + operations (create, update, delete, empty)
@@ -147,7 +150,7 @@ func (m *MapFileState) ProcessMapFiles() {
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "Processed map file",
-		logging.LogAttrMapFilePath(m.RelativeFileName),
+		logging.LogAttrMapFilePath(m.Path.FileName),
 		logging.LogAttrMapFileContent(m.PrettyString()),
 	)
 }
@@ -160,7 +163,7 @@ func (m *MapFileState) Reset() {
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "Resetting map file",
-		logging.LogAttrMapFilePath(m.RelativeFileName))
+		logging.LogAttrMapFilePath(m.Path.FileName))
 	for entryKey, entryValue := range m.Entries {
 		if entryValue == nil {
 			delete(m.Entries, entryKey)
@@ -276,8 +279,9 @@ type MapFileState struct {
 	Entries           map[EntryKey]*EntryValue
 	EntriesByResource map[ResourceOrigin]map[EntryKey]struct{}
 	logger            *slog.Logger
-	FileName          string
-	RelativeFileName  string
+	// FileName          string
+	// RelativeFileName  string
+	Path futils.FilePath
 }
 
 // Collect all intentions for each backend
@@ -346,15 +350,15 @@ func (m *MapFileState) ApplyDesiredBackends(
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "Applying desired backends",
-		logging.LogAttrMapFilePath(m.RelativeFileName),
-		slog.String("entry key", m.RelativeFileName),
+		logging.LogAttrMapFilePath(m.Path.FileName),
+		slog.String("entry key", m.Path.FileName),
 		slog.Any("desired backends", desired),
 	)
 
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "Before applying desired backends",
-		logging.LogAttrMapFilePath(m.RelativeFileName),
+		logging.LogAttrMapFilePath(m.Path.FileName),
 		logging.LogAttrMapFileContent(m.PrettyString()),
 	)
 
@@ -423,7 +427,7 @@ func (m *MapFileState) ApplyDesiredBackends(
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "After applying desired backends",
-		logging.LogAttrMapFilePath(m.RelativeFileName),
+		logging.LogAttrMapFilePath(m.Path.FileName),
 		logging.LogAttrMapFileContent(m.PrettyString()),
 	)
 }
@@ -434,15 +438,15 @@ func (m *MapFileState) ApplyDesiredBackends(
 func (m *MapFileState) WriteOnDiskIfChanged() error {
 	var f *os.File
 	var err error
-	dir := filepath.Dir(m.FileName)
+	dir := filepath.Dir(m.Path.FullPath())
 	if _, err = os.Stat(dir); os.IsNotExist(err) {
 		err = os.MkdirAll(dir, 0o755)
 		if err != nil {
 			return err
 		}
 	}
-	if _, err = os.Stat(m.FileName); os.IsNotExist(err) {
-		f, err = os.Create(m.FileName)
+	if _, err = os.Stat(m.Path.FullPath()); os.IsNotExist(err) {
+		f, err = os.Create(m.Path.FullPath())
 		if err != nil {
 			return err
 		}
@@ -464,11 +468,11 @@ func (m *MapFileState) WriteOnDiskIfChanged() error {
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "Writing map file to disk",
-		logging.LogAttrMapFilePath(m.RelativeFileName),
+		logging.LogAttrMapFilePath(m.Path.FileName),
 		logging.LogAttrMapFileContent(m.PrettyString()),
 	)
 
-	f, err = os.Create(m.FileName)
+	f, err = os.Create(m.Path.FullPath())
 	if err != nil {
 		return err
 	}
@@ -588,7 +592,7 @@ func sortedStringKeys[T any](m map[string]T) []string {
 func (m *MapFileState) PrettyString() string {
 	var b strings.Builder
 
-	_, _ = fmt.Fprintf(&b, "MapFileState: %s\n", m.RelativeFileName)
+	_, _ = fmt.Fprintf(&b, "MapFileState: %s\n", m.Path.FileName)
 
 	for _, key := range sortedEntryKeys(m.Entries) {
 		_, _ = fmt.Fprintf(&b, "└─ %s\n", key.String())

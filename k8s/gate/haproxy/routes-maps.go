@@ -206,17 +206,17 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 			if len(mapData.Entries) == 0 {
 				continue
 			}
-			mapID, err := b.getMapID(mapData.FileName)
+			mapID, err := b.getMapID(mapData.Path.FullPath())
 			if err != nil {
 				b.topManager.logger.LogAttrs(context.Background(), slog.LevelError,
 					"map [runtime] show maps error",
-					logging.LogAttrMapFilePath(mapData.RelativeFileName),
+					logging.LogAttrMapFilePath(mapData.Path.FileName),
 					logging.LogAttrError(err),
 				)
 				return err
 			}
 			if mapID == "" {
-				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "map [runtime] skipping as mapID is empty", slog.String("map", mapData.RelativeFileName))
+				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "map [runtime] skipping as mapID is empty", slog.String("map", mapData.Path.FileName))
 				continue
 			}
 			for entryKey, entryValue := range mapData.Entries {
@@ -227,13 +227,13 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 				routeValue := maps.BuildRouteValue(entryValue.DesiredValue)
 				// if routeValue is empty, delete the entry
 				if routeValue == "" {
-					b.topManager.logger.LogAttrs(context.Background(), slog.LevelInfo, "Deleting map [runtime] entry", slog.String("map", mapData.RelativeFileName), slog.String("key", key))
+					b.topManager.logger.LogAttrs(context.Background(), slog.LevelInfo, "Deleting map [runtime] entry", slog.String("map", mapData.Path.FileName), slog.String("key", key))
 					err := runtimeClient.DeleteMapEntry(mapID, key)
 					if err != nil {
 						metrics.MapStorageOperations.WithLabelValues("runtime_delete", "error").Inc()
 						b.topManager.logger.LogAttrs(context.Background(), slog.LevelError,
 							"[failure] Deleting map [runtime] entry",
-							logging.LogAttrMapFilePath(mapData.RelativeFileName),
+							logging.LogAttrMapFilePath(mapData.Path.FileName),
 							slog.String("key", key),
 							logging.LogAttrError(err),
 						)
@@ -242,13 +242,13 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 					metrics.MapStorageOperations.WithLabelValues("runtime_delete", "ok").Inc()
 					b.topManager.logger.LogAttrs(context.Background(), slog.LevelInfo,
 						"[success] Deleting map [runtime] entry",
-						logging.LogAttrMapFilePath(mapData.RelativeFileName),
+						logging.LogAttrMapFilePath(mapData.Path.FileName),
 						slog.String("key", key),
 					)
 					continue
 				}
 				// else update the entry
-				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "Set map [runtime] entry", slog.String("map", mapData.RelativeFileName), slog.String("key", key))
+				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "Set map [runtime] entry", slog.String("map", mapData.Path.FileName), slog.String("key", key))
 
 				err := runtimeClient.SetMapEntry(mapID, key, routeValue)
 				if err != nil {
@@ -259,7 +259,7 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 						metrics.MapStorageOperations.WithLabelValues("runtime_set", "error").Inc()
 						b.topManager.logger.LogAttrs(context.Background(), slog.LevelError,
 							"[failure] Set map [runtime] entry",
-							slog.String("map", mapData.RelativeFileName),
+							slog.String("map", mapData.Path.FileName),
 							slog.String("key", key),
 							logging.LogAttrError(err),
 						)
@@ -269,7 +269,7 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 				metrics.MapStorageOperations.WithLabelValues("runtime_set", "ok").Inc()
 				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug,
 					"[success] Set map [runtime] entry",
-					slog.String("map", mapData.RelativeFileName),
+					slog.String("map", mapData.Path.FileName),
 					slog.String("key", key),
 				)
 			}

@@ -141,7 +141,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Action:   "set-var",
 				VarName:  "sni_match",
 				VarScope: "txn",
-				Expr:     "req_ssl_sni,map(" + sniMap.FileName + ")",
+				Expr:     "req_ssl_sni,map(" + sniMap.Path.FullPath() + ")",
 			},
 			{
 				// tcp-request content set-var(txn.sni_match,ifnotexists) req.ssl_sni,map_end(sniDomainWildcardMap.map)
@@ -149,7 +149,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Action:   "set-var",
 				VarName:  "sni_match,ifnotexists",
 				VarScope: "txn",
-				Expr:     "req_ssl_sni,map_end(" + sniDomainWildcardMap.FileName + ")",
+				Expr:     "req_ssl_sni,map_end(" + sniDomainWildcardMap.Path.FullPath() + ")",
 			},
 		}
 		backendSwitchingRules = []*models.BackendSwitchingRule{
@@ -199,7 +199,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "route",
 				VarScope: "txn",
-				VarExpr:  "var(txn.base),map(" + pathExactMap.FileName + ")",
+				VarExpr:  "var(txn.base),map(" + pathExactMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "exact domain + exact path"},
 			},
 			{
@@ -208,7 +208,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "path,map(" + pathExactMap.FileName + ")",
+				VarExpr:  "path,map(" + pathExactMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "any domain + exact path"},
 			},
 			{
@@ -217,7 +217,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "var(txn.base),map_beg(" + pathPrefixMap.FileName + ")",
+				VarExpr:  "var(txn.base),map_beg(" + pathPrefixMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "exact domain + path prefix"},
 			},
 			{
@@ -226,7 +226,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "path,map_beg(" + pathPrefixMap.FileName + ")",
+				VarExpr:  "path,map_beg(" + pathPrefixMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "any domain + path prefix"},
 			},
 			{
@@ -235,7 +235,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "var(txn.base),map_end(" + pathDomainWPathExactMap.FileName + ")",
+				VarExpr:  "var(txn.base),map_end(" + pathDomainWPathExactMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "domain wildcard + exact path"},
 			},
 			{
@@ -244,7 +244,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "path,map_reg(" + pathRegexMap.FileName + ")",
+				VarExpr:  "path,map_reg(" + pathRegexMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "any domain + path regex"},
 			},
 			{
@@ -255,7 +255,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "var(txn.base),map_reg(" + pathRegexMap.FileName + ")",
+				VarExpr:  "var(txn.base),map_reg(" + pathRegexMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "domain wildcard + path prefix or regex, exact domain + path regex"},
 			},
 			{
