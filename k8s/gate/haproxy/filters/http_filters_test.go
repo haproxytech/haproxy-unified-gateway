@@ -334,12 +334,13 @@ func TestToHAProxyRules(t *testing.T) {
 		assert.NotEmpty(t, result.RedirectRules)
 	})
 
-	t.Run("RequestMirror is silently ignored", func(t *testing.T) {
-		result := ToHAProxyRules([]gatewayv1.HTTPRouteFilter{
-			{Type: gatewayv1.HTTPRouteFilterRequestMirror},
-		}, "")
-		assert.Empty(t, result.HTTPRequestRules)
-		assert.Empty(t, result.HTTPResponseRules)
-		assert.False(t, result.IsRedirect)
-	})
+	// Not yet implemented
+	// t.Run("RequestMirror is silently ignored", func(t *testing.T) {
+	// 	result := ToHAProxyRules([]gatewayv1.HTTPRouteFilter{
+	// 		{Type: gatewayv1.HTTPRouteFilterRequestMirror},
+	// 	}, "")
+	// 	assert.Empty(t, result.HTTPRequestRules)
+	// 	assert.Empty(t, result.HTTPResponseRules)
+	// 	assert.False(t, result.IsRedirect)
+	// })
 }

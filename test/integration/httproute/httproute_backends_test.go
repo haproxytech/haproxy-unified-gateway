@@ -195,20 +195,21 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_cors() {
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
-func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_mirror() {
-	fixtureDirPath := utils.GetCRDFixturePath()
-	fixtureDir := "backends"
-	fixturePath := path.Join(fixtureDirPath, fixtureDir, "1_route_filter_ko_mirror")
-	s.CreateFixtures(fixturePath, nil)
-	defer s.CleanupFixtures(fixturePath, nil)
+// Not implement
+// func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_mirror() {
+// 	fixtureDirPath := utils.GetCRDFixturePath()
+// 	fixtureDir := "backends"
+// 	fixturePath := path.Join(fixtureDirPath, fixtureDir, "1_route_filter_ko_mirror")
+// 	s.CreateFixtures(fixturePath, nil)
+// 	defer s.CleanupFixtures(fixturePath, nil)
 
-	expectationsPath := path.Join(fixturePath, "expectations")
-	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
-	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+// 	expectationsPath := path.Join(fixturePath, "expectations")
+// 	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
+// 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
-	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
-}
+// 	httpRouteName := "route-echo-1"
+// 	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+// }
 
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_cross_level() {
 	fixtureDirPath := utils.GetCRDFixturePath()

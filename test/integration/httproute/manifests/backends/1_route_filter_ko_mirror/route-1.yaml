@@ -14,7 +14,7 @@ spec:
         type: PathPrefix
         value: /route1
     filters:
-    - type: RequestMirror
+    - type: RequestMirror ## Not implement
       requestMirror:
         backendRef:
           name: http-echo-mirror
