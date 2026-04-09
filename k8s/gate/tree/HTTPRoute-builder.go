@@ -31,6 +31,7 @@ var _ Builder = &HTTPRouteBuilderImpl{}
 type HTTPRouteBuilderImpl struct {
 	mapsStorage storage.MapsStorage
 	*ControllerStore
+	referenceGrantManager *ReferenceGrantManager
 	// runtimeUpdate indicates if the builder should trigger a runtime update of haproxy
 	// when a map is changed
 	runtimeUpdate bool
@@ -39,14 +40,16 @@ type HTTPRouteBuilderImpl struct {
 type HTTPRouteBuilderParams struct {
 	storage.MapsStorage
 	*ControllerStore
+	*ReferenceGrantManager
 	RuntimeUpdate bool
 }
 
 func NewHTTPRouteBuilder(params HTTPRouteBuilderParams) Builder {
 	return &HTTPRouteBuilderImpl{
-		ControllerStore: params.ControllerStore,
-		mapsStorage:     params.MapsStorage,
-		runtimeUpdate:   params.RuntimeUpdate,
+		ControllerStore:       params.ControllerStore,
+		mapsStorage:           params.MapsStorage,
+		runtimeUpdate:         params.RuntimeUpdate,
+		referenceGrantManager: params.ReferenceGrantManager,
 	}
 }
 
@@ -180,7 +183,7 @@ func (b *HTTPRouteBuilderImpl) buildRules(httpRoute *HTTPRoute) {
 
 	// Performs all needed checks
 	for _, rule := range httpRoute.Rules {
-		rule.checkBackendRef(httpRoute, *b.ControllerStore)
+		rule.checkBackendRef(httpRoute, *b.ControllerStore, b.referenceGrantManager)
 		rule.checkFilters()
 	}
 }

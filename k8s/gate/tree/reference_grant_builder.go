@@ -5,12 +5,14 @@ import "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 var _ Builder = &ReferenceGrantBuilderImpl{}
 
 type ReferenceGrantBuilderImpl struct {
-	controllerStore *ControllerStore
+	controllerStore       *ControllerStore
+	referenceGrantManager *ReferenceGrantManager
 }
 
-func NewReferenceGrantBuilder(controllerStore *ControllerStore) Builder {
+func NewReferenceGrantBuilder(controllerStore *ControllerStore, referenceGrantManager *ReferenceGrantManager) Builder {
 	return &ReferenceGrantBuilderImpl{
-		controllerStore: controllerStore,
+		controllerStore:       controllerStore,
+		referenceGrantManager: referenceGrantManager,
 	}
 }
 
@@ -25,12 +27,19 @@ func (b *ReferenceGrantBuilderImpl) ComputeTreeUpdates() {
 		case rgUpdate.Status == store.StatusUpserted:
 			if existingReferenceGrant != nil {
 				existingReferenceGrant.SetAsUpserted(b.controllerStore.Logger, rgUpdate.NewObject)
+				b.referenceGrantManager.UpsertReferenceGrant(*existingReferenceGrant)
 			} else {
-				b.controllerStore.GateTree.ReferenceGrants[rgKey] = NewReferenceGrant(rgUpdate.NewObject)
+				newReferenceGrant := NewReferenceGrant(rgUpdate.NewObject)
+				b.controllerStore.GateTree.ReferenceGrants[rgKey] = newReferenceGrant
+				b.referenceGrantManager.UpsertReferenceGrant(*newReferenceGrant)
 			}
 		case rgUpdate.Status == store.StatusDeleted && existingReferenceGrant != nil:
 			existingReferenceGrant.SetAsDeleted(b.controllerStore.Logger)
+			b.referenceGrantManager.RemoveReferenceGrant(*existingReferenceGrant)
 		}
+	}
+	if len(b.controllerStore.ClusterStore.Updates.ReferenceGrants) > 0 {
+		b.referenceGrantManager.ComputeToFrom()
 	}
 }
 

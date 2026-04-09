@@ -70,7 +70,8 @@ func NewReferenceGrantManager() *ReferenceGrantManager {
 // access requires a matching entry in ToFrom, covering both named grants and
 // wildcard grants (empty name).
 func (mgr *ReferenceGrantManager) IsAccessGranted(fromGroup, fromKind, fromNamespace,
-	toGroup, toKind, toNamespace, toName string) bool {
+	toGroup, toKind, toNamespace, toName string,
+) bool {
 	// Same namespace access is always granted
 	if toNamespace == fromNamespace {
 		return true
@@ -97,7 +98,8 @@ func (mgr *ReferenceGrantManager) IsAccessGranted(fromGroup, fromKind, fromNames
 // ToReferenceGrantFrom and ReferenceGrantsTo are updated; call ComputeToFrom afterwards
 // to reflect the change in IsAccessGranted.
 func (mgr *ReferenceGrantManager) UpsertReferenceGrant(referenceGrant ReferenceGrant) {
-	if referenceGrant.TreeStatus.Status != store.StatusUpserted {
+	if referenceGrant.K8sResource == nil ||
+		referenceGrant.TreeStatus.Status != store.StatusUpserted {
 		return
 	}
 

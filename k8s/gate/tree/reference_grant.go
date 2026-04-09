@@ -9,10 +9,10 @@ import (
 )
 
 type ReferenceGrant struct {
-	// TreeStatus
-	TreeStatus TreeUpdate[ReferenceGrant]
 	// K8sResource is the source resource.
 	K8sResource *gatewayv1.ReferenceGrant
+	// TreeStatus
+	TreeStatus TreeUpdate[ReferenceGrant]
 }
 
 func NewReferenceGrant(k8sObject *gatewayv1.ReferenceGrant) *ReferenceGrant {

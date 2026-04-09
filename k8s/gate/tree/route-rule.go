@@ -34,7 +34,9 @@ type HTTPRouteRule struct {
 	Valid        bool
 }
 
-func (r *HTTPRouteRule) checkBackendRef(httpRoute *HTTPRoute, controllerStore ControllerStore) {
+func (r *HTTPRouteRule) checkBackendRef(httpRoute *HTTPRoute, controllerStore ControllerStore,
+	referenceGrantManager *ReferenceGrantManager,
+) {
 	routeValid := true
 	for _, backendRef := range r.K8sResource.BackendRefs {
 		// 1- Check is the Kind/Group is supported
@@ -61,6 +63,20 @@ func (r *HTTPRouteRule) checkBackendRef(httpRoute *HTTPRoute, controllerStore Co
 			continue
 		}
 
+		// 3- Check if a ReferenceGrant is needed and if so is it valid
+		backendNs := getNamespace(backendRef.BackendObjectReference.Namespace, httpRoute.K8sResource.Namespace)
+		accessGranted := backendNs == httpRoute.K8sResource.Namespace ||
+			referenceGrantManager.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", httpRoute.K8sResource.Namespace,
+				"", "Service", backendNs, string(backendRef.BackendObjectReference.Name))
+		if !accessGranted {
+			cond := rc.ConditionKORefNotPermitted(utils.BackendObjectReferenceToKey(backendRef.BackendObjectReference))
+			r.CheckBackendRef.Set(backendRef.BackendObjectReference, CheckResult{
+				Valid:      false,
+				Conditions: cond,
+			})
+			routeValid = false
+			continue
+		}
 		// All checks done
 		r.CheckBackendRef.Set(backendRef.BackendObjectReference, CheckResult{
 			Valid:      true,

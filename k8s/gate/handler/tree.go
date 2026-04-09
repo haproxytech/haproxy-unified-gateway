@@ -66,10 +66,12 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 
 	// --------------
 	// HTTPRoute
+	referenceGrantManager := tree.NewReferenceGrantManager()
 	httpRouteBuilder := tree.NewHTTPRouteBuilder(tree.HTTPRouteBuilderParams{
-		ControllerStore: controllerStore,
-		MapsStorage:     cfg.MapsStorage,
-		RuntimeUpdate:   cfg.RuntimeUpdateHaproxy,
+		ControllerStore:       controllerStore,
+		MapsStorage:           cfg.MapsStorage,
+		RuntimeUpdate:         cfg.RuntimeUpdateHaproxy,
+		ReferenceGrantManager: referenceGrantManager,
 	})
 
 	// --------------
@@ -84,13 +86,14 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 	// --------------
 	// ReferenceGrant
 
-	referenceGrantBuilder := tree.NewReferenceGrantBuilder(controllerStore)
+	referenceGrantBuilder := tree.NewReferenceGrantBuilder(controllerStore, referenceGrantManager)
 
 	treeBuilder := GateTreeBuilder{
 		cfg:              cfg,
 		referenceManager: referenceManager,
 		ControllerStore:  controllerStore,
 		builder: []tree.Builder{
+			referenceGrantBuilder,
 			secretBuilder,
 			gatewayClassBuilder,
 			gatewayBuilder,
@@ -100,7 +103,6 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 			httpRouteBuilder,
 			tlsRouteBuilder,
 			defaultsCRBuilder,
-			referenceGrantBuilder,
 		},
 	}
 

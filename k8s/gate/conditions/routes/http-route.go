@@ -142,3 +142,14 @@ func ConditionOKResolvedRef() genericconditions.Conditions {
 		},
 	}
 }
+
+func ConditionKORefNotPermitted(backendRef string) genericconditions.Conditions {
+	return genericconditions.Conditions{
+		genericconditions.ConditionType(gatewayv1.RouteConditionResolvedRefs): {
+			Type:    genericconditions.ConditionType(gatewayv1.RouteConditionResolvedRefs),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(gatewayv1.RouteReasonRefNotPermitted),
+			Message: fmt.Sprintf("backendRef %s not permitted by ReferenceGrant", backendRef),
+		},
+	}
+}
