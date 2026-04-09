@@ -44,15 +44,120 @@ func (e *ErrMapRuntimeUpdate) Error() string {
 
 func (b *RouteMgrImpl) fillMaps() {
 	b.fillMapsForHTTPRoutes()
+	b.fillListenerRouteMapsForHTTPRoutes()
 	b.fillMapsForTLSRoutes()
-	mapsStorage := b.topManager.params.mapsStorageEx
+	mapsStorage := b.topManager.params.mapsStorage
 	mapsStorage.ProcessMapFiles()
+}
+
+// fillListenerRouteMapsForHTTPRoutes fills MAP_LISTENER_ROUTE_EXACT_MATCH and MAP_LISTENER_ROUTE_WILDCARD_MATCH.
+// For each valid HTTPRoute attached to a Listener, and for each accepted hostname, one entry is added:
+//
+//	key:   listener-name/host     (for exact) or listener-name/reversed-host-suffix (for wildcard)
+//	value: listener-name/ns/route
+//
+// Where listener-name is "<ns>/<gateway>_<listener>" and route-name is "<ns>/<name>".
+func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
+	controllerStore := b.topManager.controllerStore
+	mapsStorage := b.topManager.params.mapsStorage
+	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile()
+	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile()
+
+	empty := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+
+	// Pre-loop: clear old state for routes that have been updated.
+	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
+		if route.TreeStatus.OldTreeResource == nil {
+			continue
+		}
+		oldRoute := route.TreeStatus.OldTreeResource
+		for _, listeners := range oldRoute.Listeners.Iterate {
+			for _, listener := range listeners {
+				if listener.VirtualListenerName == "" {
+					continue
+				}
+				listenerKeyName := listener.Key().String()
+				routeOrigin := maps.ResourceOrigin{
+					Namespace: routeKey.Namespace,
+					Name:      listenerKeyName + "/" + routeKey.Name,
+				}
+				listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+				listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+			}
+		}
+	}
+
+	// Main loop: fill for the current state of each route.
+	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
+		for _, listeners := range route.Listeners.Iterate {
+			for _, listener := range listeners {
+				if listener.VirtualListenerName == "" {
+					continue
+				}
+				listenerKeyName := listener.Key().String()
+				routeOrigin := maps.ResourceOrigin{
+					Namespace: routeKey.Namespace,
+					Name:      listenerKeyName + "/" + routeKey.Name,
+				}
+
+				switch route.TreeStatus.Status {
+				case store.StatusUnchanged:
+					continue
+				case store.StatusDeleted:
+					listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+					listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+					continue
+				}
+
+				// StatusUpserted — only fill for valid routes.
+				if !route.Valid {
+					listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+					listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+					continue
+				}
+
+				routeValueName := listenerKeyName + "/" + routeKey.String()
+				exactEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+				wildcardEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+
+				if len(route.K8sResource.Spec.Hostnames) == 0 {
+					// No hostnames = catch-all: add a wildcard entry that prefixes any reversed host.
+					// The key "<listener>/." is a prefix of every "<listener>/.<reversed-host>" produced
+					// by lua.reverse_host, so map_beg() will match any incoming host.
+					entryKey := maps.EntryKey{Hostname: listenerKeyName + "/."}
+					wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
+						routeValueName: {ValueName: routeValueName},
+					}
+				}
+
+				for _, h := range route.K8sResource.Spec.Hostnames {
+					hostname := string(h)
+					if isDomainWildcard(hostname) {
+						wildcardSuffix := removeDomainWildcard(hostname)
+						reversedKey := reverseDomain(wildcardSuffix)
+						entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + reversedKey}
+						wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
+							routeValueName: {ValueName: routeValueName},
+						}
+					} else {
+						entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + hostname}
+						exactEntries[entryKey] = map[string]*maps.WeightedValue{
+							routeValueName: {ValueName: routeValueName},
+						}
+					}
+				}
+
+				listenerRouteExactMap.ApplyRoute(routeOrigin, exactEntries)
+				listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
+			}
+		}
+	}
 }
 
 func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
 	var errs utils.Errors
 	controllerStore := b.topManager.controllerStore
-	mapsStorage := b.topManager.params.mapsStorageEx
+	mapsStorage := b.topManager.params.mapsStorage
 	// Managed TLSRoutes => if there is a old resource, clean the state before update
 	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
 		if route.TreeStatus.OldTreeResource == nil {
@@ -109,7 +214,7 @@ func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
 func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
 	var errs utils.Errors
 	controllerStore := b.topManager.controllerStore
-	mapsStorage := b.topManager.params.mapsStorageEx
+	mapsStorage := b.topManager.params.mapsStorage
 	// Managed HTTPRoutes => if there is a old resource, clean the state before update
 	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
 		if route.TreeStatus.OldTreeResource == nil {
@@ -123,11 +228,12 @@ func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
 					continue
 				}
 				frontendName := b.topManager.getFrontendName(vListenerName)
+				routeValueName := listener.Key().String() + "/" + routeKey.String()
+				origin := maps.ResourceOrigin{Namespace: routeKey.Namespace, Name: routeValueName}
 				mapExact := mapsStorage.GetPathExactMapFile(frontendName)
 				mapPrefix := mapsStorage.GetPathPrefixMapFile(frontendName)
 				mapRegex := mapsStorage.GetPathRegexMapFile(frontendName)
-				mapDomainWPathExact := mapsStorage.GetPathExactDomainWildcardMapFile(frontendName)
-				err := b.onDeletedHTTPRoute(routeKey, route, mapExact, mapPrefix, mapRegex, mapDomainWPathExact)
+				err := b.onDeletedHTTPRoute(origin, route, mapExact, mapPrefix, mapRegex)
 				// errs.Add(err)
 				_ = err // TODO ignore error for now
 			}
@@ -139,23 +245,20 @@ func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
 		for _, listener := range route.Listeners.Iterate {
 			for _, listener := range listener {
 				frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
-
-				routesHosnames := utils.ConvertSliceWithFunc(route.K8sResource.Spec.Hostnames, utils.ConvertV1Alpha2HostnameToString)
-				listenerHostname := (*string)(listener.K8sResource.Hostname)
-				acceptedHostnamesForRoute := utils.GetHostnamesForRouteWithListener(listenerHostname, routesHosnames)
+				routeValueName := listener.Key().String() + "/" + routeKey.String()
+				origin := maps.ResourceOrigin{Namespace: routeKey.Namespace, Name: routeValueName}
 				mapExact := mapsStorage.GetPathExactMapFile(frontendName)
 				mapPrefix := mapsStorage.GetPathPrefixMapFile(frontendName)
 				mapRegex := mapsStorage.GetPathRegexMapFile(frontendName)
-				mapDomainWPathExact := mapsStorage.GetPathExactDomainWildcardMapFile(frontendName)
 
 				switch route.TreeStatus.Status {
 				case store.StatusUnchanged:
 					continue
 				case store.StatusUpserted:
-					err := b.onUpsertedHTTPRoute(routeKey, route, mapExact, mapPrefix, mapRegex, mapDomainWPathExact, acceptedHostnamesForRoute)
+					err := b.onUpsertedHTTPRoute(origin, routeValueName, route, mapExact, mapPrefix, mapRegex)
 					errs.Add(err)
 				case store.StatusDeleted:
-					err := b.onDeletedHTTPRoute(routeKey, route, mapExact, mapPrefix, mapRegex, mapDomainWPathExact)
+					err := b.onDeletedHTTPRoute(origin, route, mapExact, mapPrefix, mapRegex)
 					errs.Add(err)
 				}
 			}
@@ -174,7 +277,7 @@ func (b *RouteMgrImpl) writeMaps() error {
 	}
 
 	var errs utils.Errors
-	mapsStorage := b.topManager.params.mapsStorageEx
+	mapsStorage := b.topManager.params.mapsStorage
 	for _, mapDir := range mapsStorage.GetMaps() {
 		if mapDir == nil {
 			continue
@@ -198,7 +301,7 @@ func (b *RouteMgrImpl) writeMaps() error {
 
 // runtimeMapSync updates the runtime maps through runtime API
 func (b *RouteMgrImpl) runtimeMapSync() error {
-	mapsStorage := b.topManager.params.mapsStorageEx
+	mapsStorage := b.topManager.params.mapsStorage
 	runtimeClient := b.topManager.haproxyClient.RuntimeClient()
 
 	for _, mapFiles := range mapsStorage.GetMaps() {
@@ -224,7 +327,7 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 				if entryKey.Path != "" {
 					key += entryKey.Path
 				}
-				routeValue := maps.BuildRouteValue(entryValue.DesiredValue)
+				routeValue := mapData.BuildValue(entryValue.DesiredValue)
 				// if routeValue is empty, delete the entry
 				if routeValue == "" {
 					b.topManager.logger.LogAttrs(context.Background(), slog.LevelInfo, "Deleting map [runtime] entry", slog.String("map", mapData.Path.FileName), slog.String("key", key))

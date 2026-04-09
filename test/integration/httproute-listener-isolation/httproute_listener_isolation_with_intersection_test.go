@@ -15,122 +15,122 @@
 
 package httprouteisolation
 
-// import (
-// 	"path"
-// 	"testing"
+import (
+	"path"
+	"testing"
 
-// 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
-// 	"github.com/stretchr/testify/suite"
-// )
+	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
+	"github.com/stretchr/testify/suite"
+)
 
-// // Adding HTTPRouteTestSuite, just to be able to debug directly
-// type HTTPRouteIsolationWithHostnameIntersectionTestSuite struct {
-// 	HTTPRouteIsolationSuite
-// }
+// Adding HTTPRouteTestSuite, just to be able to debug directly
+type HTTPRouteIsolationWithHostnameIntersectionTestSuite struct {
+	HTTPRouteIsolationSuite
+}
 
-// func TestHTTPRouteIsolationWithHostnameIntersectionTestSuite(t *testing.T) {
-// 	suite.Run(t, new(HTTPRouteIsolationWithHostnameIntersectionTestSuite))
-// }
+func TestHTTPRouteIsolationWithHostnameIntersectionTestSuite(t *testing.T) {
+	suite.Run(t, new(HTTPRouteIsolationWithHostnameIntersectionTestSuite))
+}
 
-// func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_1_route_attaches_to_empty_hostname() {
-// 	fixtureDirPath := utils.GetCRDFixturePath()
-// 	fixtureDir := "listener-isolation"
+func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_1_route_attaches_to_empty_hostname() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "listener-isolation-with-hostname-intersection"
 
-// 	fixturePath := path.Join(fixtureDirPath, fixtureDir, "1-route-attaches-to-empty-hostname")
-// 	s.CreateFixtures(fixturePath, nil)
-// 	mapFilePath := "hug_http_8080"
-// 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "1-route-attaches-to-empty-hostname")
+	s.CreateFixtures(fixturePath, nil)
+	mapFilePath := "hug_http_8080"
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
 
-// 	// Expected Conditions
-// 	expectationsPath := path.Join(fixturePath, "expectations")
-// 	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
-// 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+	// Expected Conditions
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
-// 	httpRouteName := "route-attaches-to-empty-hostname"
-// 	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	httpRouteName := "route-attaches-to-empty-hostname"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
 
-// 	// Check Maps
-// 	expectedMapsPath := path.Join(expectationsPath, "maps")
-// 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
-// }
+	// Check Maps
+	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectMapContents(mapFilePath, expectedMapsPath)
+}
 
-// func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_2_route_attaches_to_wildcard_example_com() {
-// 	fixtureDirPath := utils.GetCRDFixturePath()
-// 	fixtureDir := "listener-isolation"
+func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_2_route_attaches_to_wildcard_example_com() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "listener-isolation-with-hostname-intersection"
 
-// 	fixturePath := path.Join(fixtureDirPath, fixtureDir, "2-route-attaches-to-wildcard-example-com")
-// 	s.CreateFixtures(fixturePath, nil)
-// 	mapFilePath := "hug_http_8080"
-// 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "2-route-attaches-to-wildcard-example-com")
+	s.CreateFixtures(fixturePath, nil)
+	mapFilePath := "hug_http_8080"
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
 
-// 	// Expected Conditions
-// 	expectationsPath := path.Join(fixturePath, "expectations")
-// 	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
-// 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+	// Expected Conditions
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
-// 	httpRouteName := "route-attaches-to-wildcard-example-com"
-// 	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	httpRouteName := "route-attaches-to-wildcard-example-com"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
 
-// 	// Check Maps
-// 	expectedMapsPath := path.Join(expectationsPath, "maps")
-// 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
-// }
+	// Check Maps
+	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectMapContents(mapFilePath, expectedMapsPath)
+}
 
-// func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_3_route_attaches_to_wildcard_foo_example_com() {
-// 	fixtureDirPath := utils.GetCRDFixturePath()
-// 	fixtureDir := "listener-isolation"
+func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_3_route_attaches_to_wildcard_foo_example_com() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "listener-isolation-with-hostname-intersection"
 
-// 	fixturePath := path.Join(fixtureDirPath, fixtureDir, "3-route-attaches-to-wildcard-foo-example-com")
-// 	s.CreateFixtures(fixturePath, nil)
-// 	mapFilePath := "hug_http_8080"
-// 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "3-route-attaches-to-wildcard-foo-example-com")
+	s.CreateFixtures(fixturePath, nil)
+	mapFilePath := "hug_http_8080"
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
 
-// 	// Expected Conditions
-// 	expectationsPath := path.Join(fixturePath, "expectations")
-// 	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
-// 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+	// Expected Conditions
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
-// 	httpRouteName := "route-attaches-to-wildcard-foo-example-com"
-// 	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	httpRouteName := "route-attaches-to-wildcard-foo-example-com"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
 
-// 	// Check Maps
-// 	expectedMapsPath := path.Join(expectationsPath, "maps")
-// 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
-// }
+	// Check Maps
+	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectMapContents(mapFilePath, expectedMapsPath)
+}
 
-// func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_4_route_attaches_to_abc_foo_example_com() {
-// 	fixtureDirPath := utils.GetCRDFixturePath()
-// 	fixtureDir := "listener-isolation"
+func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_4_route_attaches_to_abc_foo_example_com() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "listener-isolation-with-hostname-intersection"
 
-// 	fixturePath := path.Join(fixtureDirPath, fixtureDir, "4-route-attaches-to-abc-foo-example-com")
-// 	s.CreateFixtures(fixturePath, nil)
-// 	mapFilePath := "hug_http_8080"
-// 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "4-route-attaches-to-abc-foo-example-com")
+	s.CreateFixtures(fixturePath, nil)
+	mapFilePath := "hug_http_8080"
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
 
-// 	// Expected Conditions
-// 	expectationsPath := path.Join(fixturePath, "expectations")
-// 	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
-// 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+	// Expected Conditions
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
-// 	httpRouteName := "route-attaches-to-abc-foo-example-com"
-// 	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	httpRouteName := "route-attaches-to-abc-foo-example-com"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
 
-// 	// Check Maps
-// 	expectedMapsPath := path.Join(expectationsPath, "maps")
-// 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
-// }
+	// Check Maps
+	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectMapContents(mapFilePath, expectedMapsPath)
+}
 
-// func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_5_all() {
-// 	fixtureDirPath := utils.GetCRDFixturePath()
-// 	fixtureDir := "listener-isolation"
+func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_ListenerIsolation_5_all() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "listener-isolation-with-hostname-intersection"
 
-// 	fixturePath := path.Join(fixtureDirPath, fixtureDir, "5-all")
-// 	s.CreateFixtures(fixturePath, nil)
-// 	mapFilePath := "hug_http_8080"
-// 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "5-all")
+	s.CreateFixtures(fixturePath, nil)
+	mapFilePath := "hug_http_8080"
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
 
-// 	// Check Maps
-// 	expectationsPath := path.Join(fixturePath, "expectations")
-// 	expectedMapsPath := path.Join(expectationsPath, "maps")
-// 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
-// }
+	// Check Maps
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectMapContents(mapFilePath, expectedMapsPath)
+}

@@ -25,12 +25,15 @@ import (
 
 //revive:disable:var-naming
 const (
-	PATH_EXACT_MAP                 = "path_exact"
-	PATH_EXACT_DOMAIN_WILDCARD_MAP = "domain_wildcard_path_exact"
-	PATH_PREFIX_MAP                = "path_prefix"
-	PATH_REGEX_MAP                 = "path_regex"
-	SNI_MAP                        = "sni"
-	SNI_DOMAIN_WILDCARD_MAP        = "domain_wildcard_sni"
+	PATH_EXACT_MAP                    = "path_exact"
+	PATH_PREFIX_MAP                   = "path_prefix"
+	PATH_REGEX_MAP                    = "path_regex"
+	SNI_MAP                           = "sni"
+	SNI_DOMAIN_WILDCARD_MAP           = "domain_wildcard_sni"
+	MAP_LISTENER_EXACT_MATCH          = "listener_exact_match"
+	MAP_LISTENER_WILDCARD_MATCH       = "listener_wildcard_match"
+	MAP_LISTENER_ROUTE_EXACT_MATCH    = "listener_route_exact_match"
+	MAP_LISTENER_ROUTE_WILDCARD_MATCH = "listener_route_wildcard_match"
 )
 
 //revive:enable:var-naming
@@ -54,6 +57,30 @@ func NewMapsStorage(logger *slog.Logger, mapsBaseDir string) MapsStorage {
 	}
 }
 
+func (m *MapsStorageDefault) GetListenerExactMatchMapFile() *maps.MapFileState {
+	f := m.getMapFile("", MAP_LISTENER_EXACT_MATCH)
+	f.PlainValues = true
+	return f
+}
+
+func (m *MapsStorageDefault) GetListenerWildcardMatchMapFile() *maps.MapFileState {
+	f := m.getMapFile("", MAP_LISTENER_WILDCARD_MATCH)
+	f.PlainValues = true
+	return f
+}
+
+func (m *MapsStorageDefault) GetListenerRouteExactMatchMapFile() *maps.MapFileState {
+	f := m.getMapFile("", MAP_LISTENER_ROUTE_EXACT_MATCH)
+	f.PlainValues = true
+	return f
+}
+
+func (m *MapsStorageDefault) GetListenerRouteWildcardMatchMapFile() *maps.MapFileState {
+	f := m.getMapFile("", MAP_LISTENER_ROUTE_WILDCARD_MATCH)
+	f.PlainValues = true
+	return f
+}
+
 func (m *MapsStorageDefault) GetPathExactMapFile(frontendName string) *maps.MapFileState {
 	return m.getMapFile(frontendName, PATH_EXACT_MAP)
 }
@@ -72,10 +99,6 @@ func (m *MapsStorageDefault) GetSniMapFile(frontendName string) *maps.MapFileSta
 
 func (m *MapsStorageDefault) GetSniDomainWildcardMapFile(frontendName string) *maps.MapFileState {
 	return m.getMapFile(frontendName, SNI_DOMAIN_WILDCARD_MAP)
-}
-
-func (m *MapsStorageDefault) GetPathExactDomainWildcardMapFile(frontendName string) *maps.MapFileState {
-	return m.getMapFile(frontendName, PATH_EXACT_DOMAIN_WILDCARD_MAP)
 }
 
 // getMapFile returns the MapFileState for the given frontend name and map name.

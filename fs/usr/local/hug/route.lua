@@ -202,3 +202,20 @@ end
 
 -- Register the function to be called from HAProxy
 core.register_action("route", { "http-req" }, route)
+
+-- Register a converter to reverse the host string (e.g. "www.example.com" becomes ".com.example.www")
+core.register_converters("reverse_host", function(val)
+    if val == nil or val == "" then
+        return "."
+    end
+
+    local labels = {}
+    -- Split the string by dots
+    for label in string.gmatch(val, "[^.]+") do
+        table.insert(labels, 1, label)
+    end
+
+    -- Join with dots and prefix with a leading dot
+    -- Example: "bar.com" -> ".com.bar"
+    return "." .. table.concat(labels, ".")
+end)

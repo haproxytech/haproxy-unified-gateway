@@ -40,7 +40,7 @@ func TestMapFileState_ApplyDesiredBackends_Full_WithPath(t *testing.T) {
 			name: "1 hostname, 1 backend",
 			applyFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "be1",
@@ -53,10 +53,10 @@ func TestMapFileState_ApplyDesiredBackends_Full_WithPath(t *testing.T) {
 			applyFn: func(m *MapFileState, ek EntryKey) {
 				if ek.Hostname == "a.com" {
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 				} else {
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 				}
 			},
 			expectVals: map[EntryKey]string{
@@ -71,9 +71,9 @@ func TestMapFileState_ApplyDesiredBackends_Full_WithPath(t *testing.T) {
 			name: "1 hostname, 2 backends different origin",
 			applyFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-					map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+					map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               `{"a":"wr","l":"be1:1,be2:2"}`,
@@ -87,10 +87,10 @@ func TestMapFileState_ApplyDesiredBackends_Full_WithPath(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}, "be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}, "be2": {ValueName: "be2", Weight: new(int32(2))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be3": {BackendName: "be3", Weight: new(int32(3))}, "be4": {BackendName: "be4", Weight: new(int32(4))}})
+						map[string]*WeightedValue{"be3": {ValueName: "be3", Weight: new(int32(3))}, "be4": {ValueName: "be4", Weight: new(int32(4))}})
 				}
 			},
 			expectVals: map[EntryKey]string{
@@ -105,9 +105,9 @@ func TestMapFileState_ApplyDesiredBackends_Full_WithPath(t *testing.T) {
 			name: "1 hostname, 2 identical backends, different origin, different weights",
 			applyFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(2))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(2))}})
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(5))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(5))}})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "be1",
@@ -120,10 +120,10 @@ func TestMapFileState_ApplyDesiredBackends_Full_WithPath(t *testing.T) {
 			applyFn: func(m *MapFileState, ek EntryKey) {
 				if ek.Hostname == "a.com" {
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(2))}})
 				} else {
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(5))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(5))}})
 				}
 			},
 			expectVals: map[EntryKey]string{
@@ -180,11 +180,11 @@ func TestMapFileState_ApplyDesiredBackends_DeleteScenarios(t *testing.T) {
 			name: "1 hostname, 1 backend deleted",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
 				// supprime le backend
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "",
@@ -198,15 +198,15 @@ func TestMapFileState_ApplyDesiredBackends_DeleteScenarios(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 				}
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "a.com"}:             "",
@@ -220,13 +220,13 @@ func TestMapFileState_ApplyDesiredBackends_DeleteScenarios(t *testing.T) {
 			name: "1 hostname, 2 backends deleted, different origin",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-					map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+					map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "",
@@ -240,15 +240,15 @@ func TestMapFileState_ApplyDesiredBackends_DeleteScenarios(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}, "be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}, "be2": {ValueName: "be2", Weight: new(int32(2))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be3": {BackendName: "be3", Weight: new(int32(3))}, "be4": {BackendName: "be4", Weight: new(int32(4))}})
+						map[string]*WeightedValue{"be3": {ValueName: "be3", Weight: new(int32(3))}, "be4": {ValueName: "be4", Weight: new(int32(4))}})
 				}
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "a.com"}:             "",
@@ -262,13 +262,13 @@ func TestMapFileState_ApplyDesiredBackends_DeleteScenarios(t *testing.T) {
 			name: "1 hostname, 2 identical backends deleted, different origin",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(2))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(2))}})
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(5))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(5))}})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "",
@@ -282,15 +282,15 @@ func TestMapFileState_ApplyDesiredBackends_DeleteScenarios(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(2))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(5))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(5))}})
 				}
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "a.com"}:             "",
@@ -349,10 +349,10 @@ func TestMapFileState_DeleteBackends(t *testing.T) {
 			name: "1 hostname, 1 backend deleted",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "",
@@ -366,15 +366,15 @@ func TestMapFileState_DeleteBackends(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 				}
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "a.com"}:             "",
@@ -388,13 +388,13 @@ func TestMapFileState_DeleteBackends(t *testing.T) {
 			name: "1 hostname, 2 backends deleted, different origin",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-					map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+					map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "",
@@ -408,15 +408,15 @@ func TestMapFileState_DeleteBackends(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}, "be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}, "be2": {ValueName: "be2", Weight: new(int32(2))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be3": {BackendName: "be3", Weight: new(int32(3))}, "be4": {BackendName: "be4", Weight: new(int32(4))}})
+						map[string]*WeightedValue{"be3": {ValueName: "be3", Weight: new(int32(3))}, "be4": {ValueName: "be4", Weight: new(int32(4))}})
 				}
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "a.com"}:             "",
@@ -430,13 +430,13 @@ func TestMapFileState_DeleteBackends(t *testing.T) {
 			name: "1 hostname, 2 identical backends deleted, different origin",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(2))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(2))}})
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(5))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(5))}})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "",
@@ -450,15 +450,15 @@ func TestMapFileState_DeleteBackends(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(2))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(5))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(5))}})
 				}
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "a.com"}:             "",
@@ -518,10 +518,10 @@ func TestMapFileState_BackendDeletions(t *testing.T) {
 			name: "1 hostname, 1 backend deleted",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+					map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "",
@@ -534,14 +534,14 @@ func TestMapFileState_BackendDeletions(t *testing.T) {
 			name: "1 hostname, 2 backends, delete one only",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{
-						"be1": {BackendName: "be1", Weight: new(int32(1))},
-						"be2": {BackendName: "be2", Weight: new(int32(2))},
+					map[string]*WeightedValue{
+						"be1": {ValueName: "be1", Weight: new(int32(1))},
+						"be2": {ValueName: "be2", Weight: new(int32(2))},
 					})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+					map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "be2", // un backend restant → format simple
@@ -554,14 +554,14 @@ func TestMapFileState_BackendDeletions(t *testing.T) {
 			name: "1 hostname, 2 identical backends different weights, delete one",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{
-						"be1": {BackendName: "be1", Weight: new(int32(2))},
-						"be2": {BackendName: "be1", Weight: new(int32(5))},
+					map[string]*WeightedValue{
+						"be1": {ValueName: "be1", Weight: new(int32(2))},
+						"be2": {ValueName: "be1", Weight: new(int32(5))},
 					})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedBackend{"be2": {BackendName: "be1", Weight: new(int32(5))}})
+					map[string]*WeightedValue{"be2": {ValueName: "be1", Weight: new(int32(5))}})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "be2",
@@ -576,15 +576,15 @@ func TestMapFileState_BackendDeletions(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 				}
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedBackend{})
-				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedBackend{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"}, map[string]*WeightedValue{})
+				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"}, map[string]*WeightedValue{})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "a.com"}:             "",
@@ -601,20 +601,20 @@ func TestMapFileState_BackendDeletions(t *testing.T) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be1": {BackendName: "be1", Weight: new(int32(1))}, "be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}, "be2": {ValueName: "be2", Weight: new(int32(2))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be3": {BackendName: "be3", Weight: new(int32(3))}, "be4": {BackendName: "be4", Weight: new(int32(4))}})
+						map[string]*WeightedValue{"be3": {ValueName: "be3", Weight: new(int32(3))}, "be4": {ValueName: "be4", Weight: new(int32(4))}})
 				}
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
 				switch ek.Hostname {
 				case "a.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-						map[string]*WeightedBackend{"be2": {BackendName: "be2", Weight: new(int32(2))}})
+						map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(2))}})
 				case "b.com":
 					m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res2"},
-						map[string]*WeightedBackend{"be3": {BackendName: "be3", Weight: new(int32(3))}})
+						map[string]*WeightedValue{"be3": {ValueName: "be3", Weight: new(int32(3))}})
 				}
 			},
 			expectVals: map[EntryKey]string{

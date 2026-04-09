@@ -88,7 +88,7 @@ func (m *MapFileState) ProcessMapFiles() {
 			}
 		}
 		// fill desired values with current values
-		entryValue.DesiredValue = map[string]*WeightedBackend{}
+		entryValue.DesiredValue = map[string]*WeightedValue{}
 		for backendName, weightedBackend := range entryValue.CurrentValue {
 			entryValue.DesiredValue[backendName] = weightedBackend.Copy()
 		}
@@ -96,8 +96,8 @@ func (m *MapFileState) ProcessMapFiles() {
 		for backendName, collectedIntents := range backendsOp {
 			// DiffValue
 			diffValue := &IntentValue{
-				WeightedBackend: WeightedBackend{
-					BackendName: backendName,
+				WeightedValue: WeightedValue{
+					ValueName: backendName,
 					Weight: func() *int32 {
 						if collectedIntents.Weight != nil {
 							weight := *collectedIntents.Weight
@@ -132,8 +132,8 @@ func (m *MapFileState) ProcessMapFiles() {
 			// DesiredValue
 			switch entryValue.DiffValue[backendName].Operation {
 			case Create, Update:
-				entryValue.DesiredValue[backendName] = &WeightedBackend{
-					BackendName: backendName,
+				entryValue.DesiredValue[backendName] = &WeightedValue{
+					ValueName: backendName,
 					Weight: func() *int32 {
 						if diffValue.Weight != nil {
 							weight := *diffValue.Weight
@@ -181,7 +181,7 @@ func (m *MapFileState) Reset() {
 				delete(entryValue.IntentsByBackendByResouceOrigin, resourceOrigin)
 			}
 		}
-		entryValue.CurrentValue = map[string]*WeightedBackend{}
+		entryValue.CurrentValue = map[string]*WeightedValue{}
 		for backendName, weightedBackend := range entryValue.DesiredValue {
 			entryValue.CurrentValue[backendName] = weightedBackend.Copy()
 		}
@@ -211,20 +211,20 @@ func (ro ResourceOrigin) String() string {
 }
 
 type IntentValue struct {
-	WeightedBackend
+	WeightedValue
 	Operation
 }
 
 func (i IntentValue) String() string {
-	return fmt.Sprintf("IntentValue {WeightedBackend: %+v, Operation: %+v}", i.WeightedBackend, i.Operation)
+	return fmt.Sprintf("IntentValue {WeightedBackend: %+v, Operation: %+v}", i.WeightedValue, i.Operation)
 }
 
 func (i IntentValue) Copy() *IntentValue {
-	weight := utils.PointerDefaultValueIfNil(i.WeightedBackend.Weight)
+	weight := utils.PointerDefaultValueIfNil(i.WeightedValue.Weight)
 	return &IntentValue{
-		WeightedBackend: WeightedBackend{
-			BackendName: i.WeightedBackend.BackendName,
-			Weight:      &weight,
+		WeightedValue: WeightedValue{
+			ValueName: i.WeightedValue.ValueName,
+			Weight:    &weight,
 		},
 		Operation: i.Operation,
 	}
@@ -242,31 +242,36 @@ const (
 // EntryValue represents all the information necessary to compute the desired state for a given key in the map file
 type EntryValue struct {
 	// IntentsByBackendByResouceOrigin map[ResourceOrigin]*IntentValue
-	IntentsByBackendByResouceOrigin map[ResourceOrigin]map[string]*IntentValue // resource origin -> backend name -> backend + weight
-	CurrentValue                    map[string]*WeightedBackend                // backend name -> backend + weight
-	DiffValue                       map[string]*IntentValue                    // backend name -> backend + weight + operation (useful for sockets orders)
-	DesiredValue                    map[string]*WeightedBackend                // backend name -> backend + weight
+	// in the following lines:
+	// value can be:
+	// - a backend name with a weight (for path-based maps) or just a backend name (for sni-based maps) that we want to create/update/delete in the runtime map file (desired state)
+	// - a listener name
+	// - a listener + route name
+	IntentsByBackendByResouceOrigin map[ResourceOrigin]map[string]*IntentValue // resource origin -> value name -> value + weight
+	CurrentValue                    map[string]*WeightedValue                  // value name -> value + weight
+	DiffValue                       map[string]*IntentValue                    // value name -> value + weight + operation (useful for sockets orders)
+	DesiredValue                    map[string]*WeightedValue                  // value name -> value + weight
 }
 
-type WeightedBackend struct {
-	Weight      *int32
-	BackendName string
+type WeightedValue struct {
+	Weight    *int32
+	ValueName string
 }
 
-func (wb WeightedBackend) String() string {
-	return fmt.Sprintf("BackendName: %s, Weight: %d", wb.BackendName, utils.PointerDefaultValueIfNil(wb.Weight))
+func (wb WeightedValue) String() string {
+	return fmt.Sprintf("BackendName: %s, Weight: %d", wb.ValueName, utils.PointerDefaultValueIfNil(wb.Weight))
 }
 
-func (wb WeightedBackend) Copy() *WeightedBackend {
+func (wb WeightedValue) Copy() *WeightedValue {
 	weight := utils.PointerDefaultValueIfNil(wb.Weight)
-	return &WeightedBackend{
-		BackendName: wb.BackendName,
-		Weight:      &weight,
+	return &WeightedValue{
+		ValueName: wb.ValueName,
+		Weight:    &weight,
 	}
 }
 
-func (ev EntryValue) CopyDesiredValue() map[string]*WeightedBackend {
-	result := map[string]*WeightedBackend{}
+func (ev EntryValue) CopyDesiredValue() map[string]*WeightedValue {
+	result := map[string]*WeightedValue{}
 	for backendName, weightedBackend := range ev.DesiredValue {
 		result[backendName] = weightedBackend.Copy()
 	}
@@ -282,6 +287,11 @@ type MapFileState struct {
 	// FileName          string
 	// RelativeFileName  string
 	Path futils.FilePath
+	// PlainValues disables the JSON weighted format: values are written as plain
+	// comma-separated names (no weights, no JSON wrapper). Use this for maps that
+	// are looked up directly by HAProxy (listener_exact_match, listener_wildcard_match,
+	// listener_route_exact_match, listener_route_wildcard_match).
+	PlainValues bool
 }
 
 // Collect all intentions for each backend
@@ -305,7 +315,7 @@ type CollectedBackendIntents struct {
 // 3. Update EntriesByResource
 func (m *MapFileState) ApplyRoute(
 	ro ResourceOrigin,
-	newEntries map[EntryKey]map[string]*WeightedBackend,
+	newEntries map[EntryKey]map[string]*WeightedValue,
 ) {
 	previous := m.EntriesByResource[ro]
 	if previous == nil {
@@ -324,7 +334,7 @@ func (m *MapFileState) ApplyRoute(
 	for ek := range previous {
 		if _, stillPresent := current[ek]; !stillPresent {
 			// force deletion of all backends for this resource on this entry
-			m.ApplyDesiredBackends(ek, ro, map[string]*WeightedBackend{})
+			m.ApplyDesiredBackends(ek, ro, map[string]*WeightedValue{})
 		}
 	}
 
@@ -345,7 +355,7 @@ func (m *MapFileState) ApplyRoute(
 func (m *MapFileState) ApplyDesiredBackends(
 	entryKey EntryKey,
 	resourceOrigin ResourceOrigin,
-	desired map[string]*WeightedBackend,
+	desired map[string]*WeightedValue,
 ) {
 	m.logger.LogAttrs(
 		context.Background(),
@@ -372,9 +382,9 @@ func (m *MapFileState) ApplyDesiredBackends(
 	if entry == nil {
 		entry = &EntryValue{
 			IntentsByBackendByResouceOrigin: map[ResourceOrigin]map[string]*IntentValue{},
-			CurrentValue:                    map[string]*WeightedBackend{},
+			CurrentValue:                    map[string]*WeightedValue{},
 			DiffValue:                       map[string]*IntentValue{},
-			DesiredValue:                    map[string]*WeightedBackend{},
+			DesiredValue:                    map[string]*WeightedValue{},
 		}
 		m.Entries[entryKey] = entry
 	}
@@ -390,9 +400,9 @@ func (m *MapFileState) ApplyDesiredBackends(
 	for backendName, currentIntent := range currentByBackend {
 		if _, stillDesired := desired[backendName]; !stillDesired {
 			currentByBackend[backendName] = &IntentValue{
-				WeightedBackend: WeightedBackend{
-					BackendName: backendName,
-					Weight:      currentIntent.Weight,
+				WeightedValue: WeightedValue{
+					ValueName: backendName,
+					Weight:    currentIntent.Weight,
 				},
 				Operation: Delete,
 			}
@@ -407,9 +417,9 @@ func (m *MapFileState) ApplyDesiredBackends(
 		case !exists:
 			// CREATE
 			currentByBackend[backendName] = &IntentValue{
-				WeightedBackend: WeightedBackend{
-					BackendName: backendName,
-					Weight:      copyWeight(desiredBackend.Weight),
+				WeightedValue: WeightedValue{
+					ValueName: backendName,
+					Weight:    copyWeight(desiredBackend.Weight),
 				},
 				Operation: Create,
 			}
@@ -492,27 +502,47 @@ func (m *MapFileState) WriteOnDiskIfChanged() error {
 		if entryKey.Path != "" {
 			key += entryKey.Path
 		}
-		value := BuildRouteValue(entryValue.DesiredValue)
-		if value == "" {
-			continue
-		}
-		m.logger.LogAttrs(
-			context.Background(),
-			slog.LevelDebug,
-			"Map file entry",
-			slog.String("key", key),
-			slog.String("value", value),
-		)
-
-		_, err := fmt.Fprintf(f, "%s %s\n", key, value)
-		if err != nil {
-			return err
+		if m.PlainValues {
+			names := make([]string, 0, len(entryValue.DesiredValue))
+			for name := range entryValue.DesiredValue {
+				names = append(names, name)
+			}
+			if len(names) == 0 {
+				continue
+			}
+			slices.Sort(names)
+			for _, name := range names {
+				m.logger.LogAttrs(context.Background(), slog.LevelDebug, "Map file entry",
+					slog.String("key", key), slog.String("value", name))
+				if _, err := fmt.Fprintf(f, "%s %s\n", key, name); err != nil {
+					return err
+				}
+			}
+		} else {
+			value := BuildRouteValue(entryValue.DesiredValue)
+			if value == "" {
+				continue
+			}
+			m.logger.LogAttrs(context.Background(), slog.LevelDebug, "Map file entry",
+				slog.String("key", key), slog.String("value", value))
+			if _, err := fmt.Fprintf(f, "%s %s\n", key, value); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func BuildRouteValue(desired map[string]*WeightedBackend) string {
+// BuildValue returns the map-file value string for the given desired state,
+// choosing between the plain and JSON-weighted formats based on m.PlainValues.
+func (m *MapFileState) BuildValue(desired map[string]*WeightedValue) string {
+	if m.PlainValues {
+		return BuildPlainRouteValue(desired)
+	}
+	return BuildRouteValue(desired)
+}
+
+func BuildRouteValue(desired map[string]*WeightedValue) string {
 	if len(desired) == 0 {
 		return ""
 	}
@@ -546,6 +576,20 @@ func BuildRouteValue(desired map[string]*WeightedBackend) string {
 
 	b.WriteString(`"}`)
 	return b.String()
+}
+
+// BuildPlainRouteValue returns names as a plain comma-separated string (no weights, no JSON).
+// Used for listener maps where the value must be a literal string, not a weighted backend list.
+func BuildPlainRouteValue(desired map[string]*WeightedValue) string {
+	if len(desired) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(desired))
+	for name := range desired {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return strings.Join(names, ",")
 }
 
 func copyWeight(w *int32) *int32 {
@@ -615,7 +659,7 @@ func (ev *EntryValue) PrettyString(indent string) string {
 				&b,
 				"%s│  │  └─ %s weight=%d op=%s\n",
 				indent,
-				intent.BackendName,
+				intent.ValueName,
 				utils.PointerDefaultValueIfNil(intent.Weight),
 				intent.Operation,
 			)
@@ -630,7 +674,7 @@ func (ev *EntryValue) PrettyString(indent string) string {
 			&b,
 			"%s│  └─ %s weight=%d\n",
 			indent,
-			wb.BackendName,
+			wb.ValueName,
 			utils.PointerDefaultValueIfNil(wb.Weight),
 		)
 	}
@@ -643,7 +687,7 @@ func (ev *EntryValue) PrettyString(indent string) string {
 			&b,
 			"%s│  └─ %s weight=%d op=%s\n",
 			indent,
-			diff.BackendName,
+			diff.ValueName,
 			utils.PointerDefaultValueIfNil(diff.Weight),
 			diff.Operation,
 		)
@@ -657,7 +701,7 @@ func (ev *EntryValue) PrettyString(indent string) string {
 			&b,
 			"%s   └─ %s weight=%d\n",
 			indent,
-			wb.BackendName,
+			wb.ValueName,
 			utils.PointerDefaultValueIfNil(wb.Weight),
 		)
 	}

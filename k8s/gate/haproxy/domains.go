@@ -23,3 +23,26 @@ func isDomainWildcard(domain string) bool {
 func removeDomainWildcard(domain string) string {
 	return strings.TrimPrefix(domain, "*")
 }
+
+// reverseDomain reverses the label order of a domain string so that the most
+// significant part (TLD) is at the end. This is required for HAProxy map_end
+// lookups, which match against the end of the key rather than the beginning,
+// and do not perform longest-match selection.
+//
+// The result always starts with a "." to ensure correct suffix matching.
+//
+// Examples:
+//
+//	".example.com"  → ".com.example."
+//	"example.com"   → ".com.example"
+func reverseDomain(domain string) string {
+	labels := strings.Split(domain, ".")
+	for i, j := 0, len(labels)-1; i < j; i, j = i+1, j-1 {
+		labels[i], labels[j] = labels[j], labels[i]
+	}
+	reversed := strings.Join(labels, ".")
+	if !strings.HasPrefix(reversed, ".") {
+		reversed = "." + reversed
+	}
+	return reversed
+}

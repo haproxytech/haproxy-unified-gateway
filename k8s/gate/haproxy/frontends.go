@@ -20,6 +20,7 @@ import (
 
 	"github.com/haproxytech/client-native/v6/models"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
@@ -45,7 +46,7 @@ func (b *HaproxyConfMgrImpl) processVirtualListener() error {
 			err := b.onUpsertedVirtualListener(vlName, vListener)
 			errors.Add(err)
 		case store.StatusDeleted:
-			err := b.onDeletedVirtualListener(vlName)
+			err := b.onDeletedVirtualListener(vlName, vListener)
 			errors.Add(err)
 		}
 	}
@@ -59,8 +60,9 @@ func (b *HaproxyConfMgrImpl) onUpsertedVirtualListener(vlName string, vListener 
 	return err
 }
 
-func (b *HaproxyConfMgrImpl) onDeletedVirtualListener(vlName string) error {
+func (b *HaproxyConfMgrImpl) onDeletedVirtualListener(vlName string, vListener *tree.VirtualListener) error {
 	b.logVirtualListenerUpdate("deleted", vlName)
+	b.clearListenerMaps(vListener)
 	err := b.deleteFrontendForVirtualListener(vlName)
 	return err
 }
@@ -92,7 +94,90 @@ func (b *HaproxyConfMgrImpl) upsertFrontends(vListenerName string, vListener *tr
 			logging.LogAttrError(err))
 	}
 
+	b.fillListenerMaps(vListener)
+
 	return nil
+}
+
+// clearListenerMaps removes all entries from MAP_LISTENER_EXACT_MATCH, MAP_LISTENER_WILDCARD_MATCH,
+// MAP_LISTENER_ROUTE_EXACT_MATCH, and MAP_LISTENER_ROUTE_WILDCARD_MATCH
+// that were added for each listener in the VirtualListener.
+func (b *HaproxyConfMgrImpl) clearListenerMaps(vListener *tree.VirtualListener) {
+	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile()
+	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile()
+	listenerRouteExactMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile()
+	listenerRouteWildcardMatchMap := b.params.mapsStorage.GetListenerRouteWildcardMatchMapFile()
+
+	for _, l := range vListener.Listeners {
+		listenerKeyName := l.Key().String()
+		resourceOrigin := maps.ResourceOrigin{
+			Namespace: l.Owner.Namespace,
+			Name:      listenerKeyName,
+		}
+		listenerExactMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+		listenerWildcardMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+
+		for routeKey := range l.AttachedRoutes {
+			routeOrigin := maps.ResourceOrigin{
+				Namespace: routeKey.Namespace,
+				Name:      listenerKeyName + "/" + routeKey.Name,
+			}
+			listenerRouteExactMatchMap.ApplyRoute(routeOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+			listenerRouteWildcardMatchMap.ApplyRoute(routeOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+		}
+	}
+}
+
+// fillListenerMaps fills MAP_LISTENER_EXACT_MATCH and MAP_LISTENER_WILDCARD_MATCH for each listener in the VirtualListener.
+// For every listener whose hostname is set and is not a wildcard, one entry is added to the exact-match map:
+//
+//	key:   hostname
+//	value: listener name built as per NewListenerKey(gw, listener).Name  →  "<gateway-name>_<listener-name>"
+//
+// For every listener whose hostname is a wildcard (e.g. "*.example.com"), one entry is added to the wildcard-match map:
+//
+//	key:   hostname with the leading "*" stripped (e.g. ".example.com"), for use with map_end
+//	value: listener name built as per NewListenerKey(gw, listener).Name  →  "<gateway-name>_<listener-name>"
+func (b *HaproxyConfMgrImpl) fillListenerMaps(vListener *tree.VirtualListener) {
+	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile()
+	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile()
+
+	for _, l := range vListener.Listeners {
+		hostname := l.K8sResource.Hostname
+		hostnameStr := ""
+		if hostname != nil {
+			hostnameStr = string(*hostname)
+		}
+		if hostnameStr == "" {
+			hostnameStr = "*."
+		}
+		// Equivalent to NewListenerKey(gw, listener).Name
+		listenerKeyName := l.Key().String()
+		resourceOrigin := maps.ResourceOrigin{
+			Namespace: l.Owner.Namespace,
+			Name:      listenerKeyName,
+		}
+		if isDomainWildcard(hostnameStr) {
+			// Strip the leading "*" so that map_end can match against the suffix (e.g. ".example.com")
+			wildcardKey := removeDomainWildcard(hostnameStr)
+			// Here reverse the domain string (because map_end does not take the longest string)
+			// so we want to use a key that has the most significant part at the end of the string (e.g. "com.example.")
+			reverseDomainKey := reverseDomain(wildcardKey)
+			listenerWildcardMatchMap.ApplyRoute(resourceOrigin,
+				map[maps.EntryKey]map[string]*maps.WeightedValue{
+					{Hostname: reverseDomainKey}: {
+						listenerKeyName: &maps.WeightedValue{ValueName: listenerKeyName},
+					},
+				})
+		} else {
+			listenerExactMatchMap.ApplyRoute(resourceOrigin,
+				map[maps.EntryKey]map[string]*maps.WeightedValue{
+					{Hostname: hostnameStr}: {
+						listenerKeyName: &maps.WeightedValue{ValueName: listenerKeyName},
+					},
+				})
+		}
+	}
 }
 
 func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.VirtualListener) (*models.Frontend, error) { //revive:disable:function-length
@@ -101,12 +186,16 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 
 	md := b.metadataManager.FrontendMetaData(vListener)
 
-	pathExactMap := b.params.mapsStorageEx.GetPathExactMapFile(frontendName)
-	pathPrefixMap := b.params.mapsStorageEx.GetPathPrefixMapFile(frontendName)
-	pathDomainWPathExactMap := b.params.mapsStorageEx.GetPathExactDomainWildcardMapFile(frontendName)
-	pathRegexMap := b.params.mapsStorageEx.GetPathRegexMapFile(frontendName)
-	sniMap := b.params.mapsStorageEx.GetSniMapFile(frontendName)
-	sniDomainWildcardMap := b.params.mapsStorageEx.GetSniDomainWildcardMapFile(frontendName)
+	pathExactMap := b.params.mapsStorage.GetPathExactMapFile(frontendName)
+	pathPrefixMap := b.params.mapsStorage.GetPathPrefixMapFile(frontendName)
+	pathRegexMap := b.params.mapsStorage.GetPathRegexMapFile(frontendName)
+	sniMap := b.params.mapsStorage.GetSniMapFile(frontendName)
+	sniDomainWildcardMap := b.params.mapsStorage.GetSniDomainWildcardMapFile(frontendName)
+
+	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile()
+	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile()
+	listenerRouteExaxtMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile()
+	listenerRouteWildcardMatchMap := b.params.mapsStorage.GetListenerRouteWildcardMatchMapFile()
 
 	var tcpRules []*models.TCPRequestRule
 	var httpRules []*models.HTTPRequestRule
@@ -168,7 +257,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Criterion: "var(txn.sni_match),bytes(0,1)",
 				Value:     "-m str {",
 				Metadata: map[string]any{
-					"hug": "for lua routing",
+					"zhug": "for lua routing",
 				},
 			},
 		}
@@ -187,75 +276,115 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				VarScope: "txn",
 				VarExpr:  "req.hdr(Host),host_only",
 			},
+			{
+				// http-request set-var(txn.hostreversed) req.hdr(Host),host_only,lua.reverse_host
+				Type:     "set-var",
+				VarName:  "hostreversed",
+				VarScope: "txn",
+				VarExpr:  "req.hdr(Host),host_only,lua.reverse_host",
+			},
 			{ // http-request set-var(txn.base) var(txn.host),concat("",txn.path)
 				Type:     "set-var",
 				VarName:  "base",
 				VarScope: "txn",
 				VarExpr:  "var(txn.host),concat(\"\",txn.path)",
 			},
+			// -------------------
+			// Look for listener name: selected_listener_name
 			{
-				// exact domain + exact path
-				// http-request set-var(txn.route) base,map(route_exact_match.map)
+				// listener-name exact match
+				// http-request set-var(txn.selected-listener-name) var(txn.host),map(listener_exact_match)
+				Type:     "set-var",
+				VarName:  "selected_listener_name",
+				VarScope: "txn",
+				VarExpr:  "var(txn.host),map(" + listenerExactMatchMap.Path.FullPath() + ")",
+				Metadata: map[string]any{"hug": "listener exact match selection"},
+			},
+			{
+				// http-request set-var(txn.selected-listener-name,ifnotexists) var(txn.hostreversed),map_beg(listener_wildcard_match)
+				Type:     "set-var",
+				VarName:  "selected_listener_name,ifnotexists",
+				VarScope: "txn",
+				VarExpr:  "var(txn.hostreversed),map_beg(" + listenerWildcardMatchMap.Path.FullPath() + ")",
+				Metadata: map[string]any{"hug": "listener wildcard match selection"},
+			},
+			// -------------------
+			// Look for route name: selected_listener_route
+			{
+				//  listener-route-name exact match
+				// http-request set-var(txn.TMP)                        var(txn.selected_listener_name),concat("/",txn.host)
+				// http-request set-var(txn.selected_listener_route)    var(txn.TMP),map(listener_route_exact_match)
+				Type:     "set-var",
+				VarName:  "TMP",
+				VarScope: "txn",
+				VarExpr:  "var(txn.selected_listener_name),concat(\"/\",txn.host)",
+			},
+			{
+				Type:     "set-var",
+				VarName:  "selected_listener_route,ifnotexists",
+				VarScope: "txn",
+				VarExpr:  "var(txn.TMP),map(" + listenerRouteExaxtMatchMap.Path.FullPath() + ")",
+				Metadata: map[string]any{"hug": "listener-route exact match selection"},
+			},
+			{
+				//  listener-route-name wildcard match
+				// http-request set-var(txn.TMP)                        var(txn.selected_listener_name),concat("/",txn.hostreversed)
+				// http-request set-var(txn.selected_listener_route)    var(txn.TMP),map(listener_route_exact_match)
+				Type:     "set-var",
+				VarName:  "TMP",
+				VarScope: "txn",
+				VarExpr:  "var(txn.selected_listener_name),concat(\"/\",txn.hostreversed)",
+			},
+			{
+				Type:     "set-var",
+				VarName:  "selected_listener_route,ifnotexists",
+				VarScope: "txn",
+				VarExpr:  "var(txn.TMP),map_beg(" + listenerRouteWildcardMatchMap.Path.FullPath() + ")",
+				Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
+			},
+			// -------------------
+			// Lookups based on the selected listener route (selected_listener_route)
+			// in the final routing maps
+			// Now append the path to the selected_listener_route variable, so that we have in selected_listener_route the full route name (listener + route) to look for in the route maps
+			{
+				// Set var base_listener_route by appending path
+				// http-request set-var(txn.base_listener_route)      var(txn.selected_listener_route),concat("",txn.path)
+				Type:     "set-var",
+				VarName:  "base_listener_route,ifnotexists",
+				VarScope: "txn",
+				VarExpr:  "var(txn.selected_listener_route),concat(\"\",txn.path)",
+			},
+			{
+				// lookup in route_exact_match.map
+				// exact path
+				// http-request set-var(txn.base_listener_route) var(txn.base_listener_route),map(route_exact_match.map)
 				Type:     "set-var",
 				VarName:  "route",
 				VarScope: "txn",
-				VarExpr:  "var(txn.base),map(" + pathExactMap.Path.FullPath() + ")",
+				VarExpr:  "var(txn.base_listener_route),map(" + pathExactMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "exact domain + exact path"},
 			},
 			{
-				// # any domain + exact path
-				// http-request set-var(txn.route,ifnotexists) path,map(route_exact_match.map)
+				// lookup in route_prefix_match.map
+				// path prefix
+				// http-request set-var(txn.base_listener_route,ifnotexists) base,map_beg(route_prefix_match.map)
 				Type:     "set-var",
 				VarName:  "route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "path,map(" + pathExactMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "any domain + exact path"},
-			},
-			{
-				// # exact domain + path prefix
-				// http-request set-var(txn.route,ifnotexists) base,map_beg(route_prefix_match.map)
-				Type:     "set-var",
-				VarName:  "route,ifnotexists",
-				VarScope: "txn",
-				VarExpr:  "var(txn.base),map_beg(" + pathPrefixMap.Path.FullPath() + ")",
+				VarExpr:  "var(txn.base_listener_route),map_beg(" + pathPrefixMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "exact domain + path prefix"},
 			},
 			{
-				//  # any domain + path prefix
-				// http-request set-var(txn.route,ifnotexists) path,map_beg(route_prefix_match.map)
-				Type:     "set-var",
-				VarName:  "route,ifnotexists",
-				VarScope: "txn",
-				VarExpr:  "path,map_beg(" + pathPrefixMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "any domain + path prefix"},
-			},
-			{
-				//	# domain wildcard + exact path
-				//	 http-request set-var(txn.route,ifnotexists) base,map_end(route_dw_ep.map)
-				Type:     "set-var",
-				VarName:  "route,ifnotexists",
-				VarScope: "txn",
-				VarExpr:  "var(txn.base),map_end(" + pathDomainWPathExactMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "domain wildcard + exact path"},
-			},
-			{
-				// # any domain + path regex
-				// http-request set-var(txn.route,ifnotexists) path,map_reg(route_regex.map) # ^/(foo|bar)/.*
-				Type:     "set-var",
-				VarName:  "route,ifnotexists",
-				VarScope: "txn",
-				VarExpr:  "path,map_reg(" + pathRegexMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "any domain + path regex"},
-			},
-			{
+				// lookup in route_regex_match.map
+				// TODO HELENE: path regex + sni + uncomment conf test base gateways + isolation conf test
 				// # domain wildcard + path prefix. Example: ^[^.]+\.domain\.com/v1/foo/.*   # or map_sub
 				// # domain wildcard + path regex   Example: ^[^.]+\.domain\.com/v[1-3]/foo
 				// # exact domain + path regex      Example: ^www\.domain\.com/v[1-3]/foo
-				// http-request set-var(txn.route,ifnotexists) base,map_reg(route_regex.map)
+				// http-request set-var(txn.base_listener_route,ifnotexists) base,map_reg(route_regex.map)
 				Type:     "set-var",
 				VarName:  "route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "var(txn.base),map_reg(" + pathRegexMap.Path.FullPath() + ")",
+				VarExpr:  "var(txn.base_listener_route),map_reg(" + pathRegexMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "domain wildcard + path prefix or regex, exact domain + path regex"},
 			},
 			{

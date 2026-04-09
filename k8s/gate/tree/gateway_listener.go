@@ -499,6 +499,16 @@ func ListenerKeyFromListenerName(gw *gatewayv1.Gateway, listenerName gatewayv1.S
 	}
 }
 
+func (l Listener) Key() client.ObjectKey {
+	return client.ObjectKey{
+		Namespace: l.Owner.Namespace,
+		Name: fmt.Sprintf("%s_%s",
+			l.Owner.Name,
+			l.K8sResource.Name,
+		),
+	}
+}
+
 // ConvertListenerKeyToGatewayKey converts a listener key back to a gateway key.
 // It assumes the listener key is in the format "gateway-name_listener-name", built by the previous ListenerKey function.
 // For a listener key with namespace "ns" and name "my-gateway_https",
