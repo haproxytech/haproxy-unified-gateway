@@ -168,8 +168,9 @@ func Add(
 		GatewayAPICRDs: make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
 		HugGates:       make(map[types.NamespacedName]*v3.HugGate),
 		HugConfs:       make(map[types.NamespacedName]*v3.HugConf),
-		EndpointSlices: make(map[types.NamespacedName]*discoveryV1.EndpointSlice),
-		BackendCRs:     make(map[types.NamespacedName]*v3.Backend),
+		EndpointSlices:  make(map[types.NamespacedName]*discoveryV1.EndpointSlice),
+		ReferenceGrants: make(map[types.NamespacedName]*gatewayv1.ReferenceGrant),
+		BackendCRs:      make(map[types.NamespacedName]*v3.Backend),
 		GlobalCRs:      make(map[types.NamespacedName]*v3.Global),
 		DefaultsCRs:    make(map[types.NamespacedName]*v3.Defaults),
 		Updates:        store.NewClusterUpdates(),
@@ -380,6 +381,15 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 							predicate.NewNamespacePredicate(cfg.Namespaces),
 						),
 					},
+					// Watch ReferenceGrants — cross-namespace backendRef access may change
+					{
+						watchSource: objtypes.ObjectTypeRefGrant,
+						enqueueFunc: enqueueHTTPRouteForReferenceGrant,
+						predicate: k8spredicate.And(
+							k8spredicate.ResourceVersionChangedPredicate{},
+							predicate.NewNamespacePredicate(cfg.Namespaces),
+						),
+					},
 				},
 				),
 			},
@@ -559,7 +569,31 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 							predicate.NewNamespacePredicate(cfg.Namespaces),
 						),
 					},
+					// Watch ReferenceGrants — cross-namespace backendRef access may change
+					{
+						watchSource: objtypes.ObjectTypeRefGrant,
+						enqueueFunc: enqueueTLSRouteForReferenceGrant,
+						predicate: k8spredicate.And(
+							k8spredicate.ResourceVersionChangedPredicate{},
+							predicate.NewNamespacePredicate(cfg.Namespaces),
+						),
+					},
 				}),
+			},
+		},
+		{
+			name:       "ReferenceGrant",
+			objectType: objtypes.ObjectTypeRefGrant,
+			options: []Option{
+				WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.GenerationChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				),
+				// No WithEnqueueFor: ReferenceGrant has no secondary dependencies.
+				// The inverse direction is correct, HTTPRoute and TLSRoute controllers
+				// watch ReferenceGrant to re-enqueue affected routes when a grant changes.
 			},
 		},
 	}

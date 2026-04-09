@@ -31,6 +31,7 @@ var (
 	ObjectTypeGlobal       = &v3.Global{}
 	ObjectTypeDefaults     = &v3.Defaults{}
 	ObjectTypeTLSRoute     = &gatewayv1alpha2.TLSRoute{}
+	ObjectTypeRefGrant     = &gatewayv1.ReferenceGrant{}
 )
 
 var (

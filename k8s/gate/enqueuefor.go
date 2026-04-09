@@ -480,6 +480,78 @@ func enqueueTLSRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient cl
 	}
 }
 
+// enqueueHTTPRouteForReferenceGrant returns a handler.EventHandler that enqueues all HTTPRoutes
+// that have a cross-namespace backendRef pointing to the changed ReferenceGrant's namespace.
+// A ReferenceGrant lives in the *target* namespace (the namespace of the referenced resource),
+// so only routes whose backendRef.Namespace matches the grant's namespace are affected.
+func enqueueHTTPRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctx context.Context, o client.Object) []reconcile.Request {
+		routeList := &gatewayv1.HTTPRouteList{}
+		if err := ctrlclient.List(ctx, routeList); err != nil {
+			return nil
+		}
+		var requests []reconcile.Request
+		for _, route := range routeList.Items {
+			if httpRouteHasCrossNamespaceRefTo(route, o.GetNamespace()) {
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: route.Namespace,
+					Name:      route.Name,
+				}})
+			}
+		}
+		return requests
+	}
+}
+
+// httpRouteHasCrossNamespaceRefTo reports whether any backendRef in the route targets
+// a resource in targetNamespace from a different namespace.
+func httpRouteHasCrossNamespaceRefTo(route gatewayv1.HTTPRoute, targetNamespace string) bool {
+	for _, rule := range route.Spec.Rules {
+		for _, backendRef := range rule.BackendRefs {
+			if backendRef.Namespace != nil && string(*backendRef.Namespace) == targetNamespace &&
+				targetNamespace != route.Namespace {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// enqueueTLSRouteForReferenceGrant returns a handler.EventHandler that enqueues all TLSRoutes
+// that have a cross-namespace backendRef pointing to the changed ReferenceGrant's namespace.
+func enqueueTLSRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctx context.Context, o client.Object) []reconcile.Request {
+		routeList := &gatewayv1alpha2.TLSRouteList{}
+		if err := ctrlclient.List(ctx, routeList); err != nil {
+			return nil
+		}
+		var requests []reconcile.Request
+		for _, route := range routeList.Items {
+			if tlsRouteHasCrossNamespaceRefTo(route, o.GetNamespace()) {
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: route.Namespace,
+					Name:      route.Name,
+				}})
+			}
+		}
+		return requests
+	}
+}
+
+// tlsRouteHasCrossNamespaceRefTo reports whether any backendRef in the route targets
+// a resource in targetNamespace from a different namespace.
+func tlsRouteHasCrossNamespaceRefTo(route gatewayv1alpha2.TLSRoute, targetNamespace string) bool {
+	for _, rule := range route.Spec.Rules {
+		for _, backendRef := range rule.BackendRefs {
+			if backendRef.Namespace != nil && string(*backendRef.Namespace) == targetNamespace &&
+				targetNamespace != route.Namespace {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // enqueueHugConfForDefaultsCR returns a handler.EventHandler that enqueues all HugConf
 // objects whose DefaultsRef points to the observed Defaults CR.
 func enqueueHugConfForDefaultsCR(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
