@@ -138,7 +138,7 @@ func findPreviousJob() (int, int, error) {
 		}
 
 		for _, j := range jobs {
-			if j.Name == "conformance-GW-API-1_3_0" {
+			if j.Name == "conformance-GW-API-1_5_0" {
 				return j.ID, p.ID, nil
 			}
 		}
@@ -214,7 +214,7 @@ func postToSlack(message string) error {
 func main() {
 	junitFile := os.Getenv("JUNIT_FILE")
 	if junitFile == "" {
-		junitFile = "conformance-junit-1.3.0.xml"
+		junitFile = "conformance-junit-1.5.0.xml"
 	}
 
 	todayData, err := os.ReadFile(junitFile)

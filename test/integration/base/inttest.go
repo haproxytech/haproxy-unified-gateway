@@ -110,7 +110,7 @@ func NewIntTest(t *testing.T, crdRelativePath string, levelsUp int) (test IntTes
 	// Defaults to v1.3.0.
 	gwapiVersion := os.Getenv("GWAPI_VERSION")
 	if gwapiVersion == "" {
-		gwapiVersion = "1.3.0"
+		gwapiVersion = "1.5.0"
 	}
 	gatewayCRDsPath, errTmp := os.MkdirTemp("", "gwapi-crds-*")
 	g.Expect(errTmp).ToNot(gomega.HaveOccurred())

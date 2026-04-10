@@ -3,14 +3,13 @@ version: "3"
 
 vars:
   # Images required by the Gateway API conformance test suite
-  CONFORMANCE_ECHO_IMAGE: "gcr.io/k8s-staging-gateway-api/echo-basic:v20240412-v1.0.0-394-g40c666fd"
+  CONFORMANCE_ECHO_IMAGE: "gcr.io/k8s-staging-gateway-api/echo-basic:v20260204-monthly-2026.01-60-g28382302"
   CONFORMANCE_COREDNS_IMAGE: "registry.k8s.io/coredns/coredns:v1.12.2"
 
 tasks:
-
-### -----------------
-### Tasks for CI
-### -----------------
+  ### -----------------
+  ### Tasks for CI
+  ### -----------------
   conformance-pull-images:
     desc: "pre-pull images required by conformance tests"
     cmds:
@@ -69,7 +68,6 @@ tasks:
       - /{{.kubectl}} apply -f test/conformance/manifests/gatewayclass.yaml
       - echo "HUG deployed. Ready for conformance tests."
 
-
   conformance-setup-routing-ci:
     internal: true
     desc: "Dynamically redirect NodeIP traffic to the reachable Docker host port"
@@ -117,11 +115,9 @@ tasks:
         SVC=$(/{{.kubectl}} get svc haproxy-unified-gateway-ci -n haproxy-unified-gateway -o jsonpath='{.spec.ports[0].nodePort}')
         echo "SVC: ${SVC}"
 
-
-
-### -----------------
-### Tasks common for CI and local tests
-### -----------------
+  ### -----------------
+  ### Tasks common for CI and local tests
+  ### -----------------
 
   ## To run a specific test: set env variable
   ##    CONFORMANCE_RUN_TEST
@@ -159,8 +155,8 @@ tasks:
       - echo "JUnit report written to {{.CONFORMANCE_JUNIT_OUTPUT}}"
       - task: conformance-report
         vars:
-          CONFORMANCE_JUNIT_OUTPUT: '{{.CONFORMANCE_JUNIT_OUTPUT}}'
-          CONFORMANCE_JUNIT_HTML_OUTPUT: '{{.CONFORMANCE_JUNIT_HTML_OUTPUT}}'
+          CONFORMANCE_JUNIT_OUTPUT: "{{.CONFORMANCE_JUNIT_OUTPUT}}"
+          CONFORMANCE_JUNIT_HTML_OUTPUT: "{{.CONFORMANCE_JUNIT_HTML_OUTPUT}}"
 
   conformance-report:
     desc: "print passed/skipped/failed summary from a JUnit XML report"

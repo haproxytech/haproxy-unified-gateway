@@ -126,7 +126,9 @@ func main() {
 }
 
 func generate(path, tmplStr string, versions []version) {
-	tmpl, err := template.New(path).Parse(tmplStr)
+	tmpl, err := template.New(path).Funcs(template.FuncMap{
+		"last": func(vs []version) version { return vs[len(vs)-1] },
+	}).Parse(tmplStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "template parse error for %s: %v\n", path, err)
 		os.Exit(1)
@@ -333,7 +335,7 @@ spec:
         # imagePullPolicy: this is set to never for kind cluster usage
         # imagePullPolicy: Always
         imagePullPolicy: Never
-        command: ["/usr/local/sbin/hug","--job-gwapi={{(index . 0).Short}}"]
+        command: ["/usr/local/sbin/hug","--job-gwapi={{(last .).Short}}"]
       restartPolicy: Never
   backoffLimit: 0
 `

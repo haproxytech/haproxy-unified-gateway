@@ -14,6 +14,6 @@ spec:
         # imagePullPolicy: this is set to never for kind cluster usage
         # imagePullPolicy: Always
         imagePullPolicy: Never
-        command: ["/usr/local/sbin/hug","--job-gwapi=1.3.0"]
+        command: ["/usr/local/sbin/hug","--job-gwapi=1.5.0"]
       restartPolicy: Never
   backoffLimit: 0

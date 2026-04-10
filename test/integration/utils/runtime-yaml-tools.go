@@ -59,15 +59,16 @@ func CreateRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 		return err
 	}
 	gwAPIVersion := os.Getenv("GWAPI_VERSION")
-	if gwAPIVersion == "" {
-		gwAPIVersion = "1.3.0"
-	}
-	gwAPIVersion = "v" + gwAPIVersion
-	filesSpecific, err := os.ReadDir(path.Join(params.Dir, "gwapi_specific", gwAPIVersion))
-	if err != nil {
-		_, pathError := errors.AsType[*fs.PathError](err)
-		if !pathError {
-			return err
+	var filesSpecific []os.DirEntry
+	if gwAPIVersion != "" {
+		gwAPIVersion = "v" + gwAPIVersion
+		var errSpec error
+		filesSpecific, errSpec = os.ReadDir(path.Join(params.Dir, "gwapi_specific", gwAPIVersion))
+		if errSpec != nil {
+			_, pathError := errors.AsType[*fs.PathError](errSpec)
+			if !pathError {
+				return errSpec
+			}
 		}
 	}
 	fileList := map[string]string{}
@@ -213,15 +214,16 @@ func DeleteRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 		return err
 	}
 	gwAPIVersion := os.Getenv("GWAPI_VERSION")
-	if gwAPIVersion == "" {
-		gwAPIVersion = "1.3.0"
-	}
-	gwAPIVersion = "v" + gwAPIVersion
-	filesSpecific, err := os.ReadDir(path.Join(params.Dir, "gwapi_specific", gwAPIVersion))
-	if err != nil {
-		_, pathError := errors.AsType[*fs.PathError](err)
-		if !pathError {
-			return err
+	var filesSpecific []os.DirEntry
+	if gwAPIVersion != "" {
+		gwAPIVersion = "v" + gwAPIVersion
+		var errSpec error
+		filesSpecific, errSpec = os.ReadDir(path.Join(params.Dir, "gwapi_specific", gwAPIVersion))
+		if errSpec != nil {
+			_, pathError := errors.AsType[*fs.PathError](errSpec)
+			if !pathError {
+				return errSpec
+			}
 		}
 	}
 	fileList := map[string]string{}

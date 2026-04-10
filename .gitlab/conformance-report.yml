@@ -1,7 +1,7 @@
 conformance-report:
   stage: conformance-report
   needs:
-    - job: conformance-GW-API-1_3_0
+    - job: conformance-GW-API-1_5_0
       artifacts: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == 'nightly'
@@ -12,6 +12,6 @@ conformance-report:
   tags:
     - go
   variables:
-    JUNIT_FILE: "conformance-junit-1.3.0.xml"
+    JUNIT_FILE: "conformance-junit-1.5.0.xml"
   script:
     - go run .gitlab/scripts/conformance-diff.go

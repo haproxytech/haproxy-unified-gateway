@@ -1,93 +1,93 @@
-conformance-MR-GW-API-1_3_0:
-  allow_failure: false
-  stage: conformance
-  retry: 0
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    - if: $CI_PIPELINE_SOURCE == 'push'
-  image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
-  services:
-    - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
-      alias: docker
-  tags:
-    - go
-  variables:
-    GWAPI_VERSION: "1.3.0"
-    CLUSTER_NAME: "conformance-mr-1-3-0"
-    CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.3.0.yaml"
-    CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.3.0.xml"
-    CONFORMANCE_JUNIT_HTML_OUTPUT: "conformance-junit-1.3.0.html"
-    CONFORMANCE_RUN_TEST: ""
-    CONFORMANCE_SKIP_TESTS: "HTTPRouteHeaderMatching,HTTPRouteInvalidBackendRefUnknownKind,HTTPRouteInvalidCrossNamespaceBackendRef,HTTPRouteInvalidCrossNamespaceParentRef,HTTPRouteInvalidNonExistentBackendRef,HTTPRouteListenerHostnameMatching,HTTPRouteMatching,HTTPRouteMatchingAcrossRoutes,HTTPRouteObservedGenerationBump,HTTPRoutePathMatchOrder,HTTPRouteRedirectHostAndStatus,HTTPRouteRequestHeaderModifier,HTTPRouteServiceTypes,HTTPRouteSimpleSameNamespace,HTTPRouteWeight,GatewaySecretInvalidReferenceGrant,GatewaySecretMissingReferenceGrant,GatewaySecretReferenceGrantAllInNamespace,GatewaySecretReferenceGrantSpecific,HTTPRouteInvalidReferenceGrant,HTTPRoutePartiallyInvalidViaInvalidReferenceGrant,HTTPRouteReferenceGrant"
-  before_script:
-    - export PATH=$PATH:/root/go/bin
-    - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
-    - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
-    - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
-    - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
-    - docker image tag $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine golang:$GO_VERSION-alpine
-    - sed -i "s~FROM golang~FROM $HAPROXY_REGISTRY_GO/golang~g" "build/Dockerfile"
-    - sed -i "s~FROM haproxytech/haproxy-alpine~FROM $HAPROXY_REGISTRY_GO/haproxy-alpine~g" "build/Dockerfile"
-    - docker build -t haproxytech/haproxy-unified-gateway -f build/Dockerfile .
-  script:
-    - task conformance-create-ci
-    - task conformance-run
-  after_script:
-    - task kind-delete
-  artifacts:
-    when: always
-    paths:
-      - conformance-report-1.3.0.yaml
-      - conformance-junit-1.3.0.xml
-      - conformance-junit-1.3.0.html
-    reports:
-      junit: conformance-junit-1.3.0.xml
+# conformance-MR-GW-API-1_3_0:
+#   allow_failure: false
+#   stage: conformance
+#   retry: 0
+#   needs: []
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+#     - if: $CI_PIPELINE_SOURCE == 'push'
+#   image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
+#   services:
+#     - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
+#       alias: docker
+#   tags:
+#     - go
+#   variables:
+#     GWAPI_VERSION: "1.3.0"
+#     CLUSTER_NAME: "conformance-mr-1-3-0"
+#     CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.3.0.yaml"
+#     CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.3.0.xml"
+#     CONFORMANCE_JUNIT_HTML_OUTPUT: "conformance-junit-1.3.0.html"
+#     CONFORMANCE_RUN_TEST: ""
+#     CONFORMANCE_SKIP_TESTS: "HTTPRouteHeaderMatching,HTTPRouteInvalidBackendRefUnknownKind,HTTPRouteInvalidCrossNamespaceBackendRef,HTTPRouteInvalidCrossNamespaceParentRef,HTTPRouteInvalidNonExistentBackendRef,HTTPRouteListenerHostnameMatching,HTTPRouteMatching,HTTPRouteMatchingAcrossRoutes,HTTPRouteObservedGenerationBump,HTTPRoutePathMatchOrder,HTTPRouteRedirectHostAndStatus,HTTPRouteRequestHeaderModifier,HTTPRouteServiceTypes,HTTPRouteSimpleSameNamespace,HTTPRouteWeight,GatewaySecretInvalidReferenceGrant,GatewaySecretMissingReferenceGrant,GatewaySecretReferenceGrantAllInNamespace,GatewaySecretReferenceGrantSpecific,HTTPRouteInvalidReferenceGrant,HTTPRoutePartiallyInvalidViaInvalidReferenceGrant,HTTPRouteReferenceGrant"
+#   before_script:
+#     - export PATH=$PATH:/root/go/bin
+#     - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
+#     - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
+#     - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
+#     - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
+#     - docker image tag $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine golang:$GO_VERSION-alpine
+#     - sed -i "s~FROM golang~FROM $HAPROXY_REGISTRY_GO/golang~g" "build/Dockerfile"
+#     - sed -i "s~FROM haproxytech/haproxy-alpine~FROM $HAPROXY_REGISTRY_GO/haproxy-alpine~g" "build/Dockerfile"
+#     - docker build -t haproxytech/haproxy-unified-gateway -f build/Dockerfile .
+#   script:
+#     - task conformance-create-ci
+#     - task conformance-run
+#   after_script:
+#     - task kind-delete
+#   artifacts:
+#     when: always
+#     paths:
+#       - conformance-report-1.3.0.yaml
+#       - conformance-junit-1.3.0.xml
+#       - conformance-junit-1.3.0.html
+#     reports:
+#       junit: conformance-junit-1.3.0.xml
 
-conformance-GW-API-1_3_0:
-  allow_failure: true
-  stage: conformance-tests
-  retry: 0
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == 'nightly'
-    - if: "$CI_PROJECT_NAMESPACE != 'haproxy-controller/community' && $CI_PIPELINE_SOURCE == 'push'"
-    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
-  services:
-    - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
-      alias: docker
-  tags:
-    - go
-  variables:
-    GWAPI_VERSION: "1.3.0"
-    CLUSTER_NAME: "conformance-1-3-0"
-    CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.3.0.yaml"
-    CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.3.0.xml"
-    CONFORMANCE_JUNIT_HTML_OUTPUT: "conformance-junit-1.3.0.html"
-  before_script:
-    - export PATH=$PATH:/root/go/bin
-    - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
-    - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
-    - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
-    - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
-    - docker image tag $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine golang:$GO_VERSION-alpine
-    - sed -i "s~FROM golang~FROM $HAPROXY_REGISTRY_GO/golang~g" "build/Dockerfile"
-    - sed -i "s~FROM haproxytech/haproxy-alpine~FROM $HAPROXY_REGISTRY_GO/haproxy-alpine~g" "build/Dockerfile"
-    - docker build -t haproxytech/haproxy-unified-gateway -f build/Dockerfile .
-  script:
-    - task conformance-create-ci
-    - task conformance-run
-  after_script:
-    - task kind-delete
-  artifacts:
-    when: always
-    paths:
-      - conformance-report-1.3.0.yaml
-      - conformance-junit-1.3.0.xml
-      - conformance-junit-1.3.0.html
-    reports:
-      junit: conformance-junit-1.3.0.xml
+# conformance-GW-API-1_3_0:
+#   allow_failure: true
+#   stage: conformance-tests
+#   retry: 0
+#   needs: []
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == 'nightly'
+#     - if: "$CI_PROJECT_NAMESPACE != 'haproxy-controller/community' && $CI_PIPELINE_SOURCE == 'push'"
+#     - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+#   image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
+#   services:
+#     - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
+#       alias: docker
+#   tags:
+#     - go
+#   variables:
+#     GWAPI_VERSION: "1.3.0"
+#     CLUSTER_NAME: "conformance-1-3-0"
+#     CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.3.0.yaml"
+#     CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.3.0.xml"
+#     CONFORMANCE_JUNIT_HTML_OUTPUT: "conformance-junit-1.3.0.html"
+#   before_script:
+#     - export PATH=$PATH:/root/go/bin
+#     - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
+#     - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
+#     - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
+#     - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
+#     - docker image tag $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine golang:$GO_VERSION-alpine
+#     - sed -i "s~FROM golang~FROM $HAPROXY_REGISTRY_GO/golang~g" "build/Dockerfile"
+#     - sed -i "s~FROM haproxytech/haproxy-alpine~FROM $HAPROXY_REGISTRY_GO/haproxy-alpine~g" "build/Dockerfile"
+#     - docker build -t haproxytech/haproxy-unified-gateway -f build/Dockerfile .
+#   script:
+#     - task conformance-create-ci
+#     - task conformance-run
+#   after_script:
+#     - task kind-delete
+#   artifacts:
+#     when: always
+#     paths:
+#       - conformance-report-1.3.0.yaml
+#       - conformance-junit-1.3.0.xml
+#       - conformance-junit-1.3.0.html
+#     reports:
+#       junit: conformance-junit-1.3.0.xml
 
 # conformance-GW-API-1_4_0:
 #   allow_failure: true
@@ -131,44 +131,93 @@ conformance-GW-API-1_3_0:
 #     reports:
 #       junit: conformance-junit-1.4.0.xml
 
-# conformance-GW-API-1_5_0:
-#   allow_failure: true
-#   stage: conformance-tests
-#   retry: 1
-#   needs: []
-#   rules:
-#     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-#     - if: "$CI_PROJECT_NAMESPACE != 'haproxy-controller/community' && $CI_PIPELINE_SOURCE == 'push'"
-#   image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
-#   services:
-#     - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
-#       alias: docker
-#   tags:
-#     - go
-#   variables:
-#     GWAPI_VERSION: "1.5.0"
-#     CLUSTER_NAME: "conformance-1-5-0"
-#     CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.5.0.yaml"
-#     CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.5.0.xml"
-#   before_script:
-#     - export PATH=$PATH:/root/go/bin
-#     - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
-#     - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
-#     - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
-#     - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
-#     - docker image tag $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine golang:$GO_VERSION-alpine
-#     - sed -i "s~FROM golang~FROM $HAPROXY_REGISTRY_GO/golang~g" "build/Dockerfile"
-#     - sed -i "s~FROM haproxytech/haproxy-alpine~FROM $HAPROXY_REGISTRY_GO/haproxy-alpine~g" "build/Dockerfile"
-#     - docker build -t haproxytech/haproxy-unified-gateway -f build/Dockerfile .
-#   script:
-#     - task conformance-create-ci
-#     - task conformance-run
-#   after_script:
-#     - task kind-delete
-#   artifacts:
-#     when: always
-#     paths:
-#       - conformance-report-1.5.0.yaml
-#       - conformance-junit-1.5.0.xml
-#     reports:
-#       junit: conformance-junit-1.5.0.xml
+conformance-GW-API-1_5_0:
+  allow_failure: true
+  stage: conformance-tests
+  retry: 0
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == 'nightly'
+    - if: "$CI_PROJECT_NAMESPACE != 'haproxy-controller/community' && $CI_PIPELINE_SOURCE == 'push'"
+    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
+  services:
+    - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
+      alias: docker
+  tags:
+    - go
+  variables:
+    GWAPI_VERSION: "1.5.0"
+    CLUSTER_NAME: "conformance-1-5-0"
+    CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.5.0.yaml"
+    CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.5.0.xml"
+    CONFORMANCE_JUNIT_HTML_OUTPUT: "conformance-junit-1.5.0.html"
+  before_script:
+    - export PATH=$PATH:/root/go/bin
+    - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
+    - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
+    - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
+    - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
+    - docker image tag $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine golang:$GO_VERSION-alpine
+    - sed -i "s~FROM golang~FROM $HAPROXY_REGISTRY_GO/golang~g" "build/Dockerfile"
+    - sed -i "s~FROM haproxytech/haproxy-alpine~FROM $HAPROXY_REGISTRY_GO/haproxy-alpine~g" "build/Dockerfile"
+    - docker build -t haproxytech/haproxy-unified-gateway -f build/Dockerfile .
+  script:
+    - task conformance-create-ci
+    - task conformance-run
+  after_script:
+    - task kind-delete
+  artifacts:
+    when: always
+    paths:
+      - conformance-report-1.5.0.yaml
+      - conformance-junit-1.5.0.xml
+      - conformance-junit-1.5.0.html
+    reports:
+      junit: conformance-junit-1.5.0.xml
+
+conformance-MR-GW-API-1_5_0:
+  allow_failure: false
+  stage: conformance
+  retry: 0
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'push'
+  image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
+  services:
+    - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
+      alias: docker
+  tags:
+    - go
+  variables:
+    GWAPI_VERSION: "1.5.0"
+    CLUSTER_NAME: "conformance-mr-1-5-0"
+    CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-1.5.0.yaml"
+    CONFORMANCE_JUNIT_OUTPUT: "conformance-junit-1.5.0.xml"
+    CONFORMANCE_JUNIT_HTML_OUTPUT: "conformance-junit-1.5.0.html"
+    CONFORMANCE_RUN_TEST: ""
+    CONFORMANCE_SKIP_TESTS: "HTTPRouteHeaderMatching,HTTPRouteInvalidBackendRefUnknownKind,HTTPRouteInvalidCrossNamespaceBackendRef,HTTPRouteInvalidCrossNamespaceParentRef,HTTPRouteInvalidNonExistentBackendRef,HTTPRouteListenerHostnameMatching,HTTPRouteMatching,HTTPRouteMatchingAcrossRoutes,HTTPRouteObservedGenerationBump,HTTPRoutePathMatchOrder,HTTPRouteRedirectHostAndStatus,HTTPRouteRequestHeaderModifier,HTTPRouteServiceTypes,HTTPRouteSimpleSameNamespace,HTTPRouteWeight,GatewaySecretInvalidReferenceGrant,GatewaySecretMissingReferenceGrant,GatewaySecretReferenceGrantAllInNamespace,GatewaySecretReferenceGrantSpecific,HTTPRouteInvalidReferenceGrant,HTTPRoutePartiallyInvalidViaInvalidReferenceGrant,HTTPRouteReferenceGrant"
+  before_script:
+    - export PATH=$PATH:/root/go/bin
+    - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
+    - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
+    - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
+    - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
+    - docker image tag $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine golang:$GO_VERSION-alpine
+    - sed -i "s~FROM golang~FROM $HAPROXY_REGISTRY_GO/golang~g" "build/Dockerfile"
+    - sed -i "s~FROM haproxytech/haproxy-alpine~FROM $HAPROXY_REGISTRY_GO/haproxy-alpine~g" "build/Dockerfile"
+    - docker build -t haproxytech/haproxy-unified-gateway -f build/Dockerfile .
+  script:
+    - task conformance-create-ci
+    - task conformance-run
+  after_script:
+    - task kind-delete
+  artifacts:
+    when: always
+    paths:
+      - conformance-report-1.5.0.yaml
+      - conformance-junit-1.5.0.xml
+      - conformance-junit-1.5.0.html
+    reports:
+      junit: conformance-junit-1.5.0.xml
