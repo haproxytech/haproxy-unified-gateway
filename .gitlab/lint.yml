@@ -125,6 +125,8 @@ check-committer:
         esac
       done
       CO_AUTHORED=""
+      ASSISTED=""
+      SIGNED_OFF=""
       for COMMIT in $(git log --format='%H' origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}..HEAD); do
         BODY=$(git log -1 --format='%b' "$COMMIT")
         MSG=$(git log -1 --format='%s' "$COMMIT")
@@ -133,6 +135,18 @@ check-committer:
           SHORT=$(echo "$COMMIT" | cut -c1-8)
           CO_AUTHORED="${CO_AUTHORED}${SHORT} ${MSG}\n$(echo "$MATCHED" | sed 's/^/  /')\n"
           junit-report add --status=failed --file="co-authored-by" --message="$MSG" --description="$(printf "commit contains Co-authored-by trailer\n\n%s\n%s" "$MSG" "$MATCHED")"
+        fi
+        MATCHED=$(echo "$BODY" | grep -i 'Assisted-by' || true)
+        if [ -n "$MATCHED" ]; then
+          SHORT=$(echo "$COMMIT" | cut -c1-8)
+          ASSISTED="${ASSISTED}${SHORT} ${MSG}\n$(echo "$MATCHED" | sed 's/^/  /')\n"
+          junit-report add --status=failed --file="assisted-by" --message="$MSG" --description="$(printf "commit contains Assisted-by trailer\n\n%s\n%s" "$MSG" "$MATCHED")"
+        fi
+        MATCHED=$(echo "$BODY" | grep -i 'Signed-off-by' || true)
+        if [ -n "$MATCHED" ]; then
+          SHORT=$(echo "$COMMIT" | cut -c1-8)
+          SIGNED_OFF="${SIGNED_OFF}${SHORT} ${MSG}\n$(echo "$MATCHED" | sed 's/^/  /')\n"
+          junit-report add --status=failed --file="signed-off-by" --message="$MSG" --description="$(printf "commit contains Signed-off-by trailer\n\n%s\n%s" "$MSG" "$MATCHED")"
         fi
       done
       FAILED=""
@@ -151,6 +165,22 @@ check-committer:
       else
         echo "No commits contain Co-authored-by."
         junit-report add --status=ok --file=co-authored-by --description="no co-authored-by found" --message="No commits contain Co-authored-by."
+      fi
+      if [ -n "$ASSISTED" ]; then
+        echo "The following commits contain Assisted-by:"
+        printf "$ASSISTED"
+        FAILED=1
+      else
+        echo "No commits contain Assisted-by."
+        junit-report add --status=ok --file=assisted-by --description="no assisted-by found" --message="No commits contain Assisted-by."
+      fi
+      if [ -n "$SIGNED_OFF" ]; then
+        echo "The following commits contain Signed-off-by:"
+        printf "$SIGNED_OFF"
+        FAILED=1
+      else
+        echo "No commits contain Signed-off-by."
+        junit-report add --status=ok --file=signed-off-by --description="no signed-off-by found" --message="No commits contain Signed-off-by."
       fi
       if [ -n "$FAILED" ]; then
         exit 1
