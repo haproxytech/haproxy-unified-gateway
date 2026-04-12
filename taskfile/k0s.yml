@@ -12,8 +12,6 @@ tasks:
     desc: "create a k0s cluster with controller"
     status:
       - task check-if-ci-env # check if we are in CI_ENV, if we are, skip this task
-    vars:
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
     dir: "ci/k0s" # this file is imported so its fine
     cmds:
       # - docker-compose down --volumes --remove-orphans || true
@@ -31,8 +29,6 @@ tasks:
     desc: "create a k0s cluster with controller"
     status:
       - task check-if-ci-env # check if we are in CI_ENV, if we are, skip this task
-    vars:
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
     dir: "ci/k0s" # this file is imported so its fine
     cmds:
       - echo -n "Waiting for k0s to be ready "
@@ -135,7 +131,6 @@ tasks:
       # can be set to 'k0s-build-controller-image-build-in-docker' if you want to build in the docker image
       CONTROLLER_BUILD_TASK: "k0s-build-controller-image-dev"
       kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
     deps:
       - task: check-go-tool
         vars:
@@ -149,8 +144,8 @@ tasks:
       - docker save haproxytech/haproxy-unified-gateway:latest -o hug.tar
       - task: k0s-echo-create-tar
       # - task: delimiter
-      # - cmd: /{{.kind}} load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
-      # - cmd: /{{.kind}} load docker-image haproxytech/http-echo:latest --name={{.CLUSTER_NAME}}
+      # - cmd: $(check-go-tool {{.KIND}}) load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
+      # - cmd: $(check-go-tool {{.KIND}}) load docker-image haproxytech/http-echo:latest --name={{.CLUSTER_NAME}}
       - task: delimiter
       - task: k0s-create-cluster-wait-ready
       - docker cp hug.tar k0s-hug-controller:/tmp/
@@ -179,7 +174,7 @@ tasks:
       - echo "deploying a complete example in `example` namespace ..."
       - /{{.kubectl}} create ns example
       - /{{.kubectl}} apply -n example -f {{.DEV_INIT_DIR}}/echo.yaml
-      - /{{.kind}} load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
+      - $(check-go-tool {{.KIND}}) load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
       - task: delimiter
       - echo "deploying GatewayClass, Gateway, Secret, 2 HTTPRoutes"
       - /{{.kubectl}} apply -n example -f {{.DEV_INIT_DIR}}/offload-secret.yaml
@@ -200,11 +195,10 @@ tasks:
     silent: true
     vars:
       kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
     cmds:
       - task: k0s-build-controller-image-dev
       - task: delimiter
-      - cmd: /{{.kind}} load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
+      - cmd: $(check-go-tool {{.KIND}}) load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
       - task: delimiter
       - echo "deploying Controller ..."
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/rbac.yaml

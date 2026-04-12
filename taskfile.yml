@@ -1,16 +1,38 @@
 #https://taskfile.dev/
 version: "3"
 
+env:
+  KUBECTL_VERSION: v1.35.0
+  K8S_VERSION: v1.35.0
+  GWAPI_VERSIONS: v1.3.0, v1.4.0, v1.5.0
+  GWAPI_EXP_VERSIONS:
+  ENVTEST_VERSION: v1.35.0 # https://raw.githubusercontent.com/kubernetes-sigs/controller-tools/master/envtest-releases.yaml
+  CLUSTER_NAME: '{{ default "dev-controller" .CLUSTER_NAME}}'
+  DOCKER_FILE: '{{ default "-build/Dockerfile" .DOCKER_FILE}}'
+  TMP: tmp
+
+vars:
+  CONFIG_DIR: "example/deploy"
+  DEV_INIT_DIR: "example/dev-init"
+  API_DEFINITION_DIR: "api/definition"
+  # tools
+  YQ: github.com/mikefarah/yq/v4@v4.47.1
+  KIND: sigs.k8s.io/kind@v0.31.0
+  CLOUD_PROVIDER_KIND: sigs.k8s.io/cloud-provider-kind@v0.10.0
+  CONTROLLER_GEN: sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1
+  CHECK_COMMIT: github.com/haproxytech/check-commit/v5@v5.5.3
+  BETTERALIGN: github.com/dkorunic/betteralign/cmd/betteralign@v0.9.0
+  STATICCHECK: honnef.co/go/tools/cmd/staticcheck@v0.7.0
+  GO_LICENSES: github.com/google/go-licenses@v1.6.0
+  GOVULNCHECK: golang.org/x/vuln/cmd/govulncheck@v1.1.4
+  GOFUMPT: mvdan.cc/gofumpt@v0.9.2
+  REVIVE: github.com/mgechev/revive@v1.15.0
+  GOTESTSUM: gotest.tools/gotestsum@v1.13.0
+
 dotenv:
   - .env
 
 includes:
-  vars:
-    taskfile: taskfile/.vars.yml
-    flatten: true
-  tools:
-    taskfile: taskfile/.tools.yml
-    flatten: true
   k0s:
     taskfile: taskfile/k0s.yml
     flatten: true
@@ -35,8 +57,6 @@ includes:
   conformance:
     taskfile: taskfile/conformance.yml
     flatten: true
-
-vars:
 
 tasks:
   ci:
@@ -73,7 +93,7 @@ tasks:
         POD_NAMESPACE={{.POD_NAMESPACE}} \
         HAPROXY_BIN={{.HAPROXY_BIN}} \
         POD_IP=$POD_IP POD_NAME=$POD_NAME POD_NAMESPACE=$POD_NAMESPACE ENVTEST_VERSION=$ENVTEST_VERSION KUBEBUILDER_ASSETS=$KUBEBUILDER_ASSETS HAPROXY_BIN=$HAPROXY_BIN \
-        /{{.TMP}}/gotestsum/{{.GOTESTSUM_VERSION}}/gotestsum \
+        $(check-go-tool {{.GOTESTSUM}}) \
           --format-icons=hivis \
           --format={{.FORMAT}} \
           --format-hide-empty-pkg \
@@ -93,9 +113,9 @@ tasks:
         vars:
           TOOLS: [BETTERALIGN, REVIVE, STATICCHECK]
     cmds:
-      - /{{.TMP}}/revive/{{.REVIVE_VERSION}}/revive -config revive.toml -formatter friendly -set_exit_status ./...
-      - /{{.TMP}}/staticcheck/{{.STATICCHECK_VERSION}}/staticcheck ./...
-      - /{{.TMP}}/betteralign/{{.BETTERALIGN_VERSION}}/betteralign ./...
+      - "$(check-go-tool {{.REVIVE}}) -config revive.toml -formatter friendly -set_exit_status ./..."
+      - "$(check-go-tool {{.STATICCHECK}}) ./..."
+      - "$(check-go-tool {{.BETTERALIGN}}) ./..."
 
   format:
     desc: "formats the code"
@@ -105,8 +125,8 @@ tasks:
           TOOLS: [BETTERALIGN, GOFUMPT]
     cmds:
       - go fix ./...
-      - /{{.TMP}}/betteralign/{{.BETTERALIGN_VERSION}}/betteralign -apply ./... || true
-      - /{{.TMP}}/gofumpt/{{.GOFUMPT_VERSION}}/gofumpt -l -w .
+      - "$(check-go-tool {{.BETTERALIGN}}) -apply ./... || true"
+      - "$(check-go-tool {{.GOFUMPT}}) -l -w ."
       - go run cmd/crd-version-check/main.go
 
   licenses:
@@ -120,8 +140,9 @@ tasks:
       - |
         PROJECT="$(go list -m)"
         ALLOWED_LICENSES="$(<../../.allowed_license_types)"
-        /{{.TMP}}/go-licenses/{{.GO_LICENSES_VERSION}}/go-licenses report --ignore "$PROJECT" --ignore "github.com/modern-go/reflect2" --ignore "golang.org/x/sys" --ignore "golang.org/x/sys/unix"  .
-        /{{.TMP}}/go-licenses/{{.GO_LICENSES_VERSION}}/go-licenses check --allowed_licenses="$ALLOWED_LICENSES" --ignore "$PROJECT"  --ignore "github.com/modern-go/reflect2" --ignore "github.com/modern-go/reflect2" --ignore "golang.org/x/sys/unix"  .
+        BIN="$(check-go-tool {{.GO_LICENSES}})"
+        $BIN report --ignore "$PROJECT" --ignore "github.com/modern-go/reflect2" --ignore "golang.org/x/sys" --ignore "golang.org/x/sys/unix"  .
+        $BIN check --allowed_licenses="$ALLOWED_LICENSES" --ignore "$PROJECT"  --ignore "github.com/modern-go/reflect2" --ignore "github.com/modern-go/reflect2" --ignore "golang.org/x/sys/unix"  .
 
   check-commit:
     deps:
@@ -129,7 +150,7 @@ tasks:
         vars:
           TOOL: CHECK_COMMIT
     cmds:
-      - /{{.TMP}}/check-commit/{{.CHECK_COMMIT_VERSION}}/check-commit
+      - "$(check-go-tool {{.CHECK_COMMIT}})"
 
   govulncheck:
     deps:
@@ -137,7 +158,7 @@ tasks:
         vars:
           TOOL: GOVULNCHECK
     cmds:
-      - /{{.TMP}}/govulncheck/{{.GOVULNCHECK_VERSION}}/govulncheck -show verbose ./...
+      - "$(check-go-tool {{.GOVULNCHECK}}) -show verbose ./..."
 
   legal:
     desc: "check legal"

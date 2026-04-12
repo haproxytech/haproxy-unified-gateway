@@ -30,13 +30,12 @@ tasks:
     status:
       - task check-if-ci-env # check if we are in CI_ENV, if we are, skip this task
     vars:
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
       KIND_CONFIG: '{{.KIND_CONFIG | default "kind-config.yaml"}}'
     dir: "ci/kind" # this file is imported so its fine
     cmds:
-      - /{{.kind}} delete cluster --name {{.CLUSTER_NAME}}
+      - $(check-go-tool {{.KIND}}) delete cluster --name {{.CLUSTER_NAME}}
       - echo "Creating kind cluster {{.CLUSTER_NAME}} with config {{.KIND_CONFIG}} ..."
-      - /{{.kind}} create cluster --name {{.CLUSTER_NAME}} --config {{.KIND_CONFIG}} --image kindest/node:{{.K8S_VERSION}}
+      - $(check-go-tool {{.KIND}}) create cluster --name {{.CLUSTER_NAME}} --config {{.KIND_CONFIG}} --image kindest/node:{{.K8S_VERSION}}
 
   kind-controller-build:
     desc: ""
@@ -85,11 +84,10 @@ tasks:
         vars:
           TOOL: CLOUD_PROVIDER_KIND
     vars:
-      cpk: "{{.TMP}}/cloud-provider-kind/{{.CLOUD_PROVIDER_KIND_VERSION}}/cloud-provider-kind --gateway-channel=disabled"
       pidfile: "/tmp/cloud-provider-kind-{{.CLUSTER_NAME}}.pid"
       logfile: "/tmp/cloud-provider-kind-{{.CLUSTER_NAME}}.log"
     cmds:
-      - nohup /{{.cpk}} > {{.logfile}} 2>&1 & echo $! > {{.pidfile}}
+      - nohup $(check-go-tool {{.CLOUD_PROVIDER_KIND}}) --gateway-channel=disabled > {{.logfile}} 2>&1 & echo $! > {{.pidfile}}
       - echo "cloud-provider-kind started (pid=$(cat {{.pidfile}}), log={{.logfile}})"
 
   kind-cloud-provider-stop:
@@ -109,11 +107,9 @@ tasks:
       - task: check-go-tool
         vars:
           TOOL: KIND
-    vars:
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
     cmds:
       - task: kind-cloud-provider-stop
-      - "/{{.kind}} delete cluster --name {{.CLUSTER_NAME}}"
+      - $(check-go-tool {{.KIND}}) delete cluster --name {{.CLUSTER_NAME}}
 
   kind-create:
     desc: "create a KinD cluster for local debug (start Hug in local) (no host port maps as we have a LoadBalancer service)"
@@ -130,7 +126,6 @@ tasks:
       # set in .env CONTROLLER_BUILD_TASK=kind-build-controller-image-dev to speed build times
       CONTROLLER_BUILD_TASK: '{{.CONTROLLER_BUILD_TASK | default "kind-build-controller-image-build-in-docker"}}'
       kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
     deps:
       - task: check-go-tool
         vars:
@@ -146,8 +141,8 @@ tasks:
       - task: "{{ .CONTROLLER_BUILD_TASK }}"
       - task: kind-build-echo-image
       - task: delimiter
-      - cmd: /{{.kind}} load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
-      - cmd: /{{.kind}} load docker-image haproxytech/http-echo:latest --name={{.CLUSTER_NAME}}
+      - cmd: $(check-go-tool {{.KIND}}) load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
+      - cmd: $(check-go-tool {{.KIND}}) load docker-image haproxytech/http-echo:latest --name={{.CLUSTER_NAME}}
       - task: delimiter
       - echo "Create HAProxy namespace ..."
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/namespace.yaml
@@ -170,7 +165,7 @@ tasks:
       - echo "deploying a complete example in `example` namespace ..."
       - /{{.kubectl}} create ns example
       - /{{.kubectl}} apply -n example -f {{.DEV_INIT_DIR}}/echo.yaml
-      - /{{.kind}} load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
+      - $(check-go-tool {{.KIND}}) load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
       - task: delimiter
       - echo "deploying GatewayClass, Gateway, Secret, 2 HTTPRoutes"
       - /{{.kubectl}} apply -n example -f {{.DEV_INIT_DIR}}/offload-secret.yaml
@@ -190,11 +185,10 @@ tasks:
     silent: true
     vars:
       kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
     cmds:
       - task: kind-build-controller-image-dev
       - task: delimiter
-      - cmd: /{{.kind}} load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
+      - cmd: $(check-go-tool {{.KIND}}) load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
       - task: delimiter
       - echo "deploying Controller ..."
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/rbac.yaml

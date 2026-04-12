@@ -19,7 +19,6 @@ tasks:
   conformance-create-ci:
     desc: "create a Kind cluster for conformance testing in Docker-in-Docker CI"
     vars:
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
       kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
     cmds:
       - task: kind-create-cluster
@@ -42,13 +41,12 @@ tasks:
       - task: check-kubectl
     vars:
       kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
-      kind: "{{.TMP}}/kind/{{.KIND_VERSION}}/kind"
       CLUSTER_NAME: '{{ default "dev-controller" .CLUSTER_NAME }}'
     cmds:
       # Load images into Kind (HUG + conformance test images)
-      - cmd: /{{.kind}} load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
-      - cmd: /{{.kind}} load docker-image {{.CONFORMANCE_ECHO_IMAGE}} --name={{.CLUSTER_NAME}}
-      - cmd: /{{.kind}} load docker-image {{.CONFORMANCE_COREDNS_IMAGE}} --name={{.CLUSTER_NAME}}
+      - cmd: $(check-go-tool {{.KIND}}) load docker-image haproxytech/haproxy-unified-gateway:latest --name={{.CLUSTER_NAME}}
+      - cmd: $(check-go-tool {{.KIND}}) load docker-image {{.CONFORMANCE_ECHO_IMAGE}} --name={{.CLUSTER_NAME}}
+      - cmd: $(check-go-tool {{.KIND}}) load docker-image {{.CONFORMANCE_COREDNS_IMAGE}} --name={{.CLUSTER_NAME}}
       # Create namespace
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/namespace.yaml
       # Install CRDs
@@ -139,7 +137,7 @@ tasks:
     cmds:
       - |
         CONFORMANCE_REPORT_OUTPUT={{.CONFORMANCE_REPORT_OUTPUT}} \
-        /{{.TMP}}/gotestsum/{{.GOTESTSUM_VERSION}}/gotestsum \
+        $(check-go-tool {{.GOTESTSUM}}) \
           --format-icons=hivis \
           --format={{.FORMAT}} \
           --format-hide-empty-pkg \

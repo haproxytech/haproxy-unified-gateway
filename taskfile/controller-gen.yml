@@ -25,7 +25,7 @@ tasks:
         vars:
           TOOL: CONTROLLER_GEN
     cmds:
-      - /{{.TMP}}/controller-gen/{{.CONTROLLER_GEN_VERSION}}/controller-gen object:headerFile="assets/license-header.txt" paths="./..." output:artifacts:config=./api
+      - $(check-go-tool {{.CONTROLLER_GEN}}) object:headerFile="assets/license-header.txt" paths="./..." output:artifacts:config=./api
 
   controller-gen-manifest:
     internal: true
@@ -35,22 +35,22 @@ tasks:
         vars:
           TOOL: CONTROLLER_GEN
     cmds:
-      - /{{.TMP}}/controller-gen/{{.CONTROLLER_GEN_VERSION}}/controller-gen crd webhook paths="./api/gate/..." output:crd:artifacts:config=./api/definition
+      - $(check-go-tool {{.CONTROLLER_GEN}}) crd webhook paths="./api/gate/..." output:crd:artifacts:config=./api/definition
       - |
+        YQ=$(check-go-tool {{.YQ}})
         for file in api/definition/*.yaml; do
-          /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.metadata.annotations."controller-gen.kubebuilder.io/version")' -i "$file"
+          $YQ eval 'del(.metadata.annotations."controller-gen.kubebuilder.io/version")' -i "$file"
         done
-      - # Remove name from backend CRD
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.required[] | select(. == "name")) | del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.name)' -i api/definition/gate.v3.haproxy.org_backends.yaml
-      - # Remove: from Global CRD
-      - # daemon, localpeer, master-worker, pidfile, stats_timeout, default_path, tune_lua_options.bool_sample_conversion, lua_options.load_per_thread
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.daemon)' -i api/definition/gate.v3.haproxy.org_globals.yaml
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.localpeer)' -i api/definition/gate.v3.haproxy.org_globals.yaml
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties."master-worker")' -i api/definition/gate.v3.haproxy.org_globals.yaml
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.pidfile)' -i api/definition/gate.v3.haproxy.org_globals.yaml
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.stats_timeout)' -i api/definition/gate.v3.haproxy.org_globals.yaml
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.default_path)' -i api/definition/gate.v3.haproxy.org_globals.yaml
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.tune_lua_options.properties.bool_sample_conversion)' -i api/definition/gate.v3.haproxy.org_globals.yaml
-      - /{{.TMP}}/yq/{{.YQ_VERSION}}/yq eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.lua_options.properties.load_per_thread)' -i api/definition/gate.v3.haproxy.org_globals.yaml
-
+        # Remove name from backend CRD
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.required[] | select(. == "name")) | del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.name)' -i api/definition/gate.v3.haproxy.org_backends.yaml
+        # Remove from Global CRD:
+        # daemon, localpeer, master-worker, pidfile, stats_timeout, default_path, tune_lua_options.bool_sample_conversion, lua_options.load_per_thread
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.daemon)' -i api/definition/gate.v3.haproxy.org_globals.yaml
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.localpeer)' -i api/definition/gate.v3.haproxy.org_globals.yaml
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties."master-worker")' -i api/definition/gate.v3.haproxy.org_globals.yaml
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.pidfile)' -i api/definition/gate.v3.haproxy.org_globals.yaml
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.stats_timeout)' -i api/definition/gate.v3.haproxy.org_globals.yaml
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.default_path)' -i api/definition/gate.v3.haproxy.org_globals.yaml
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.tune_lua_options.properties.bool_sample_conversion)' -i api/definition/gate.v3.haproxy.org_globals.yaml
+        $YQ eval 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties.lua_options.properties.load_per_thread)' -i api/definition/gate.v3.haproxy.org_globals.yaml
       - go run cmd/crd-version-check/main.go
