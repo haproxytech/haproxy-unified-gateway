@@ -59,6 +59,12 @@ resources. These are already included in `example/deploy/hug/rbac.yaml`:
 
 ### 3. Prometheus RBAC
 
+> **Note:** This step requires **cluster-scoped** resources (ClusterRole and ClusterRoleBinding).
+> `nonResourceURLs` can only be used in ClusterRoles, not namespace-scoped Roles — this is a
+> Kubernetes API constraint. If you only have namespace-level access, you will need a cluster
+> admin to create these resources. Alternatively, consider using [`basic` auth mode](metrics-basic.md)
+> which works entirely within namespace scope.
+
 Prometheus needs a ClusterRole that grants access to the `/metrics` non-resource URL,
 and a ClusterRoleBinding to its ServiceAccount. These are included in `example/deploy/hug/rbac.yaml`:
 
