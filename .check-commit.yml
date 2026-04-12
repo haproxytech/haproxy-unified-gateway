@@ -25,12 +25,6 @@ PatchTypes:
       - MEDIUM
       - MAJOR
       - CRITICAL
-  Custom Resource patch:
-    Values:
-      - CR
-  Continuous Integration patch:
-    Values:
-      - CI
 TagOrder:
   - PatchTypes:
       - HAProxy Standard Patch
