@@ -56,6 +56,7 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlruntimeconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -208,9 +209,13 @@ func (test *IntTest) StartTestEnv(t *testing.T) { //revive:disable:function-leng
 	// Setup Gate lib configuration from HUG binary configuration
 	opts := start.SetupGateConfig(hugConfig)
 
+	skipNameValidation := true
 	mgr, err := ctrlruntime.NewManager(cfg, ctrlruntime.Options{
 		Scheme:  scheme.Scheme,
 		Metrics: metricsserver.Options{BindAddress: "0"},
+		Controller: ctrlruntimeconfig.Controller{
+			SkipNameValidation: &skipNameValidation,
+		},
 	})
 	g.Expect(err).ToNot(gomega.HaveOccurred())
 
