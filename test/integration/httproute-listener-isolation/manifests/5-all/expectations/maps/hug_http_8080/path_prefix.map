@@ -1,0 +1,4 @@
+e2e-tests-httproute-listener-isolation/gateway_abc-foo-example-com/e2e-tests-httproute-listener-isolation/route-attaches-to-abc-foo-example-com/abc-foo-example-com hug_e2e-tests-httproute-listener-isolation_http-echo_80__
+e2e-tests-httproute-listener-isolation/gateway_empty-hostname/e2e-tests-httproute-listener-isolation/route-attaches-to-empty-hostname/empty-hostname hug_e2e-tests-httproute-listener-isolation_http-echo_80__
+e2e-tests-httproute-listener-isolation/gateway_wildcard-example-com/e2e-tests-httproute-listener-isolation/route-attaches-to-wildcard-example-com/wildcard-example-com hug_e2e-tests-httproute-listener-isolation_http-echo_80__
+e2e-tests-httproute-listener-isolation/gateway_wildcard-foo-example-com/e2e-tests-httproute-listener-isolation/route-attaches-to-wildcard-foo-example-com/wildcard-foo-example-com hug_e2e-tests-httproute-listener-isolation_http-echo_80__

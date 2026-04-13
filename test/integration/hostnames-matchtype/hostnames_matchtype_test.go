@@ -42,6 +42,7 @@ func (s *HostnamesMatchtypeSuite) Test_1_Exact_Route_Exact_Match_Exact() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	// For FE http
 	mapFilePath := "hug_http_31081"
@@ -74,6 +75,7 @@ func (s *HostnamesMatchtypeSuite) Test_5_Wildcard_Route_Exact_Match_Exact() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -104,6 +106,7 @@ func (s *HostnamesMatchtypeSuite) Test_4_Exact_Route_Empty_Match_Exact() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -134,6 +137,7 @@ func (s *HostnamesMatchtypeSuite) Test_2_Exact_Route_Wildcard_Match_Exact() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -164,6 +168,7 @@ func (s *HostnamesMatchtypeSuite) Test_6_Exact_Route_Exact_Match_Prefix() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -194,6 +199,7 @@ func (s *HostnamesMatchtypeSuite) Test_8_Exact_Route_Wildcard_Match_Prefix() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -224,6 +230,7 @@ func (s *HostnamesMatchtypeSuite) Test_10_Exact_Route_Empty_Match_Prefix() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -254,6 +261,7 @@ func (s *HostnamesMatchtypeSuite) Test_12_Wildcard_Route_Exact_Match_Prefix() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -284,6 +292,7 @@ func (s *HostnamesMatchtypeSuite) Test_14_Wildcard_Route_Wildcard_Match_Exact() 
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -314,6 +323,7 @@ func (s *HostnamesMatchtypeSuite) Test_17_Wildcard_Route_Empty_Match_Exact() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -344,6 +354,7 @@ func (s *HostnamesMatchtypeSuite) Test_20_Empty_Route_Exact_Match_Exact() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -374,6 +385,7 @@ func (s *HostnamesMatchtypeSuite) Test_23_Empty_Route_Wildcard_Match_Exact() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -404,6 +416,7 @@ func (s *HostnamesMatchtypeSuite) Test_26_Empty_Route_Empty_Match_Exact() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -434,6 +447,7 @@ func (s *HostnamesMatchtypeSuite) Test_27_Empty_Route_Empty_Match_Prefix() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -464,6 +478,7 @@ func (s *HostnamesMatchtypeSuite) Test_13_Wildcard_Route_Exact_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -494,6 +509,7 @@ func (s *HostnamesMatchtypeSuite) Test_7_Exact_Route_Exact_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -524,6 +540,7 @@ func (s *HostnamesMatchtypeSuite) Test_9_Exact_Route_Wildcard_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -554,6 +571,7 @@ func (s *HostnamesMatchtypeSuite) Test_11_Exact_Route_Empty_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -584,6 +602,7 @@ func (s *HostnamesMatchtypeSuite) Test_16_Wildcard_Route_Wildcard_Match_Regex() 
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -614,6 +633,7 @@ func (s *HostnamesMatchtypeSuite) Test_19_Wildcard_Route_Empty_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -644,6 +664,7 @@ func (s *HostnamesMatchtypeSuite) Test_25_Empty_Route_Wildcard_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -674,6 +695,7 @@ func (s *HostnamesMatchtypeSuite) Test_28_Empty_Route_Empty_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -704,6 +726,7 @@ func (s *HostnamesMatchtypeSuite) Test_22_Empty_Route_Exact_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -734,6 +757,7 @@ func (s *HostnamesMatchtypeSuite) Test_15_Wildcard_Route_Wildcard_Match_Prefix()
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -764,6 +788,7 @@ func (s *HostnamesMatchtypeSuite) Test_18_Wildcard_Route_Empty_Match_Prefix() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -794,6 +819,7 @@ func (s *HostnamesMatchtypeSuite) Test_21_Empty_Route_Exact_Match_Prefix() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -824,6 +850,7 @@ func (s *HostnamesMatchtypeSuite) Test_24_Empty_Route_Wildcard_Match_Prefix() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
@@ -856,6 +883,7 @@ func (s *HostnamesMatchtypeSuite) Test_3_Exact_Route_Exact_Match_Exact_Nomatch()
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)

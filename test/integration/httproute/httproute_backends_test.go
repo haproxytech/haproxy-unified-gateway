@@ -51,6 +51,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -84,6 +85,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -111,6 +113,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_response_header_filt
 	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -138,6 +141,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_url_rewrite() {
 	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -165,6 +169,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_redirect() {
 	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -192,6 +197,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_cors() {
 	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -283,6 +289,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_dynamic_delete_1_bac
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
 	// - name: http-echo-2
@@ -330,6 +337,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_1_backend_dynamic_de
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
 	// Now remove the Service http-echo-1

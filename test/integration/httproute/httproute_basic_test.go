@@ -67,6 +67,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_OK() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	// For FE http
 	s.ExpectMapContents(mapFilePath1, expectedMapsPath)
 
@@ -95,6 +96,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_1_parent_not_allowed() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	// For FE http
 	s.ExpectMapContents(mapFilePath1, expectedMapsPath)
 }
@@ -121,6 +123,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_no_matching_parent() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	// For FE http
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 }
@@ -149,6 +152,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_AttachedRoutes() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 
 	// 2- Now create a 2nd route
@@ -201,7 +205,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_OK_Multiple_Listeners_One_Gateway() 
 	fixtureDirPath := utils.GetCRDFixturePath()
 	fixtureDir := "basic"
 
-	fixturePath := path.Join(fixtureDirPath, fixtureDir, "ok _multiple_listeners_one_gateway")
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "ok_multiple_listeners_one_gateway")
 	s.CreateFixtures(fixturePath, nil)
 	mapFilePath1 := "hug_http_8080"
 	mapFilePath2 := "hug_http_8088"
@@ -225,6 +229,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_OK_Multiple_Listeners_One_Gateway() 
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	// For FE http
 	s.ExpectMapContents(mapFilePath1, expectedMapsPath)
 

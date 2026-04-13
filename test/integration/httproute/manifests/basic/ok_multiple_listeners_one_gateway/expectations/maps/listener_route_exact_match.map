@@ -1,0 +1,2 @@
+e2e-tests-httproute/gateway_http/example.haproxy e2e-tests-httproute/gateway_http/e2e-tests-httproute/route-echo
+e2e-tests-httproute/gateway_http2/example.haproxy e2e-tests-httproute/gateway_http2/e2e-tests-httproute/route-echo

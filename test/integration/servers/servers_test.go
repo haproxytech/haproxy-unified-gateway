@@ -51,6 +51,7 @@ func (s *ServersSuite) Test_Scale_up() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	mapFilePath := "hug_http_31081"
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)

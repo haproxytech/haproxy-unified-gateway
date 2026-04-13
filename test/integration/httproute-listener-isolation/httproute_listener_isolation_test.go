@@ -34,9 +34,8 @@ func TestHTTPRouteIsolationTestSuite(t *testing.T) {
 
 func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_1_route_attaches_to_empty_hostname() {
 	fixtureDirPath := utils.GetCRDFixturePath()
-	fixtureDir := "listener-isolation"
 
-	fixturePath := path.Join(fixtureDirPath, fixtureDir, "1-route-attaches-to-empty-hostname")
+	fixturePath := path.Join(fixtureDirPath, "1-route-attaches-to-empty-hostname")
 	s.CreateFixtures(fixturePath, nil)
 	mapFilePath := "hug_http_8080"
 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
@@ -51,14 +50,14 @@ func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_1_route_a
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 }
 
 func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_2_route_attaches_to_wildcard_example_com() {
 	fixtureDirPath := utils.GetCRDFixturePath()
-	fixtureDir := "listener-isolation"
 
-	fixturePath := path.Join(fixtureDirPath, fixtureDir, "2-route-attaches-to-wildcard-example-com")
+	fixturePath := path.Join(fixtureDirPath, "2-route-attaches-to-wildcard-example-com")
 	s.CreateFixtures(fixturePath, nil)
 	mapFilePath := "hug_http_8080"
 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
@@ -73,14 +72,14 @@ func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_2_route_a
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 }
 
 func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_3_route_attaches_to_wildcard_foo_example_com() {
 	fixtureDirPath := utils.GetCRDFixturePath()
-	fixtureDir := "listener-isolation"
 
-	fixturePath := path.Join(fixtureDirPath, fixtureDir, "3-route-attaches-to-wildcard-foo-example-com")
+	fixturePath := path.Join(fixtureDirPath, "3-route-attaches-to-wildcard-foo-example-com")
 	s.CreateFixtures(fixturePath, nil)
 	mapFilePath := "hug_http_8080"
 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
@@ -95,14 +94,14 @@ func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_3_route_a
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 }
 
 func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_4_route_attaches_to_abc_foo_example_com() {
 	fixtureDirPath := utils.GetCRDFixturePath()
-	fixtureDir := "listener-isolation"
 
-	fixturePath := path.Join(fixtureDirPath, fixtureDir, "4-route-attaches-to-abc-foo-example-com")
+	fixturePath := path.Join(fixtureDirPath, "4-route-attaches-to-abc-foo-example-com")
 	s.CreateFixtures(fixturePath, nil)
 	mapFilePath := "hug_http_8080"
 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
@@ -117,14 +116,14 @@ func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_4_route_a
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 }
 
 func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_5_all() {
 	fixtureDirPath := utils.GetCRDFixturePath()
-	fixtureDir := "listener-isolation"
 
-	fixturePath := path.Join(fixtureDirPath, fixtureDir, "5-all")
+	fixturePath := path.Join(fixtureDirPath, "5-all")
 	s.CreateFixtures(fixturePath, nil)
 	mapFilePath := "hug_http_8080"
 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
@@ -132,5 +131,6 @@ func (s *HTTPRouteIsolationTestSuite) Test_HTTPRoute_ListenerIsolation_5_all() {
 	// Check Maps
 	expectationsPath := path.Join(fixturePath, "expectations")
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 }

@@ -47,6 +47,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_BackendCRD_basic() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -76,6 +77,6 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_BackendCRD_extended() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
-
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }

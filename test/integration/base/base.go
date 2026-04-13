@@ -344,6 +344,9 @@ func (b *BaseSuite) CleanupFixturesCheckMapFiles(fixturePath string, manifestNam
 	}
 	err := utils.DeleteRuntimeObjectsFromYAMLFiles(params)
 	b.Require().NoError(err)
+	// Listener Route maps
+	b.ExpectListenerRouteMapContents("")
+	// Standard maps
 	for _, mapFileRelativePath := range mapFileRelativePaths {
 		b.ExpectMapContents(mapFileRelativePath, "")
 	}
@@ -640,7 +643,6 @@ func (b *BaseSuite) CheckEntryInMapFile(mapFileRelativePath, key, value string) 
 }
 
 var StandardMaps = []string{
-	"domain_wildcard_path_exact.map",
 	"domain_wildcard_sni.map",
 	"path_exact.map",
 	"path_prefix.map",
@@ -648,11 +650,27 @@ var StandardMaps = []string{
 	"sni.map",
 }
 
+var ListenerRouteMaps = []string{
+	"listener_exact_match.map",
+	"listener_wildcard_match.map",
+	"listener_route_exact_match.map",
+	"listener_route_wildcard_match.map",
+}
+
 func (b *BaseSuite) ExpectMapContents(mapFilePath, expectedMapPath string) {
 	b.Require().Eventually(func() bool {
+		// Standard maps (maps in expectedMapPath/mapFilePath)
 		check := b.checkMapContents(mapFilePath, expectedMapPath)
 		return check
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", mapFilePath))
+	}, timeout, interval, fmt.Sprintf("maps in %s/%s did not match expected contents", expectedMapPath, mapFilePath))
+}
+
+func (b *BaseSuite) ExpectListenerRouteMapContents(expectedMapPath string) {
+	b.Require().Eventually(func() bool {
+		// ListenerRoute maps (maps in expectedMapPath)
+		check := b.checkListenerRouteMapFileContents(expectedMapPath)
+		return check
+	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", expectedMapPath))
 }
 
 func (b *BaseSuite) checkMapContents(mapFileRelativePath, expectedMapPath string) bool {
@@ -667,38 +685,70 @@ func (b *BaseSuite) checkMapContents(mapFileRelativePath, expectedMapPath string
 }
 
 func (b *BaseSuite) checkMapFileContents(mapFileRelativePath, expectedMapPath string) bool {
-	b.T().Logf("Checking map [file] in %s with expected map path %s", mapFileRelativePath, expectedMapPath)
+	var mapOK bool
+	// Standard maps
+	b.T().Logf("Checking [standard] map [file] %s/%s", expectedMapPath, mapFileRelativePath)
+
 	for _, mapName := range StandardMaps {
-		expectedFilePath := path.Join(expectedMapPath, mapName)
-
-		// Check if expectation exists
-		expectedContent, err := os.ReadFile(expectedFilePath)
-		expectationExists := err == nil
-
-		// Read actual map
-		actualMapPath := filepath.Join(b.test.HaproxyCfgDir, "maps", mapFileRelativePath, mapName)
-		actualContent, err := os.ReadFile(actualMapPath)
-		// If actual map doesn't exist, we treat it as empty string
-		var actualString string
-		if err == nil {
-			actualString = string(actualContent)
-		}
-
-		if expectationExists {
-			// Check if content matches
-			if string(expectedContent) != actualString {
-				b.T().Logf("  map [file] mismatch for %s: \nexpected %q, \ngot      %q", mapName, string(expectedContent), actualString)
-				return false
-			}
-		} else {
-			// Check if actual is empty
-			if strings.TrimSpace(actualString) != "" {
-				b.T().Logf("   map [file] %s should be empty but has content: %q", mapName, actualString)
-				return false
-			}
+		b.T().Logf(" Checking map [file] %s", mapName)
+		mapOK = b.check1MapContent(mapFileRelativePath, expectedMapPath, mapName)
+		if !mapOK {
+			return false
 		}
 	}
-	b.T().Logf("  map [file] correct for %s", mapFileRelativePath)
+	return true
+}
+
+func (b *BaseSuite) checkListenerRouteMapFileContents(expectedMapPath string) bool {
+	var mapOK bool
+	// ListenerRoute maps
+	b.T().Logf("Checking [listener route] map [file] %s", expectedMapPath)
+
+	for _, mapName := range ListenerRouteMaps {
+		b.T().Logf(" Checking map [file] %s", mapName)
+		mapOK = b.check1MapContent("", expectedMapPath, mapName)
+		if !mapOK {
+			return false
+		}
+	}
+
+	if TestMapThroughRuntime {
+		return b.checkListenerRouteRuntimeMapContents(expectedMapPath)
+	}
+	return true
+}
+
+func (b *BaseSuite) check1MapContent(mapFileRelativePath, expectedMapPath, mapName string) bool {
+	// For Route mapping (maps in expectedMapPath)
+	expectedFilePath := path.Join(expectedMapPath, mapFileRelativePath, mapName)
+
+	// Check if expectation exists
+	expectedContent, err := os.ReadFile(expectedFilePath)
+	expectationExists := err == nil
+
+	// Read actual map
+	actualMapPath := filepath.Join(b.test.HaproxyCfgDir, "maps", mapFileRelativePath, mapName)
+
+	actualContent, err := os.ReadFile(actualMapPath)
+	// If actual map doesn't exist, we treat it as empty string
+	var actualString string
+	if err == nil {
+		actualString = string(actualContent)
+	}
+
+	if expectationExists {
+		// Check if content matches
+		if string(expectedContent) != actualString {
+			b.T().Logf("  map [file] mismatch for %s: \nexpected %q, \ngot      %q", mapName, string(expectedContent), actualString)
+			return false
+		}
+	} else {
+		// Check if actual is empty
+		if strings.TrimSpace(actualString) != "" {
+			b.T().Logf("   map [file] %s should be empty but has content: %q", mapName, actualString)
+			return false
+		}
+	}
 	return true
 }
 
@@ -877,62 +927,87 @@ func (b *BaseSuite) ConsistentlyNoReload(oldPid string, duration time.Duration) 
 }
 
 func (b *BaseSuite) checkRuntimeMapContents(mapFileRelativePath, expectedMapPath string) bool {
-	b.T().Logf("Checking map [runtime] for %s with expected map path %s", mapFileRelativePath, expectedMapPath)
-	socketPath := filepath.Join(b.test.HaproxyCfgDir, "haproxy-runtime-api.sock")
+	b.T().Logf("Checking map [runtime] for %s/%s ", expectedMapPath, mapFileRelativePath)
 
 	for _, mapName := range StandardMaps {
-		expectedFilePath := path.Join(expectedMapPath, mapName)
+		b.T().Logf(" Checking map [runtime] %s", mapName)
 
-		// Check if expectation exists
-		expectedContent, err := os.ReadFile(expectedFilePath)
-		expectationExists := err == nil
-
-		// Build runtime map path (must match HAProxy config path exactly)
-		runtimeMapPath := filepath.Join(
-			b.test.HaproxyCfgDir,
-			"maps",
-			mapFileRelativePath,
-			mapName,
-		)
-
-		// Read map from runtime socket
-		actualString, err := readRuntimeMap(socketPath, runtimeMapPath)
-		if err != nil {
-			// If map not found in runtime, treat it as empty
-			actualString = ""
-		}
-
-		expectedNormalized := normalizeMapContent(string(expectedContent))
-		actualNormalized := normalizeMapContent(actualString)
-		if strings.HasPrefix(actualNormalized, "Unknown map identifier") {
-			actualNormalized = ""
-		}
-
-		if expectationExists {
-			b.T().Logf("map [runtime] contents: %s", actualNormalized)
-			b.T().Logf("Expected map [runtime] contents: %s", expectedNormalized)
-			if expectedNormalized != actualNormalized {
-				b.T().Logf(
-					"  map [runtime] mismatch for %s:\nexpected:\n%q\ngot:\n%q",
-					mapName,
-					expectedNormalized,
-					actualNormalized,
-				)
-				return false
-			}
-		} else {
-			if strings.TrimSpace(actualNormalized) != "" {
-				b.T().Logf(
-					"   map [runtime] %s should be empty but has content: %q",
-					mapName,
-					actualNormalized,
-				)
-				return false
-			}
+		chek := b.check1RuntimeMapContent(mapFileRelativePath, expectedMapPath, mapName)
+		if !chek {
+			return false
 		}
 	}
-	b.T().Logf("  map [runtime] correct for %s", mapFileRelativePath)
 
+	return true
+}
+
+func (b *BaseSuite) checkListenerRouteRuntimeMapContents(expectedMapPath string) bool {
+	b.T().Logf("Checking map [runtime] for %s ", expectedMapPath)
+
+	for _, mapName := range ListenerRouteMaps {
+		b.T().Logf(" Checking map [runtime] %s", mapName)
+
+		chek := b.check1RuntimeMapContent("", expectedMapPath, mapName)
+		if !chek {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (b *BaseSuite) check1RuntimeMapContent(mapFileRelativePath, expectedMapPath, mapName string) bool {
+	socketPath := filepath.Join(b.test.HaproxyCfgDir, "haproxy-runtime-api.sock")
+
+	expectedFilePath := path.Join(expectedMapPath, mapFileRelativePath, mapName)
+
+	// Check if expectation exists
+	expectedContent, err := os.ReadFile(expectedFilePath)
+	expectationExists := err == nil
+
+	// Build runtime map path (must match HAProxy config path exactly)
+	runtimeMapPath := filepath.Join(
+		b.test.HaproxyCfgDir,
+		"maps",
+		mapFileRelativePath,
+		mapName,
+	)
+
+	// Read map from runtime socket
+	actualString, err := readRuntimeMap(socketPath, runtimeMapPath)
+	if err != nil {
+		// If map not found in runtime, treat it as empty
+		actualString = ""
+	}
+
+	expectedNormalized := normalizeMapContent(string(expectedContent))
+	actualNormalized := normalizeMapContent(actualString)
+	if strings.HasPrefix(actualNormalized, "Unknown map identifier") {
+		actualNormalized = ""
+	}
+
+	if expectationExists {
+		b.T().Logf("map [runtime] contents: %s", actualNormalized)
+		b.T().Logf("Expected map [runtime] contents: %s", expectedNormalized)
+		if expectedNormalized != actualNormalized {
+			b.T().Logf(
+				"  map [runtime] mismatch for %s:\nexpected:\n%q\ngot:\n%q",
+				mapName,
+				expectedNormalized,
+				actualNormalized,
+			)
+			return false
+		}
+	} else {
+		if strings.TrimSpace(actualNormalized) != "" {
+			b.T().Logf(
+				"   map [runtime] %s should be empty but has content: %q",
+				mapName,
+				actualNormalized,
+			)
+			return false
+		}
+	}
 	return true
 }
 

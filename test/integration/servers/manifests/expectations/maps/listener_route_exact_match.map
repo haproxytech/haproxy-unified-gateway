@@ -1,0 +1,2 @@
+e2e-tests-servers/hug-gateway_http/offload.haproxy e2e-tests-servers/hug-gateway_http/e2e-tests-servers/route-echo-http
+e2e-tests-servers/hug-gateway_https/offload.haproxy e2e-tests-servers/hug-gateway_https/e2e-tests-servers/route-echo-http

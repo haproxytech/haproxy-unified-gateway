@@ -158,6 +158,8 @@ func (b *HaproxyConfMgrImpl) fillListenerMaps(vListener *tree.VirtualListener) {
 			Name:      listenerKeyName,
 		}
 		if isDomainWildcard(hostnameStr) {
+			// Clear exact match for this listener (in case hostname type changed from exact to wildcard)
+			listenerExactMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
 			// Strip the leading "*" so that map_end can match against the suffix (e.g. ".example.com")
 			wildcardKey := removeDomainWildcard(hostnameStr)
 			// Here reverse the domain string (because map_end does not take the longest string)
@@ -170,6 +172,8 @@ func (b *HaproxyConfMgrImpl) fillListenerMaps(vListener *tree.VirtualListener) {
 					},
 				})
 		} else {
+			// Clear wildcard match for this listener (in case hostname type changed from wildcard to exact)
+			listenerWildcardMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
 			listenerExactMatchMap.ApplyRoute(resourceOrigin,
 				map[maps.EntryKey]map[string]*maps.WeightedValue{
 					{Hostname: hostnameStr}: {
@@ -376,7 +380,6 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 			},
 			{
 				// lookup in route_regex_match.map
-				// TODO HELENE: path regex + sni + uncomment conf test base gateways + isolation conf test
 				// # domain wildcard + path prefix. Example: ^[^.]+\.domain\.com/v1/foo/.*   # or map_sub
 				// # domain wildcard + path regex   Example: ^[^.]+\.domain\.com/v[1-3]/foo
 				// # exact domain + path regex      Example: ^www\.domain\.com/v[1-3]/foo

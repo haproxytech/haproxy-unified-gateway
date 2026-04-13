@@ -1,0 +1,2 @@
+. e2e-tests-httproute/gateway_http2
+.haproxy. e2e-tests-httproute/gateway_http

@@ -48,6 +48,7 @@ func (s *HTTPRouteTestSuite) Test_Timeout_OK() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	// For FE http
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 }
@@ -79,6 +80,7 @@ func (s *HTTPRouteTestSuite) Test_Timeout_Update() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	// For FE http
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 
@@ -121,6 +123,7 @@ func (s *HTTPRouteTestSuite) Test_Timeout_Removal() {
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	// For FE http
 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
 

@@ -24,10 +24,11 @@ func (s *HostnamesMatchtypeSuite7) Test_7_Exact_Route_Exact_Match_Regex() {
 	fixtureDirPath := path.Join("../", utils.GetCRDFixturePath())
 	fixtureDir := "7-gw-exact-route-exact-match-regex"
 
-	fixturePath := path.Join(fixtureDirPath, fixtureDir)
-	s.CreateFixtures(fixturePath, nil)
 	mapFilePath1 := "hug_http_31081"
 	mapFilePath2 := "hug_https_31444"
+
+	fixturePath := path.Join(fixtureDirPath, fixtureDir)
+	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath1, mapFilePath2})
 
 	// Expected Conditions
@@ -44,6 +45,7 @@ func (s *HostnamesMatchtypeSuite7) Test_7_Exact_Route_Exact_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join("expectations", "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	// For FE http
 	s.ExpectMapContents(mapFilePath1, expectedMapsPath)

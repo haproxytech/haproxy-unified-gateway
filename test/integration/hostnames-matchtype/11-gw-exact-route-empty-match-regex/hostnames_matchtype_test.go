@@ -44,6 +44,7 @@ func (s *HostnamesMatchtypeSuite11) Test_11_Exact_Route_Empty_Match_Regex() {
 
 	// Check Maps
 	expectedMapsPath := path.Join("expectations", "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 
 	// For FE http
 	s.ExpectMapContents(mapFilePath1, expectedMapsPath)

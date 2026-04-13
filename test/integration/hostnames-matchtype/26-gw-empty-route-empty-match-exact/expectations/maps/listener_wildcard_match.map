@@ -1,0 +1,2 @@
+. e2e-tests----gw-empty-route-empty-match-exact/hug-gateway_http
+. e2e-tests----gw-empty-route-empty-match-exact/hug-gateway_https

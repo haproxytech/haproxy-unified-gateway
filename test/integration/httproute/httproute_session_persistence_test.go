@@ -62,9 +62,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_SessionPersistence_Named_Removed() {
 	s.CreateFixtures(fixturePath, nil)
 	mapFileRelativePath := "hug_http_8080"
 	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFileRelativePath})
+	// Clean up parent fixtures (gateway, http-echo) before the route-update cleanup runs,
+	// so the gateway is gone before ExpectListenerRouteMapContents("") is checked.
+	// Route is intentionally excluded here: it is deleted by CleanupFixturesCheckMapFiles above.
+	defer s.CleanupFixtures(path.Join(fixtureDirPath, fixtureDir, fixtureTestDir), []string{"gatewayclass.yaml", "gateway.yaml", "http-echo.yaml"})
+
 	expectationsPath := path.Join(fixtureDirPath, fixtureDir, fixtureTestDir, "expectations")
 	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
 	s.YamlToRouteConditions(expectedCondPath)
+
 	backendsRemovedExpectationsPath := path.Join(fixtureDirPath, fixtureDir, fixtureTestDir, "expectations", "backends-session-persistence-removed")
 	expectedBackends := []string{
 		"hug_e2e-tests-httproute_http-echo_80__",
@@ -105,5 +111,6 @@ func (s *HTTPRouteTestSuite) RunHTTPRouteSessionPersistenceTest(fixtureTestDir s
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
