@@ -43,6 +43,10 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 	gatewayClassBuilder := tree.NewGatewayClassBuilder(gatewayClassBuilderParams)
 
 	// --------------
+	// ReferenceGrant manager (shared across all route and gateway builders)
+	referenceGrantManager := tree.NewReferenceGrantManager()
+
+	// --------------
 	// Gateway
 	gatewayBuilder := tree.NewGatewayBuilder(tree.GatewayBuilderParams{
 		ControllerStore:    controllerStore,
@@ -66,7 +70,6 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 
 	// --------------
 	// HTTPRoute
-	referenceGrantManager := tree.NewReferenceGrantManager()
 	httpRouteBuilder := tree.NewHTTPRouteBuilder(tree.HTTPRouteBuilderParams{
 		ControllerStore:       controllerStore,
 		MapsStorage:           cfg.MapsStorage,
@@ -77,8 +80,9 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 	// --------------
 	// TLSRoute
 	tlsRouteBuilder := tree.NewTLSRouteBuilder(tree.TLSRouteBuilderParams{
-		ControllerStore: controllerStore,
-		MapsStorage:     cfg.MapsStorage,
+		ControllerStore:       controllerStore,
+		MapsStorage:           cfg.MapsStorage,
+		ReferenceGrantManager: referenceGrantManager,
 	})
 
 	defaultsCRBuilder := tree.NewDefaultsCRBuilder(controllerStore)

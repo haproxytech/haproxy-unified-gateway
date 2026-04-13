@@ -32,17 +32,20 @@ var _ Builder = &TLSRouteBuilderImpl{}
 type TLSRouteBuilderImpl struct {
 	mapsStorage storage.MapsStorage
 	*ControllerStore
+	referenceGrantManager *ReferenceGrantManager
 }
 
 type TLSRouteBuilderParams struct {
 	storage.MapsStorage
 	*ControllerStore
+	*ReferenceGrantManager
 }
 
 func NewTLSRouteBuilder(params TLSRouteBuilderParams) Builder {
 	return &TLSRouteBuilderImpl{
-		ControllerStore: params.ControllerStore,
-		mapsStorage:     params.MapsStorage,
+		ControllerStore:       params.ControllerStore,
+		mapsStorage:           params.MapsStorage,
+		referenceGrantManager: params.ReferenceGrantManager,
 	}
 }
 
@@ -170,6 +173,6 @@ func (b *TLSRouteBuilderImpl) buildRules(tlsRoute *TLSRoute) {
 
 	// Performs all needed checks
 	for _, rule := range tlsRoute.Rules {
-		rule.checkBackendRef(tlsRoute, *b.ControllerStore)
+		rule.checkBackendRef(tlsRoute, *b.ControllerStore, b.referenceGrantManager)
 	}
 }
