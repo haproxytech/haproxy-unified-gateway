@@ -1,27 +1,43 @@
 package tlsroute
 
-// func (s *TLSRouteSuite) Test_TLSRoute_SSL_Passthrough() {
-// 	fixtureDirPath := utils.GetCRDFixturePath()
-// 	fixtureDir := "sslpassthrough"
+import (
+	"path"
+	"testing"
 
-// 	fixturePath := path.Join(fixtureDirPath, fixtureDir)
-// 	s.CreateFixtures(fixturePath, nil)
-// 	defer s.CleanupFixtures(fixturePath, nil)
+	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
+	"github.com/stretchr/testify/suite"
+)
 
-// 	// Expected Conditions
-// 	expectationsPath := path.Join(fixturePath, "expectations")
-// 	expectedCondPath := path.Join(expectationsPath, "conditions-route.yaml")
-// 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+// Adding TLSRouteSslPassthroughTestSuite to allow running the test directly
+type TLSRouteSslPassthroughTestSuite struct {
+	TLSRouteSuite
+}
 
-// 	tlsRouteName := "tlsroute"
-// 	s.expectConditionsRouteUpdated(s.Test().Ctx, s.Test().Namespace, tlsRouteName, expectedConditions)
+func TestTLSRouteSslPassthroughTestSuite(t *testing.T) {
+	suite.Run(t, new(TLSRouteSslPassthroughTestSuite))
+}
 
-// 	// Check AttachedRoutes on Gateway status
-// 	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "tls-gateway", "tls", 1)
+func (s *TLSRouteSslPassthroughTestSuite) Test_TLSRoute_SSL_Passthrough() {
+	fixtureDirPath := utils.GetCRDFixturePath()
 
-// 	// Check Maps
-// 	mapFilePath := "hug_tls_31445"
+	fixturePath := path.Join(fixtureDirPath, "sslpassthrough")
+	s.CreateFixtures(fixturePath, nil)
+	mapFilePath := "hug_tls_31445"
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{mapFilePath})
 
-// 	expectedMapsPath := path.Join(expectationsPath, "maps")
-// 	s.ExpectMapContents(mapFilePath, expectedMapsPath)
-// }
+	// Expected Conditions
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "conditions-route.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+
+	tlsRouteName := "tlsroute"
+	s.expectConditionsRouteUpdated(s.Test().Ctx, s.Test().Namespace, tlsRouteName, expectedConditions)
+
+	// Check AttachedRoutes on Gateway status
+	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "tls-gateway", "tls", 1)
+
+	// Check Maps
+	expectedMapsPath := path.Join(expectationsPath, "maps")
+	s.ExpectListenerRouteMapContents(expectedMapsPath)
+	s.ExpectMapContents(mapFilePath, expectedMapsPath)
+}

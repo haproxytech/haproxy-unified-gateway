@@ -72,20 +72,21 @@ func (b *RouteMgrImpl) onUpsertedHTTPRoute(origin maps.ResourceOrigin, routeValu
 	return b.onInvalidHTTPRouteUpserted(origin, route, mapExact, mapPrefix, mapRegex)
 }
 
-func (b *RouteMgrImpl) onUpsertedTLSRoute(routeKey k8stypes.NamespacedName, route *tree.TLSRoute,
-	mapSNI, mapSNIDomainWildcardMap *maps.MapFileState, acceptedHostnamesForRoute []string,
+func (b *RouteMgrImpl) onUpsertedTLSRoute(routeOrigin maps.ResourceOrigin, routeValueName string, route *tree.TLSRoute,
+	mapSNI *maps.MapFileState,
 ) error {
 	if route.Valid {
-		return b.onValidTLSRouteUpserted(routeKey, route, mapSNI, mapSNIDomainWildcardMap, acceptedHostnamesForRoute)
+		return b.onValidTLSRouteUpserted(routeOrigin, routeValueName, route, mapSNI)
 	}
-	return b.onInvalidTLSRouteUpserted(routeKey, route, mapSNI, mapSNIDomainWildcardMap)
+	return b.onInvalidTLSRouteUpserted(routeOrigin, route, mapSNI)
 }
 
-func (b *RouteMgrImpl) onValidTLSRouteUpserted(namespacedName k8stypes.NamespacedName,
-	tlsRoute *tree.TLSRoute, mapSNI, mapSNIDomainWildcardMap *maps.MapFileState, acceptedHostnamesForRoute []string,
+func (b *RouteMgrImpl) onValidTLSRouteUpserted(routeOrigin maps.ResourceOrigin, routeValueName string,
+	tlsRoute *tree.TLSRoute, mapSNI *maps.MapFileState,
 ) error {
-	desiredBackendsBySNI := map[maps.EntryKey]map[string]*maps.WeightedValue{}
-	desiredBackendsBySNIWildcard := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+	desiredBackends := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+	entryKey := maps.EntryKey{Hostname: routeValueName}
+	backends := map[string]*maps.WeightedValue{}
 
 	for _, tlsRouteRule := range tlsRoute.Rules {
 		if !tlsRouteRule.Valid {
@@ -100,7 +101,6 @@ func (b *RouteMgrImpl) onValidTLSRouteUpserted(namespacedName k8stypes.Namespace
 				continue
 			}
 
-			// backend := rule.K8sResource.BackendRefs[index]
 			svckey := k8stypes.NamespacedName{
 				Name: string(backend.Name),
 			}
@@ -121,64 +121,27 @@ func (b *RouteMgrImpl) onValidTLSRouteUpserted(namespacedName k8stypes.Namespace
 				)
 				continue
 			}
-			// For each accepted SNI ...
-			for _, hostname := range acceptedHostnamesForRoute {
-				mapDesiredBackends := desiredBackendsBySNI
-				if isDomainWildcard(string(hostname)) {
-					mapDesiredBackends = desiredBackendsBySNIWildcard
-				}
-				entryKey := maps.EntryKey{
-					Hostname: hostname,
-				}
-				desiredBackendsByPath := mapDesiredBackends[entryKey]
-				if desiredBackendsByPath == nil {
-					desiredBackendsByPath = map[string]*maps.WeightedValue{}
-					mapDesiredBackends[entryKey] = desiredBackendsByPath
-				}
-				// ... and we set the weighted backend
-				desiredBackendsByPath[backendName] = &maps.WeightedValue{
-					ValueName: backendName,
-					Weight:    backend.Weight,
-				}
-			}
+			backends[backendName] = &maps.WeightedValue{ValueName: backendName, Weight: backend.Weight}
 		}
 	}
 
-	mapSNI.ApplyRoute(
-		maps.ResourceOrigin{
-			Namespace: namespacedName.Namespace,
-			Name:      namespacedName.Name,
-		},
-		desiredBackendsBySNI)
-	mapSNIDomainWildcardMap.ApplyRoute(
-		maps.ResourceOrigin{
-			Namespace: namespacedName.Namespace,
-			Name:      namespacedName.Name,
-		},
-		desiredBackendsBySNIWildcard)
+	if len(backends) > 0 {
+		desiredBackends[entryKey] = backends
+	}
+
+	mapSNI.ApplyRoute(routeOrigin, desiredBackends)
 	return nil
 }
 
-func (RouteMgrImpl) onInvalidTLSRouteUpserted(namespacedName k8stypes.NamespacedName, _ *tree.TLSRoute, mapSNI, mapSNIDomainWildcardMap *maps.MapFileState) error {
-	mapSNI.ApplyRoute(
-		maps.ResourceOrigin{
-			Namespace: namespacedName.Namespace,
-			Name:      namespacedName.Name,
-		},
-		map[maps.EntryKey]map[string]*maps.WeightedValue{})
-	mapSNIDomainWildcardMap.ApplyRoute(
-		maps.ResourceOrigin{
-			Namespace: namespacedName.Namespace,
-			Name:      namespacedName.Name,
-		},
-		map[maps.EntryKey]map[string]*maps.WeightedValue{})
+func (RouteMgrImpl) onInvalidTLSRouteUpserted(routeOrigin maps.ResourceOrigin, _ *tree.TLSRoute, mapSNI *maps.MapFileState) error {
+	mapSNI.ApplyRoute(routeOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
 	return nil
 }
 
-func (b *RouteMgrImpl) onDeletedTLSRoute(namespacedName k8stypes.NamespacedName, route *tree.TLSRoute,
-	mapSNI *maps.MapFileState, mapSNIDomainWildcard *maps.MapFileState,
+func (b *RouteMgrImpl) onDeletedTLSRoute(routeOrigin maps.ResourceOrigin, route *tree.TLSRoute,
+	mapSNI *maps.MapFileState,
 ) error {
-	return b.onInvalidTLSRouteUpserted(namespacedName, route, mapSNI, mapSNIDomainWildcard)
+	return b.onInvalidTLSRouteUpserted(routeOrigin, route, mapSNI)
 }
 
 func (b *RouteMgrImpl) onDeletedHTTPRoute(origin maps.ResourceOrigin, route *tree.HTTPRoute,

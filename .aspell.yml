@@ -83,6 +83,7 @@ allowed:
   - ubuntu
   - unix
   - usr
+  - utils
   - workdir
   - yaml
   - kubectl

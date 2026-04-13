@@ -194,11 +194,10 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	pathPrefixMap := b.params.mapsStorage.GetPathPrefixMapFile(frontendName)
 	pathRegexMap := b.params.mapsStorage.GetPathRegexMapFile(frontendName)
 	sniMap := b.params.mapsStorage.GetSniMapFile(frontendName)
-	sniDomainWildcardMap := b.params.mapsStorage.GetSniDomainWildcardMapFile(frontendName)
 
 	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile()
 	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile()
-	listenerRouteExaxtMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile()
+	listenerRouteExactMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile()
 	listenerRouteWildcardMatchMap := b.params.mapsStorage.GetListenerRouteWildcardMatchMapFile()
 
 	var tcpRules []*models.TCPRequestRule
@@ -229,20 +228,76 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Expr:     "req.ssl_sni",
 			},
 			{
-				// tcp-request content set-var(txn.sni_match) req.ssl_sni,map(sni.map)
+				// tcp-request content set-var(sess.snireversed) var(sess.sni),lua.reverse_host
+				Type:     "content",
+				Action:   "set-var",
+				VarName:  "snireversed",
+				VarScope: "sess",
+				Expr:     "var(sess.sni),lua.reverse_host",
+			},
+			// -------------------
+			// Look for listener name: selected_listener_name
+			{
+				// tcp-request content set-var(sess.selected_listener_name) var(sess.sni),map(listener_exact_match)
+				Type:     "content",
+				Action:   "set-var",
+				VarName:  "selected_listener_name",
+				VarScope: "sess",
+				Expr:     "var(sess.sni),map(" + listenerExactMatchMap.Path.FullPath() + ")",
+				Metadata: map[string]any{"hug": "listener exact match selection"},
+			},
+			{
+				// tcp-request content set-var(sess.selected_listener_name,ifnotexists) var(sess.snireversed),map_beg(listener_wildcard_match)
+				Type:     "content",
+				Action:   "set-var",
+				VarName:  "selected_listener_name,ifnotexists",
+				VarScope: "sess",
+				Expr:     "var(sess.snireversed),map_beg(" + listenerWildcardMatchMap.Path.FullPath() + ")",
+				Metadata: map[string]any{"hug": "listener wildcard match selection"},
+			},
+			// -------------------
+			// Look for route name: selected_listener_route
+			{
+				// tcp-request content set-var(txn.TMP) var(txn.selected_listener_name),concat("/",sess.sni)
+				Type:     "content",
+				Action:   "set-var",
+				VarName:  "TMP",
+				VarScope: "sess",
+				Expr:     "var(sess.selected_listener_name),concat(\"/\",sess.sni)",
+			},
+			{
+				Type:     "content",
+				Action:   "set-var",
+				VarName:  "selected_listener_route",
+				VarScope: "sess",
+				Expr:     "var(sess.TMP),map(" + listenerRouteExactMatchMap.Path.FullPath() + ")",
+				Metadata: map[string]any{"hug": "listener-route exact match selection"},
+			},
+			{
+				// tcp-request content set-var(txn.TMP) var(txn.selected_listener_name),concat("/",txn.snireversed)
+				Type:     "content",
+				Action:   "set-var",
+				VarName:  "TMP",
+				VarScope: "sess",
+				Expr:     "var(sess.selected_listener_name),concat(\"/\",sess.snireversed)",
+			},
+			{
+				Type:     "content",
+				Action:   "set-var",
+				VarName:  "selected_listener_route,ifnotexists",
+				VarScope: "sess",
+				Expr:     "var(sess.TMP),map_beg(" + listenerRouteWildcardMatchMap.Path.FullPath() + ")",
+				Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
+			},
+			// -------------------
+			// Look for backend: sni_match
+			{
+				// tcp-request content set-var(txn.sni_match) var(txn.selected_listener_route),map(sni.map)
 				Type:     "content",
 				Action:   "set-var",
 				VarName:  "sni_match",
-				VarScope: "txn",
-				Expr:     "req_ssl_sni,map(" + sniMap.Path.FullPath() + ")",
-			},
-			{
-				// tcp-request content set-var(txn.sni_match,ifnotexists) req.ssl_sni,map_end(sniDomainWildcardMap.map)
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "sni_match,ifnotexists",
-				VarScope: "txn",
-				Expr:     "req_ssl_sni,map_end(" + sniDomainWildcardMap.Path.FullPath() + ")",
+				VarScope: "sess",
+				Expr:     "var(sess.selected_listener_route),map(" + sniMap.Path.FullPath() + ")",
 			},
 		}
 		backendSwitchingRules = []*models.BackendSwitchingRule{
@@ -252,7 +307,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				CondTest: "route_is_json",
 			},
 			{
-				Name: "%[var(txn.sni_match),field(1,.)]",
+				Name: "%[var(sess.sni_match),field(1,.)]",
 			},
 		}
 		aclList = []*models.ACL{
@@ -261,7 +316,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Criterion: "var(txn.sni_match),bytes(0,1)",
 				Value:     "-m str {",
 				Metadata: map[string]any{
-					"zhug": "for lua routing",
+					"hug": "for lua routing",
 				},
 			},
 		}
@@ -327,7 +382,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "selected_listener_route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "var(txn.TMP),map(" + listenerRouteExaxtMatchMap.Path.FullPath() + ")",
+				VarExpr:  "var(txn.TMP),map(" + listenerRouteExactMatchMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "listener-route exact match selection"},
 			},
 			{

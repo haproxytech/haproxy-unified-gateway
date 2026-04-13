@@ -29,7 +29,6 @@ const (
 	PATH_PREFIX_MAP                   = "path_prefix"
 	PATH_REGEX_MAP                    = "path_regex"
 	SNI_MAP                           = "sni"
-	SNI_DOMAIN_WILDCARD_MAP           = "domain_wildcard_sni"
 	MAP_LISTENER_EXACT_MATCH          = "listener_exact_match"
 	MAP_LISTENER_WILDCARD_MATCH       = "listener_wildcard_match"
 	MAP_LISTENER_ROUTE_EXACT_MATCH    = "listener_route_exact_match"
@@ -95,10 +94,6 @@ func (m *MapsStorageDefault) GetPathRegexMapFile(frontendName string) *maps.MapF
 
 func (m *MapsStorageDefault) GetSniMapFile(frontendName string) *maps.MapFileState {
 	return m.getMapFile(frontendName, SNI_MAP)
-}
-
-func (m *MapsStorageDefault) GetSniDomainWildcardMapFile(frontendName string) *maps.MapFileState {
-	return m.getMapFile(frontendName, SNI_DOMAIN_WILDCARD_MAP)
 }
 
 // getMapFile returns the MapFileState for the given frontend name and map name.

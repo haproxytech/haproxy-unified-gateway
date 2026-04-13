@@ -9,7 +9,7 @@ spec:
         kinds:
           - group: gateway.networking.k8s.io
             kind: TLSRoute
-      hostname: "*.haproxy"
+      hostname: "*.tls.haproxy"
       name: tls
       port: 31444
       protocol: TLS

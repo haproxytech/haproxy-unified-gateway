@@ -7,7 +7,7 @@ spec:
     - name: tls-gateway
       sectionName: tls
   hostnames:
-    - "example.haproxy"
+    - "example.tls.haproxy"
   rules:
     - backendRefs:
         - name: http-echo
