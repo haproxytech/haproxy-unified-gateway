@@ -4,7 +4,7 @@ dontlognull: enabled
 http_keep_alive_timeout: 60000
 http_request_timeout: 5000
 log_format: '''%ci:%cp [%tr] %ft %b/%s %TR/%Tw/%Tc/%Tr/%Ta %ST %B %CC %CS %tsc %ac/%fc/%bc/%sc/%rc
-  %sq/%bq %hr %hs "%HM %[var(txn.base)] %HV"'''
+  %sq/%bq %hr %hs {BLR:%[var(txn.base_listener_route)]} "%HM %[var(txn.base)] %HV"'''
 log_target_list:
 - global: true
 name: haproxytech
