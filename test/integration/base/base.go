@@ -344,9 +344,6 @@ func (b *BaseSuite) CleanupFixturesCheckMapFiles(fixturePath string, manifestNam
 	}
 	err := utils.DeleteRuntimeObjectsFromYAMLFiles(params)
 	b.Require().NoError(err)
-	// Listener Route maps
-	b.ExpectListenerRouteMapContents("")
-	// Standard maps
 	for _, mapFileRelativePath := range mapFileRelativePaths {
 		b.ExpectMapContents(mapFileRelativePath, "")
 	}
@@ -644,17 +641,14 @@ func (b *BaseSuite) CheckEntryInMapFile(mapFileRelativePath, key, value string) 
 
 var StandardMaps = []string{
 	"domain_wildcard_sni.map",
+	"listener_exact_match.map",
+	"listener_route_exact_match.map",
+	"listener_route_wildcard_match.map",
+	"listener_wildcard_match.map",
 	"path_exact.map",
 	"path_prefix.map",
 	"path_regex.map",
 	"sni.map",
-}
-
-var ListenerRouteMaps = []string{
-	"listener_exact_match.map",
-	"listener_wildcard_match.map",
-	"listener_route_exact_match.map",
-	"listener_route_wildcard_match.map",
 }
 
 func (b *BaseSuite) ExpectMapContents(mapFilePath, expectedMapPath string) {
@@ -665,13 +659,9 @@ func (b *BaseSuite) ExpectMapContents(mapFilePath, expectedMapPath string) {
 	}, timeout, interval, fmt.Sprintf("maps in %s/%s did not match expected contents", expectedMapPath, mapFilePath))
 }
 
-func (b *BaseSuite) ExpectListenerRouteMapContents(expectedMapPath string) {
-	b.Require().Eventually(func() bool {
-		// ListenerRoute maps (maps in expectedMapPath)
-		check := b.checkListenerRouteMapFileContents(expectedMapPath)
-		return check
-	}, timeout, interval, fmt.Sprintf("maps in %s did not match expected contents", expectedMapPath))
-}
+// ExpectListenerRouteMapContents is a no-op: listener maps are now per-frontend
+// and are verified by ExpectMapContents for each frontend directory.
+func (*BaseSuite) ExpectListenerRouteMapContents(_ string) {}
 
 func (b *BaseSuite) checkMapContents(mapFileRelativePath, expectedMapPath string) bool {
 	checkFile := b.checkMapFileContents(mapFileRelativePath, expectedMapPath)
@@ -695,25 +685,6 @@ func (b *BaseSuite) checkMapFileContents(mapFileRelativePath, expectedMapPath st
 		if !mapOK {
 			return false
 		}
-	}
-	return true
-}
-
-func (b *BaseSuite) checkListenerRouteMapFileContents(expectedMapPath string) bool {
-	var mapOK bool
-	// ListenerRoute maps
-	b.T().Logf("Checking [listener route] map [file] %s", expectedMapPath)
-
-	for _, mapName := range ListenerRouteMaps {
-		b.T().Logf(" Checking map [file] %s", mapName)
-		mapOK = b.check1MapContent("", expectedMapPath, mapName)
-		if !mapOK {
-			return false
-		}
-	}
-
-	if TestMapThroughRuntime {
-		return b.checkListenerRouteRuntimeMapContents(expectedMapPath)
 	}
 	return true
 }
@@ -933,21 +904,6 @@ func (b *BaseSuite) checkRuntimeMapContents(mapFileRelativePath, expectedMapPath
 		b.T().Logf(" Checking map [runtime] %s", mapName)
 
 		chek := b.check1RuntimeMapContent(mapFileRelativePath, expectedMapPath, mapName)
-		if !chek {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (b *BaseSuite) checkListenerRouteRuntimeMapContents(expectedMapPath string) bool {
-	b.T().Logf("Checking map [runtime] for %s ", expectedMapPath)
-
-	for _, mapName := range ListenerRouteMaps {
-		b.T().Logf(" Checking map [runtime] %s", mapName)
-
-		chek := b.check1RuntimeMapContent("", expectedMapPath, mapName)
 		if !chek {
 			return false
 		}

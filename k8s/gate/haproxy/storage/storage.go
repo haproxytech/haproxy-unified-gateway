@@ -44,10 +44,10 @@ type MapsStorage interface {
 	GetPathPrefixMapFile(frontendName string) *maps.MapFileState
 	GetPathRegexMapFile(frontendName string) *maps.MapFileState
 	GetSniMapFile(frontendName string) *maps.MapFileState
-	GetListenerExactMatchMapFile() *maps.MapFileState
-	GetListenerWildcardMatchMapFile() *maps.MapFileState
-	GetListenerRouteExactMatchMapFile() *maps.MapFileState
-	GetListenerRouteWildcardMatchMapFile() *maps.MapFileState
+	GetListenerExactMatchMapFile(frontendName string) *maps.MapFileState
+	GetListenerWildcardMatchMapFile(frontendName string) *maps.MapFileState
+	GetListenerRouteExactMatchMapFile(frontendName string) *maps.MapFileState
+	GetListenerRouteWildcardMatchMapFile(frontendName string) *maps.MapFileState
 	GetMaps() map[string]map[string]*maps.MapFileState
 	ProcessMapFiles()
 }

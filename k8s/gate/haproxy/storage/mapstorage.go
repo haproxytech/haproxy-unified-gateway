@@ -56,26 +56,26 @@ func NewMapsStorage(logger *slog.Logger, mapsBaseDir string) MapsStorage {
 	}
 }
 
-func (m *MapsStorageDefault) GetListenerExactMatchMapFile() *maps.MapFileState {
-	f := m.getMapFile("", MAP_LISTENER_EXACT_MATCH)
+func (m *MapsStorageDefault) GetListenerExactMatchMapFile(frontendName string) *maps.MapFileState {
+	f := m.getMapFile(frontendName, MAP_LISTENER_EXACT_MATCH)
 	f.PlainValues = true
 	return f
 }
 
-func (m *MapsStorageDefault) GetListenerWildcardMatchMapFile() *maps.MapFileState {
-	f := m.getMapFile("", MAP_LISTENER_WILDCARD_MATCH)
+func (m *MapsStorageDefault) GetListenerWildcardMatchMapFile(frontendName string) *maps.MapFileState {
+	f := m.getMapFile(frontendName, MAP_LISTENER_WILDCARD_MATCH)
 	f.PlainValues = true
 	return f
 }
 
-func (m *MapsStorageDefault) GetListenerRouteExactMatchMapFile() *maps.MapFileState {
-	f := m.getMapFile("", MAP_LISTENER_ROUTE_EXACT_MATCH)
+func (m *MapsStorageDefault) GetListenerRouteExactMatchMapFile(frontendName string) *maps.MapFileState {
+	f := m.getMapFile(frontendName, MAP_LISTENER_ROUTE_EXACT_MATCH)
 	f.PlainValues = true
 	return f
 }
 
-func (m *MapsStorageDefault) GetListenerRouteWildcardMatchMapFile() *maps.MapFileState {
-	f := m.getMapFile("", MAP_LISTENER_ROUTE_WILDCARD_MATCH)
+func (m *MapsStorageDefault) GetListenerRouteWildcardMatchMapFile(frontendName string) *maps.MapFileState {
+	f := m.getMapFile(frontendName, MAP_LISTENER_ROUTE_WILDCARD_MATCH)
 	f.PlainValues = true
 	return f
 }

@@ -62,7 +62,7 @@ func (b *HaproxyConfMgrImpl) onUpsertedVirtualListener(vlName string, vListener 
 
 func (b *HaproxyConfMgrImpl) onDeletedVirtualListener(vlName string, vListener *tree.VirtualListener) error {
 	b.logVirtualListenerUpdate("deleted", vlName)
-	b.clearListenerMaps(vListener)
+	b.clearListenerMaps(vlName, vListener)
 	err := b.deleteFrontendForVirtualListener(vlName)
 	return err
 }
@@ -94,7 +94,7 @@ func (b *HaproxyConfMgrImpl) upsertFrontends(vListenerName string, vListener *tr
 			logging.LogAttrError(err))
 	}
 
-	b.fillListenerMaps(vListener)
+	b.fillListenerMaps(vListenerName, vListener)
 
 	return nil
 }
@@ -102,11 +102,12 @@ func (b *HaproxyConfMgrImpl) upsertFrontends(vListenerName string, vListener *tr
 // clearListenerMaps removes all entries from MAP_LISTENER_EXACT_MATCH, MAP_LISTENER_WILDCARD_MATCH,
 // MAP_LISTENER_ROUTE_EXACT_MATCH, and MAP_LISTENER_ROUTE_WILDCARD_MATCH
 // that were added for each listener in the VirtualListener.
-func (b *HaproxyConfMgrImpl) clearListenerMaps(vListener *tree.VirtualListener) {
-	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile()
-	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile()
-	listenerRouteExactMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile()
-	listenerRouteWildcardMatchMap := b.params.mapsStorage.GetListenerRouteWildcardMatchMapFile()
+func (b *HaproxyConfMgrImpl) clearListenerMaps(vlName string, vListener *tree.VirtualListener) {
+	frontendName := b.getFrontendName(vlName)
+	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile(frontendName)
+	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile(frontendName)
+	listenerRouteExactMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
+	listenerRouteWildcardMatchMap := b.params.mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
 
 	for _, l := range vListener.Listeners {
 		listenerKeyName := l.Key().String()
@@ -138,9 +139,10 @@ func (b *HaproxyConfMgrImpl) clearListenerMaps(vListener *tree.VirtualListener) 
 //
 //	key:   hostname with the leading "*" stripped (e.g. ".example.com"), for use with map_end
 //	value: listener name built as per NewListenerKey(gw, listener).Name  →  "<gateway-name>_<listener-name>"
-func (b *HaproxyConfMgrImpl) fillListenerMaps(vListener *tree.VirtualListener) {
-	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile()
-	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile()
+func (b *HaproxyConfMgrImpl) fillListenerMaps(vListenerName string, vListener *tree.VirtualListener) {
+	frontendName := b.getFrontendName(vListenerName)
+	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile(frontendName)
+	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile(frontendName)
 
 	for _, l := range vListener.Listeners {
 		hostname := l.K8sResource.Hostname
@@ -195,10 +197,10 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	pathRegexMap := b.params.mapsStorage.GetPathRegexMapFile(frontendName)
 	sniMap := b.params.mapsStorage.GetSniMapFile(frontendName)
 
-	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile()
-	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile()
-	listenerRouteExactMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile()
-	listenerRouteWildcardMatchMap := b.params.mapsStorage.GetListenerRouteWildcardMatchMapFile()
+	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile(frontendName)
+	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile(frontendName)
+	listenerRouteExactMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
+	listenerRouteWildcardMatchMap := b.params.mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
 
 	var tcpRules []*models.TCPRequestRule
 	var httpRules []*models.HTTPRequestRule
@@ -367,6 +369,10 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				VarExpr:  "var(txn.hostreversed),map_beg(" + listenerWildcardMatchMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "listener wildcard match selection"},
 			},
+			// {
+			// 	Type:      "lua",
+			// 	LuaAction: "find_listener_route",
+			// },
 			// -------------------
 			// Look for route name: selected_listener_route
 			{

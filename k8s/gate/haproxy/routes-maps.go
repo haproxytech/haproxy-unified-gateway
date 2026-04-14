@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"strings"
 
+	k8stypes "k8s.io/apimachinery/pkg/types"
+
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/metrics"
@@ -62,10 +64,6 @@ func (b *RouteMgrImpl) fillMaps() {
 // Where listener-name is "<ns>/<gateway>_<listener>" and route-name is "<ns>/<name>".
 func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 	controllerStore := b.topManager.controllerStore
-	mapsStorage := b.topManager.params.mapsStorage
-	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile()
-	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile()
-
 	empty := map[maps.EntryKey]map[string]*maps.WeightedValue{}
 
 	// Pre-loop: clear old state for routes that have been updated.
@@ -73,93 +71,117 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 		if route.TreeStatus.OldTreeResource == nil {
 			continue
 		}
-		oldRoute := route.TreeStatus.OldTreeResource
-		for _, listener := range b.listenersForRoute(oldRoute) {
-			if listener.VirtualListenerName == "" {
-				continue
-			}
-			listenerKeyName := listener.Key().String()
-			routeOrigin := maps.ResourceOrigin{
-				Namespace: routeKey.Namespace,
-				Name:      listenerKeyName + "/" + routeKey.Name,
-			}
-			listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-			listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		for _, listener := range b.listenersForRoute(route.TreeStatus.OldTreeResource) {
+			b.clearHTTPRouteListenerMaps(routeKey, listener, empty)
 		}
 	}
 
 	// Main loop: fill for the current state of each route.
 	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
 		for _, listener := range b.listenersForRoute(route) {
-			if listener.VirtualListenerName == "" {
-				continue
-			}
-			listenerKeyName := listener.Key().String()
-			routeOrigin := maps.ResourceOrigin{
-				Namespace: routeKey.Namespace,
-				Name:      listenerKeyName + "/" + routeKey.Name,
-			}
-
-			switch route.TreeStatus.Status {
-			case store.StatusUnchanged:
-				continue
-			case store.StatusDeleted:
-				listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-				listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
-				continue
-			}
-
-			// Only fill if the route is actually accepted by this listener.
-			// A listener that rejects the route kind (e.g. TLS listener receiving an
-			// HTTPRoute) will not have the route in its AttachedRoutes.
-			if _, accepted := listener.AttachedRoutes[routeKey]; !accepted {
-				listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-				listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
-				continue
-			}
-
-			// StatusUpserted — only fill for valid routes.
-			if !route.Valid {
-				listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-				listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
-				continue
-			}
-
-			routeValueName := listenerKeyName + "/" + routeKey.String()
-			exactEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
-			wildcardEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
-
-			if len(route.K8sResource.Spec.Hostnames) == 0 {
-				// No hostnames = catch-all: add a wildcard entry that prefixes any reversed host.
-				// The key "<listener>/." is a prefix of every "<listener>/.<reversed-host>" produced
-				// by lua.reverse_host, so map_beg() will match any incoming host.
-				entryKey := maps.EntryKey{Hostname: listenerKeyName + "/."}
-				wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
-					routeValueName: {ValueName: routeValueName},
-				}
-			}
-
-			for _, h := range route.K8sResource.Spec.Hostnames {
-				hostname := string(h)
-				if isDomainWildcard(hostname) {
-					wildcardSuffix := removeDomainWildcard(hostname)
-					reversedKey := reverseDomain(wildcardSuffix)
-					entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + reversedKey}
-					wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
-						routeValueName: {ValueName: routeValueName},
-					}
-				} else {
-					entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + hostname}
-					exactEntries[entryKey] = map[string]*maps.WeightedValue{
-						routeValueName: {ValueName: routeValueName},
-					}
-				}
-			}
-
-			listenerRouteExactMap.ApplyRoute(routeOrigin, exactEntries)
-			listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
+			b.applyHTTPRouteListenerMaps(routeKey, route, listener, empty)
 		}
 	}
+}
+
+func (b *RouteMgrImpl) clearHTTPRouteListenerMaps(
+	routeKey k8stypes.NamespacedName,
+	listener *tree.Listener,
+	empty map[maps.EntryKey]map[string]*maps.WeightedValue,
+) {
+	if listener.VirtualListenerName == "" {
+		return
+	}
+	mapsStorage := b.topManager.params.mapsStorage
+	frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
+	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
+	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
+	listenerKeyName := listener.Key().String()
+	routeOrigin := maps.ResourceOrigin{
+		Namespace: routeKey.Namespace,
+		Name:      listenerKeyName + "/" + routeKey.Name,
+	}
+	listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+	listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+}
+
+func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
+	routeKey k8stypes.NamespacedName,
+	route *tree.HTTPRoute,
+	listener *tree.Listener,
+	empty map[maps.EntryKey]map[string]*maps.WeightedValue,
+) {
+	if listener.VirtualListenerName == "" {
+		return
+	}
+	mapsStorage := b.topManager.params.mapsStorage
+	frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
+	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
+	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
+	listenerKeyName := listener.Key().String()
+	routeOrigin := maps.ResourceOrigin{
+		Namespace: routeKey.Namespace,
+		Name:      listenerKeyName + "/" + routeKey.Name,
+	}
+
+	switch route.TreeStatus.Status {
+	case store.StatusUnchanged:
+		return
+	case store.StatusDeleted:
+		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		return
+	}
+
+	// Only fill if the route is actually accepted by this listener.
+	// A listener that rejects the route kind (e.g. TLS listener receiving an
+	// HTTPRoute) will not have the route in its AttachedRoutes.
+	if _, accepted := listener.AttachedRoutes[routeKey]; !accepted {
+		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		return
+	}
+
+	// StatusUpserted — only fill for valid routes.
+	if !route.Valid {
+		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		return
+	}
+
+	routeValueName := listenerKeyName + "/" + routeKey.String()
+	exactEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+	wildcardEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+
+	if len(route.K8sResource.Spec.Hostnames) == 0 {
+		// No hostnames = catch-all: add a wildcard entry that prefixes any reversed host.
+		// The key "<listener>/." is a prefix of every "<listener>/.<reversed-host>" produced
+		// by lua.reverse_host, so map_beg() will match any incoming host.
+		entryKey := maps.EntryKey{Hostname: listenerKeyName + "/."}
+		wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
+			routeValueName: {ValueName: routeValueName},
+		}
+	}
+
+	for _, h := range route.K8sResource.Spec.Hostnames {
+		hostname := string(h)
+		if isDomainWildcard(hostname) {
+			wildcardSuffix := removeDomainWildcard(hostname)
+			reversedKey := reverseDomain(wildcardSuffix)
+			entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + reversedKey}
+			wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
+				routeValueName: {ValueName: routeValueName},
+			}
+		} else {
+			entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + hostname}
+			exactEntries[entryKey] = map[string]*maps.WeightedValue{
+				routeValueName: {ValueName: routeValueName},
+			}
+		}
+	}
+
+	listenerRouteExactMap.ApplyRoute(routeOrigin, exactEntries)
+	listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
 }
 
 // listenersForRoute returns all gateway Listener objects referenced by the route's parentRefs,
@@ -251,10 +273,6 @@ func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
 // for TLSRoutes, mirroring the same logic as fillListenerRouteMapsForHTTPRoutes.
 func (b *RouteMgrImpl) fillListenerRouteMapsForTLSRoutes() {
 	controllerStore := b.topManager.controllerStore
-	mapsStorage := b.topManager.params.mapsStorage
-	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile()
-	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile()
-
 	empty := map[maps.EntryKey]map[string]*maps.WeightedValue{}
 
 	// Pre-loop: clear old state for routes that have been updated.
@@ -262,86 +280,110 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForTLSRoutes() {
 		if route.TreeStatus.OldTreeResource == nil {
 			continue
 		}
-		oldRoute := route.TreeStatus.OldTreeResource
-		for _, listener := range b.listenersForTLSRoute(oldRoute) {
-			if listener.VirtualListenerName == "" {
-				continue
-			}
-			listenerKeyName := listener.Key().String()
-			routeOrigin := maps.ResourceOrigin{
-				Namespace: routeKey.Namespace,
-				Name:      listenerKeyName + "/" + routeKey.Name,
-			}
-			listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-			listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		for _, listener := range b.listenersForTLSRoute(route.TreeStatus.OldTreeResource) {
+			b.clearTLSRouteListenerMaps(routeKey, listener, empty)
 		}
 	}
 
 	// Main loop: fill for the current state of each route.
 	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
 		for _, listener := range b.listenersForTLSRoute(route) {
-			if listener.VirtualListenerName == "" {
-				continue
-			}
-			listenerKeyName := listener.Key().String()
-			routeOrigin := maps.ResourceOrigin{
-				Namespace: routeKey.Namespace,
-				Name:      listenerKeyName + "/" + routeKey.Name,
-			}
-
-			switch route.TreeStatus.Status {
-			case store.StatusUnchanged:
-				continue
-			case store.StatusDeleted:
-				listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-				listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
-				continue
-			}
-
-			if _, accepted := listener.AttachedRoutes[routeKey]; !accepted {
-				listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-				listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
-				continue
-			}
-
-			if !route.Valid {
-				listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-				listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
-				continue
-			}
-
-			routeValueName := listenerKeyName + "/" + routeKey.String()
-			exactEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
-			wildcardEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
-
-			if len(route.K8sResource.Spec.Hostnames) == 0 {
-				entryKey := maps.EntryKey{Hostname: listenerKeyName + "/."}
-				wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
-					routeValueName: {ValueName: routeValueName},
-				}
-			}
-
-			for _, h := range route.K8sResource.Spec.Hostnames {
-				hostname := string(h)
-				if isDomainWildcard(hostname) {
-					wildcardSuffix := removeDomainWildcard(hostname)
-					reversedKey := reverseDomain(wildcardSuffix)
-					entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + reversedKey}
-					wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
-						routeValueName: {ValueName: routeValueName},
-					}
-				} else {
-					entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + hostname}
-					exactEntries[entryKey] = map[string]*maps.WeightedValue{
-						routeValueName: {ValueName: routeValueName},
-					}
-				}
-			}
-
-			listenerRouteExactMap.ApplyRoute(routeOrigin, exactEntries)
-			listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
+			b.applyTLSRouteListenerMaps(routeKey, route, listener, empty)
 		}
 	}
+}
+
+func (b *RouteMgrImpl) clearTLSRouteListenerMaps(
+	routeKey k8stypes.NamespacedName,
+	listener *tree.Listener,
+	empty map[maps.EntryKey]map[string]*maps.WeightedValue,
+) {
+	if listener.VirtualListenerName == "" {
+		return
+	}
+	mapsStorage := b.topManager.params.mapsStorage
+	frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
+	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
+	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
+	listenerKeyName := listener.Key().String()
+	routeOrigin := maps.ResourceOrigin{
+		Namespace: routeKey.Namespace,
+		Name:      listenerKeyName + "/" + routeKey.Name,
+	}
+	listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+	listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+}
+
+func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
+	routeKey k8stypes.NamespacedName,
+	route *tree.TLSRoute,
+	listener *tree.Listener,
+	empty map[maps.EntryKey]map[string]*maps.WeightedValue,
+) {
+	if listener.VirtualListenerName == "" {
+		return
+	}
+	mapsStorage := b.topManager.params.mapsStorage
+	frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
+	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
+	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
+	listenerKeyName := listener.Key().String()
+	routeOrigin := maps.ResourceOrigin{
+		Namespace: routeKey.Namespace,
+		Name:      listenerKeyName + "/" + routeKey.Name,
+	}
+
+	switch route.TreeStatus.Status {
+	case store.StatusUnchanged:
+		return
+	case store.StatusDeleted:
+		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		return
+	}
+
+	if _, accepted := listener.AttachedRoutes[routeKey]; !accepted {
+		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		return
+	}
+
+	if !route.Valid {
+		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		return
+	}
+
+	routeValueName := listenerKeyName + "/" + routeKey.String()
+	exactEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+	wildcardEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
+
+	if len(route.K8sResource.Spec.Hostnames) == 0 {
+		entryKey := maps.EntryKey{Hostname: listenerKeyName + "/."}
+		wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
+			routeValueName: {ValueName: routeValueName},
+		}
+	}
+
+	for _, h := range route.K8sResource.Spec.Hostnames {
+		hostname := string(h)
+		if isDomainWildcard(hostname) {
+			wildcardSuffix := removeDomainWildcard(hostname)
+			reversedKey := reverseDomain(wildcardSuffix)
+			entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + reversedKey}
+			wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
+				routeValueName: {ValueName: routeValueName},
+			}
+		} else {
+			entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + hostname}
+			exactEntries[entryKey] = map[string]*maps.WeightedValue{
+				routeValueName: {ValueName: routeValueName},
+			}
+		}
+	}
+
+	listenerRouteExactMap.ApplyRoute(routeOrigin, exactEntries)
+	listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
 }
 
 // listenersForTLSRoute returns all gateway Listener objects referenced by the TLSRoute's parentRefs,
