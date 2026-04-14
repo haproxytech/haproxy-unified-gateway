@@ -503,6 +503,29 @@ func enqueueHTTPRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.Extr
 	}
 }
 
+// enqueueGatewayForReferenceGrant returns a handler.EventHandler that enqueues all Gateways
+// that have a cross-namespace backendRef pointing to the changed ReferenceGrant's namespace.
+// A ReferenceGrant lives in the *target* namespace (the namespace of the referenced resource),
+// so only routes whose backendRef.Namespace matches the grant's namespace are affected.
+func enqueueGatewayForReferenceGrant(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctx context.Context, o client.Object) []reconcile.Request {
+		gatewayList := &gatewayv1.GatewayList{}
+		if err := ctrlclient.List(ctx, gatewayList); err != nil {
+			return nil
+		}
+		var requests []reconcile.Request
+		for _, gateway := range gatewayList.Items {
+			if gatewayHasCrossNamespaceRefTo(gateway, o.GetNamespace()) {
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: gateway.Namespace,
+					Name:      gateway.Name,
+				}})
+			}
+		}
+		return requests
+	}
+}
+
 // httpRouteHasCrossNamespaceRefTo reports whether any backendRef in the route targets
 // a resource in targetNamespace from a different namespace.
 func httpRouteHasCrossNamespaceRefTo(route gatewayv1.HTTPRoute, targetNamespace string) bool {
@@ -510,6 +533,25 @@ func httpRouteHasCrossNamespaceRefTo(route gatewayv1.HTTPRoute, targetNamespace 
 		for _, backendRef := range rule.BackendRefs {
 			if backendRef.Namespace != nil && string(*backendRef.Namespace) == targetNamespace &&
 				targetNamespace != route.Namespace {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// gatewayHasCrossNamespaceRefTo reports whether any certificateRef in the gateway targets
+// a resource in targetNamespace from a different namespace.
+func gatewayHasCrossNamespaceRefTo(gateway gatewayv1.Gateway, targetNamespace string) bool {
+	for _, listener := range gateway.Spec.Listeners {
+		tls := listener.TLS
+		if tls == nil {
+			continue
+		}
+		for _, certificateRefs := range tls.CertificateRefs {
+			nsNamedCertificateRefs := utils.GetNamespacedName(certificateRefs.Name, certificateRefs.Namespace, gateway.GetNamespace())
+			if nsNamedCertificateRefs.Namespace == targetNamespace &&
+				targetNamespace != gateway.Namespace {
 				return true
 			}
 		}

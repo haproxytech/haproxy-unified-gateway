@@ -27,6 +27,7 @@ var _ Builder = &GatewayBuilderImpl{}
 type GatewayBuilderImpl struct {
 	certStorage storage.CertificateStorage
 	*ControllerStore
+	referenceGrantManager *ReferenceGrantManager
 }
 
 type listenerConflictCondition struct {
@@ -45,12 +46,14 @@ type listenerConflict map[client.ObjectKey]listenerConflictCondition // map[list
 type GatewayBuilderParams struct {
 	storage.CertificateStorage
 	*ControllerStore
+	*ReferenceGrantManager
 }
 
 func NewGatewayBuilder(params GatewayBuilderParams) Builder {
 	return &GatewayBuilderImpl{
-		ControllerStore: params.ControllerStore,
-		certStorage:     params.CertificateStorage,
+		ControllerStore:       params.ControllerStore,
+		certStorage:           params.CertificateStorage,
+		referenceGrantManager: params.ReferenceGrantManager,
 	}
 }
 
@@ -181,7 +184,7 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
 		case gatewayv1.HTTPSProtocolType:
 			listener.checkRouteGroupKind(treeGw, gateSupportedRouteKindsByProtocol)
-			listener.checkCertificateRefs(treeGw, b.GateTree.Secrets)
+			listener.checkCertificateRefs(treeGw, b.GateTree.Secrets, b.referenceGrantManager)
 			listener.checkProtocol(gateSupportedRouteKindsByProtocol)
 			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
 		default:

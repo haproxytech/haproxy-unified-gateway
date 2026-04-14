@@ -236,7 +236,7 @@ func (l *Listener) checkProtocol(gateSupportedRouteKinds map[gatewayv1.ProtocolT
 	}
 }
 
-func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.NamespacedName]*Secret) {
+func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.NamespacedName]*Secret, referenceGrantManager *ReferenceGrantManager) {
 	if !treeGw.Valid {
 		l.CheckSecret = CheckResult{}
 		return
@@ -279,7 +279,17 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 			}
 			continue
 		}
-
+		isAccessGranted := referenceGrantManager.IsAccessGranted(
+			gatewayv1.GroupName, "Gateway", treeGw.K8sResource.GetNamespace(),
+			"", "Secret", treeSecret.K8sResource.GetNamespace(), treeSecret.K8sResource.GetName())
+		if !isAccessGranted {
+			msg := fmt.Sprintf("Secret reference %s/%s is not granted for listener in gateway %s/%s", nsName.Namespace, nsName.Name, treeGw.K8sResource.GetNamespace(), treeGw.K8sResource.GetName())
+			l.CheckSecret = CheckResult{
+				Valid:      false,
+				Conditions: conditions.NewListenerResolvedRefListenerRefNotPermitted(msg),
+			}
+			continue
+		}
 		certPEM := treeSecret.K8sResource.Data[v1.TLSCertKey]
 		keyPEM := treeSecret.K8sResource.Data[v1.TLSPrivateKeyKey]
 

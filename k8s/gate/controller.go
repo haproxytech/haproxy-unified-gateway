@@ -157,23 +157,23 @@ func Add(
 	}
 
 	clusterStore := &store.ClusterStore{
-		GatewayClasses: make(map[types.NamespacedName]*gatewayv1.GatewayClass),
-		Gateways:       make(map[types.NamespacedName]*gatewayv1.Gateway),
-		HTTPRoutes:     make(map[types.NamespacedName]*gatewayv1.HTTPRoute),
-		TLSRoutes:      make(map[types.NamespacedName]*gatewayv1alpha2.TLSRoute),
-		Services:       make(map[types.NamespacedName]*apiv1.Service),
-		Namespaces:     make(map[types.NamespacedName]*apiv1.Namespace),
-		Secrets:        make(map[types.NamespacedName]*apiv1.Secret),
-		ConfigMaps:     make(map[types.NamespacedName]*apiv1.ConfigMap),
-		GatewayAPICRDs: make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
-		HugGates:       make(map[types.NamespacedName]*v3.HugGate),
-		HugConfs:       make(map[types.NamespacedName]*v3.HugConf),
+		GatewayClasses:  make(map[types.NamespacedName]*gatewayv1.GatewayClass),
+		Gateways:        make(map[types.NamespacedName]*gatewayv1.Gateway),
+		HTTPRoutes:      make(map[types.NamespacedName]*gatewayv1.HTTPRoute),
+		TLSRoutes:       make(map[types.NamespacedName]*gatewayv1alpha2.TLSRoute),
+		Services:        make(map[types.NamespacedName]*apiv1.Service),
+		Namespaces:      make(map[types.NamespacedName]*apiv1.Namespace),
+		Secrets:         make(map[types.NamespacedName]*apiv1.Secret),
+		ConfigMaps:      make(map[types.NamespacedName]*apiv1.ConfigMap),
+		GatewayAPICRDs:  make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
+		HugGates:        make(map[types.NamespacedName]*v3.HugGate),
+		HugConfs:        make(map[types.NamespacedName]*v3.HugConf),
 		EndpointSlices:  make(map[types.NamespacedName]*discoveryV1.EndpointSlice),
 		ReferenceGrants: make(map[types.NamespacedName]*gatewayv1.ReferenceGrant),
 		BackendCRs:      make(map[types.NamespacedName]*v3.Backend),
-		GlobalCRs:      make(map[types.NamespacedName]*v3.Global),
-		DefaultsCRs:    make(map[types.NamespacedName]*v3.Defaults),
-		Updates:        store.NewClusterUpdates(),
+		GlobalCRs:       make(map[types.NamespacedName]*v3.Global),
+		DefaultsCRs:     make(map[types.NamespacedName]*v3.Defaults),
+		Updates:         store.NewClusterUpdates(),
 	}
 
 	var certificateStorage storage.CertificateStorage
@@ -336,6 +336,15 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 							k8spredicate.NewPredicateFuncs(func(obj ctrlruntimeclient.Object) bool {
 								return obj.GetLabels()[cfg.HugServiceLabelKey] == cfg.HugServiceLabelVal
 							}),
+						),
+					},
+					// Watch ReferenceGrants — cross-namespace certificateRefs access may change
+					{
+						watchSource: objtypes.ObjectTypeRefGrant,
+						enqueueFunc: enqueueGatewayForReferenceGrant,
+						predicate: k8spredicate.And(
+							k8spredicate.ResourceVersionChangedPredicate{},
+							predicate.NewNamespacePredicate(cfg.Namespaces),
 						),
 					},
 				},

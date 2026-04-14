@@ -49,8 +49,9 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 	// --------------
 	// Gateway
 	gatewayBuilder := tree.NewGatewayBuilder(tree.GatewayBuilderParams{
-		ControllerStore:    controllerStore,
-		CertificateStorage: cfg.CertificateStorage,
+		ControllerStore:       controllerStore,
+		CertificateStorage:    cfg.CertificateStorage,
+		ReferenceGrantManager: referenceGrantManager,
 	})
 
 	// VirtualListener

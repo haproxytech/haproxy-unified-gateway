@@ -55,6 +55,17 @@ func NewListenerResolvedRefOK() generic.Conditions {
 	}
 }
 
+func NewListenerResolvedRefListenerRefNotPermitted(msg string) generic.Conditions {
+	return generic.Conditions{
+		generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs): {
+			Type:    generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(gatewayv1.ListenerReasonRefNotPermitted),
+			Message: msg,
+		},
+	}
+}
+
 // ---------------------------------------------------------
 // ListenerConditionProgrammed
 

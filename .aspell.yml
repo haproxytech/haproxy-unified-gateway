@@ -119,3 +119,4 @@ allowed:
   - iowriter
   - subresource
   - GVK
+  - Impl
