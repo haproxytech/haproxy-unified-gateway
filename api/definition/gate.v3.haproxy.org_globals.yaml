@@ -173,7 +173,7 @@ spec:
                       type: boolean
                   type: object
                 description:
-                  description: description
+                  description: Text that describes the instance
                   type: string
                 device_atlas_options:
                   description: device atlas options
@@ -224,7 +224,7 @@ spec:
                         type: object
                       type: array
                     resetenv:
-                      description: resetenv
+                      description: Remove all environment variables except the ones specified
                       type: string
                     setenv:
                       description: set envs
@@ -250,7 +250,7 @@ spec:
                         type: object
                       type: array
                     unsetenv:
-                      description: unsetenv
+                      description: Removes environment variables specified in arguments
                       type: string
                   type: object
                 expose_deprecated_directives:
@@ -281,7 +281,7 @@ spec:
                   type: object
                 force_cfg_parser_pause:
                   description: |-
-                    force cfg parser pause
+                    Pause the configuration parser to simulate long reloads
                     Minimum: 0
                   format: int64
                   minimum: 0
@@ -292,7 +292,7 @@ spec:
                   type: integer
                 grace:
                   description: |-
-                    grace
+                    Defines a delay between SIGUSR1 and real soft-stop
                     Minimum: 0
                   format: int64
                   minimum: 0
@@ -416,7 +416,7 @@ spec:
                       type: integer
                   type: object
                 http_err_codes:
-                  description: http err codes
+                  description: Replace, reduce or extend the list of status codes that define an error
                   items:
                     description: |-
                       HTTPCodes HTTP codes
@@ -435,7 +435,7 @@ spec:
                     type: object
                   type: array
                 http_fail_codes:
-                  description: http fail codes
+                  description: Replace, reduce or extend the list of status codes that define a failure
                   items:
                     description: |-
                       HTTPCodes HTTP codes
@@ -654,7 +654,7 @@ spec:
                   x-kubernetes-preserve-unknown-fields: true
                 mworker_max_reloads:
                   description: |-
-                    mworker max reloads
+                    The number of times a worker can survive a reload
                     Minimum: 0
                   format: int64
                   minimum: 0
@@ -664,7 +664,7 @@ spec:
                   format: int64
                   type: integer
                 no_quic:
-                  description: no quic
+                  description: Disable the use of the QUIC protocol
                   type: boolean
                 node:
                   description: node
@@ -743,7 +743,7 @@ spec:
                       format: int64
                       type: integer
                     maxcomprate:
-                      description: maxcomprate
+                      description: Maximum per-process input compression rate
                       format: int64
                       type: integer
                     maxconn:
@@ -751,7 +751,7 @@ spec:
                       format: int64
                       type: integer
                     maxconnrate:
-                      description: maxconnrate
+                      description: Maximum per-process number of concurrent connections
                       format: int64
                       type: integer
                     maxpipes:
@@ -759,37 +759,40 @@ spec:
                       format: int64
                       type: integer
                     maxsessrate:
-                      description: maxsessrate
+                      description: Maximum per-process number of sessions per second
                       format: int64
                       type: integer
                     maxzlibmem:
-                      description: maxzlibmem
+                      description: Maximum amount of RAM in megabytes per process usable by the zlib
                       format: int64
                       type: integer
                     noepoll:
-                      description: noepoll
+                      description: Disable the use of the "epoll" event polling system on Linux
                       type: boolean
                     noevports:
-                      description: noevports
+                      description: Disable the use of the event ports event polling system on SunOS system derived from Solaris 10 and later
                       type: boolean
                     nogetaddrinfo:
-                      description: nogetaddrinfo
+                      description: Disable the use of getaddrinfo for name resolving
                       type: boolean
                     nokqueue:
-                      description: nokqueue
+                      description: Disable the use of the "kqueue" event polling system on BSD
+                      type: boolean
+                    noktls:
+                      description: Disables the use of ktls. It is equivalent to the command line argument "-dT"
                       type: boolean
                     nopoll:
-                      description: nopoll
+                      description: Disable the use of the "poll" event polling system
                       type: boolean
                     noreuseport:
                       description: noreuseport
                       type: boolean
                     nosplice:
-                      description: nosplice
+                      description: Disable the use of kernel tcp splicing between sockets on Linux
                       type: boolean
                     profiling_memory:
                       description: |-
-                        profiling memory
+                        Enable or disables per-function memory profiling
                         Enum: ["enabled","disabled"]
                       enum:
                         - enabled
@@ -797,7 +800,7 @@ spec:
                       type: string
                     profiling_tasks:
                       description: |-
-                        profiling tasks
+                        Enable or disables per-task CPU profiling
                         Enum: ["auto","enabled","disabled"]
                       enum:
                         - auto
@@ -817,7 +820,7 @@ spec:
                       pattern: ^[^\s]+$
                       type: string
                     spread_checks:
-                      description: spread checks
+                      description: Add some randomness in the check interval
                       format: int64
                       type: integer
                     thread_hard_limit:
@@ -876,6 +879,9 @@ spec:
                         type: string
                       ca_verify_file:
                         description: ca verify file
+                        type: string
+                      cc:
+                        description: cc
                         type: string
                       ciphers:
                         description: ciphers
@@ -963,6 +969,17 @@ spec:
                         type: integer
                       interface:
                         description: interface
+                        type: string
+                      ktls:
+                        description: |-
+                          ktls
+                          Enum: ["on","off"]
+                        enum:
+                          - "on"
+                          - "off"
+                        type: string
+                      label:
+                        description: label
                         type: string
                       level:
                         description: |-
@@ -1106,7 +1123,7 @@ spec:
                         type: string
                       ssl_certificate:
                         description: |-
-                          ssl certificate
+                          All of the certificates delimited by ':' as mentioned as a crt on the bind line.
                           Pattern: ^[^\s]+$
                         pattern: ^[^\s]+$
                         type: string
@@ -1143,6 +1160,12 @@ spec:
                       strict_sni:
                         description: strict sni
                         type: boolean
+                      tcp_md5sig:
+                        description: |-
+                          tcp md5sig
+                          Pattern: ^[^\s]+$
+                        pattern: ^[^\s]+$
+                        type: string
                       tcp_user_timeout:
                         description: tcp user timeout
                         format: int64
@@ -1280,6 +1303,19 @@ spec:
                     Pattern: ^[^\s]+$
                   pattern: ^[^\s]+$
                   type: string
+                shm_stats_file:
+                  description: |-
+                    Shared Memory Statistics File (EXPERIMENTAL)
+                    Pattern: ^[^\s]+$
+                  pattern: ^[^\s]+$
+                  type: string
+                shm_stats_file_max_objects:
+                  description: |-
+                    Maximum number of objects the shared memory used for shared counters will be able to store per thread group. (EXPERIMENTAL)
+                    Minimum: 0
+                  format: int64
+                  minimum: 0
+                  type: integer
                 ssl_options:
                   description: ssl options
                   properties:
@@ -1363,11 +1399,11 @@ spec:
                       description: load extra files
                       type: string
                     maxsslconn:
-                      description: maxsslconn
+                      description: Maximum per-process number of concurrent SSL connections
                       format: int64
                       type: integer
                     maxsslrate:
-                      description: maxsslrate
+                      description: Maximum per-process number of SSL sessions per second
                       format: int64
                       type: integer
                     mode_async:
@@ -1377,6 +1413,9 @@ spec:
                       enum:
                         - enabled
                         - disabled
+                      type: string
+                    passphrase_cmd:
+                      description: passphrase cmd
                       type: string
                     propquery:
                       description: propquery
@@ -1465,7 +1504,7 @@ spec:
                       type: integer
                     bufsize_small:
                       description: |-
-                        bufsize small
+                        Size of small buffers (for memory-restrained situations)
                         Minimum: 1
                       format: int64
                       minimum: 1
@@ -1573,7 +1612,7 @@ spec:
                   properties:
                     applet_zero_copy_forwarding:
                       description: |-
-                        applet zero copy forwarding
+                        Enables of disabled the zero-copy forwarding of data for the applets
                         Enum: ["enabled","disabled"]
                       enum:
                         - enabled
@@ -1625,7 +1664,7 @@ spec:
                       type: integer
                     h1_zero_copy_fwd_recv:
                       description: |-
-                        h1 zero copy fwd recv
+                        enable or disable the zero-copy receives of data for the HTTP/1 multiplexer
                         Enum: ["enabled","disabled"]
                       enum:
                         - enabled
@@ -1633,46 +1672,46 @@ spec:
                       type: string
                     h1_zero_copy_fwd_send:
                       description: |-
-                        h1 zero copy fwd send
+                        enable or disable the zero-copy sends of data for the HTTP/1 multiplexer
                         Enum: ["enabled","disabled"]
                       enum:
                         - enabled
                         - disabled
                       type: string
                     h2_be_glitches_threshold:
-                      description: h2 be glitches threshold
+                      description: Automatically kill a backend connection past a number of glitches
                       format: int64
                       type: integer
                     h2_be_initial_window_size:
-                      description: h2 be initial window size
+                      description: Initial window size for outgoing connections
                       format: int64
                       type: integer
                     h2_be_max_concurrent_streams:
-                      description: h2 be max concurrent streams
+                      description: Maximum number of concurrent streams per outgoing connection
                       format: int64
                       type: integer
                     h2_be_rxbuf:
-                      description: h2 be rxbuf
+                      description: HTTP/2 receive buffer size for outgoing connections
                       format: int64
                       type: integer
                     h2_fe_glitches_threshold:
-                      description: h2 fe glitches threshold
+                      description: Automatically kill a frontend connection past a number of glitches
                       format: int64
                       type: integer
                     h2_fe_initial_window_size:
-                      description: h2 fe initial window size
+                      description: Initial window size for incoming connections
                       format: int64
                       type: integer
                     h2_fe_max_concurrent_streams:
-                      description: h2 fe max concurrent streams
+                      description: Maximum number of concurrent streams per incoming connection
                       format: int64
                       type: integer
                     h2_fe_max_total_streams:
-                      description: h2 fe max total streams
+                      description: Maximum number of total streams processed per incoming HTTP/2 connection
                       format: int64
                       type: integer
                     h2_fe_rxbuf:
-                      description: h2 fe rxbuf
+                      description: HTTP/2 receive buffer size for incoming connections
                       format: int64
                       type: integer
                     h2_header_table_size:
@@ -1696,7 +1735,7 @@ spec:
                       type: integer
                     h2_zero_copy_fwd_send:
                       description: |-
-                        h2 zero copy fwd send
+                        enable or disable the zero-copy sends of data for the HTTP/2 multiplexer
                         Enum: ["enabled","disabled"]
                       enum:
                         - enabled
@@ -1793,7 +1832,7 @@ spec:
                       format: int64
                       type: integer
                     peers_max_updates_at_once:
-                      description: peers max updates at once
+                      description: Maximum number of stick-table updates at once
                       format: int64
                       type: integer
                     pool_high_fd_ratio:
@@ -1806,7 +1845,7 @@ spec:
                       type: integer
                     pt_zero_copy_forwarding:
                       description: |-
-                        pt zero copy forwarding
+                        enable or disable the zero-copy forwarding of data for the pass-through multiplexer
                         Enum: ["enabled","disabled"]
                       enum:
                         - enabled
@@ -1814,7 +1853,7 @@ spec:
                       type: string
                     renice_runtime:
                       description: |-
-                        renice runtime
+                        Scheduling priority applied after the configuration parsing
                         Maximum: 19
                         Minimum: -20
                       format: int64
@@ -1823,7 +1862,7 @@ spec:
                       type: integer
                     renice_startup:
                       description: |-
-                        renice startup
+                        Scheduling priority applied before the rest of the configuration
                         Maximum: 19
                         Minimum: -20
                       format: int64
@@ -1831,7 +1870,7 @@ spec:
                       minimum: -20
                       type: integer
                     ring_queues:
-                      description: ring queues
+                      description: Number of write queues in front of ring buffers
                       format: int64
                       type: integer
                     runqueue_depth:
@@ -1888,7 +1927,7 @@ spec:
                       type: integer
                     reorder_ratio:
                       description: |-
-                        reorder ratio
+                        Ratio applied to the packet reordering threshold
                         Maximum: 100
                         Minimum: 0
                       format: int64
@@ -1909,7 +1948,7 @@ spec:
                       type: string
                     zero_copy_fwd_send:
                       description: |-
-                        zero copy fwd send
+                        Enables or disables the zero-copy sends for the QUIC multiplexer
                         Enum: ["enabled","disabled"]
                       enum:
                         - enabled
@@ -1958,11 +1997,11 @@ spec:
                       format: int64
                       type: integer
                     ocsp_update_max_delay:
-                      description: ocsp update max delay
+                      description: SSL Maximum Interval Between Two Automatic Updates of the same OCSP Response
                       format: int64
                       type: integer
                     ocsp_update_min_delay:
-                      description: ocsp update min delay
+                      description: SSL Minimum Interval Between Two Automatic Updates of the same OCSP Response
                       format: int64
                       type: integer
                   type: object
@@ -2028,7 +2067,7 @@ spec:
                   type: string
                 warn_blocked_traffic_after:
                   description: |-
-                    warn blocked traffic after
+                    Delay after which a stuck task triggers a warning
                     Minimum: 1
                   format: int64
                   minimum: 1
@@ -2037,20 +2076,20 @@ spec:
                   description: wurfl options
                   properties:
                     cache_size:
-                      description: cache size
+                      description: Sets the WURFL Useragent cache size
                       format: int64
                       type: integer
                     data_file:
-                      description: data file
+                      description: The path of the WURFL data file
                       type: string
                     information_list:
-                      description: information list
+                      description: A space-delimited list of WURFL capabilities
                       type: string
                     information_list_separator:
-                      description: information list separator
+                      description: A char that will be used to separate values in a response header containing WURFL results
                       type: string
                     patch_file:
-                      description: patch file
+                      description: A list of WURFL patch file paths
                       type: string
                   type: object
               required:

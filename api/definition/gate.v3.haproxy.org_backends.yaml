@@ -406,6 +406,9 @@ spec:
                         - enabled
                         - disabled
                       type: string
+                    cc:
+                      description: cc
+                      type: string
                     check:
                       description: |-
                         check
@@ -461,6 +464,14 @@ spec:
                         check proto
                         Pattern: ^[^\s]+$
                       pattern: ^[^\s]+$
+                      type: string
+                    check_sni_auto:
+                      description: |-
+                        check sni auto
+                        Enum: ["enabled","disabled"]
+                      enum:
+                        - enabled
+                        - disabled
                       type: string
                     check_via_socks4:
                       description: |-
@@ -610,6 +621,14 @@ spec:
                       format: int64
                       minimum: 0
                       type: integer
+                    ktls:
+                      description: |-
+                        ktls
+                        Enum: ["on","off"]
+                      enum:
+                        - "on"
+                        - "off"
+                      type: string
                     log-bufsize:
                       description: log bufsize
                       format: int64
@@ -767,6 +786,14 @@ spec:
                     redir:
                       description: redir
                       type: string
+                    renegotiate:
+                      description: |-
+                        Toggles the secure renegotiation mechanism for an SSL backend.
+                        Enum: ["enabled","disabled"]
+                      enum:
+                        - enabled
+                        - disabled
+                      type: string
                     resolve-net:
                       description: |-
                         resolve net
@@ -866,6 +893,14 @@ spec:
                         Pattern: ^[^\s]+$
                       pattern: ^[^\s]+$
                       type: string
+                    sni_auto:
+                      description: |-
+                        sni auto
+                        Enum: ["enabled","disabled"]
+                      enum:
+                        - enabled
+                        - disabled
+                      type: string
                     socks4:
                       description: |-
                         socks4
@@ -944,6 +979,12 @@ spec:
                     strict-maxconn:
                       description: strict maxconn
                       type: boolean
+                    tcp_md5sig:
+                      description: |-
+                        tcp md5sig
+                        Pattern: ^[^\s]+$
+                      pattern: ^[^\s]+$
+                      type: string
                     tcp_ut:
                       description: |-
                         tcp ut
@@ -3430,6 +3471,9 @@ spec:
                           - enabled
                           - disabled
                         type: string
+                      cc:
+                        description: cc
+                        type: string
                       check:
                         description: |-
                           check
@@ -3485,6 +3529,14 @@ spec:
                           check proto
                           Pattern: ^[^\s]+$
                         pattern: ^[^\s]+$
+                        type: string
+                      check_sni_auto:
+                        description: |-
+                          check sni auto
+                          Enum: ["enabled","disabled"]
+                        enum:
+                          - enabled
+                          - disabled
                         type: string
                       check_via_socks4:
                         description: |-
@@ -3643,6 +3695,14 @@ spec:
                         format: int64
                         minimum: 0
                         type: integer
+                      ktls:
+                        description: |-
+                          ktls
+                          Enum: ["on","off"]
+                        enum:
+                          - "on"
+                          - "off"
+                        type: string
                       log-bufsize:
                         description: log bufsize
                         format: int64
@@ -3823,6 +3883,14 @@ spec:
                       redir:
                         description: redir
                         type: string
+                      renegotiate:
+                        description: |-
+                          Toggles the secure renegotiation mechanism for an SSL backend.
+                          Enum: ["enabled","disabled"]
+                        enum:
+                          - enabled
+                          - disabled
+                        type: string
                       resolve-net:
                         description: |-
                           resolve net
@@ -3922,6 +3990,14 @@ spec:
                           Pattern: ^[^\s]+$
                         pattern: ^[^\s]+$
                         type: string
+                      sni_auto:
+                        description: |-
+                          sni auto
+                          Enum: ["enabled","disabled"]
+                        enum:
+                          - enabled
+                          - disabled
+                        type: string
                       socks4:
                         description: |-
                           socks4
@@ -4000,6 +4076,12 @@ spec:
                       strict-maxconn:
                         description: strict maxconn
                         type: boolean
+                      tcp_md5sig:
+                        description: |-
+                          tcp md5sig
+                          Pattern: ^[^\s]+$
+                        pattern: ^[^\s]+$
+                        type: string
                       tcp_ut:
                         description: |-
                           tcp ut
@@ -4163,6 +4245,9 @@ spec:
                           - enabled
                           - disabled
                         type: string
+                      cc:
+                        description: cc
+                        type: string
                       check:
                         description: |-
                           check
@@ -4218,6 +4303,14 @@ spec:
                           check proto
                           Pattern: ^[^\s]+$
                         pattern: ^[^\s]+$
+                        type: string
+                      check_sni_auto:
+                        description: |-
+                          check sni auto
+                          Enum: ["enabled","disabled"]
+                        enum:
+                          - enabled
+                          - disabled
                         type: string
                       check_via_socks4:
                         description: |-
@@ -4371,6 +4464,14 @@ spec:
                         format: int64
                         minimum: 0
                         type: integer
+                      ktls:
+                        description: |-
+                          ktls
+                          Enum: ["on","off"]
+                        enum:
+                          - "on"
+                          - "off"
+                        type: string
                       log-bufsize:
                         description: log bufsize
                         format: int64
@@ -4546,6 +4647,14 @@ spec:
                       redir:
                         description: redir
                         type: string
+                      renegotiate:
+                        description: |-
+                          Toggles the secure renegotiation mechanism for an SSL backend.
+                          Enum: ["enabled","disabled"]
+                        enum:
+                          - enabled
+                          - disabled
+                        type: string
                       resolve-net:
                         description: |-
                           resolve net
@@ -4645,6 +4754,14 @@ spec:
                           Pattern: ^[^\s]+$
                         pattern: ^[^\s]+$
                         type: string
+                      sni_auto:
+                        description: |-
+                          sni auto
+                          Enum: ["enabled","disabled"]
+                        enum:
+                          - enabled
+                          - disabled
+                        type: string
                       socks4:
                         description: |-
                           socks4
@@ -4723,6 +4840,12 @@ spec:
                       strict-maxconn:
                         description: strict maxconn
                         type: boolean
+                      tcp_md5sig:
+                        description: |-
+                          tcp md5sig
+                          Pattern: ^[^\s]+$
+                        pattern: ^[^\s]+$
+                        type: string
                       tcp_ut:
                         description: |-
                           tcp ut

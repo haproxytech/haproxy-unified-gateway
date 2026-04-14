@@ -168,9 +168,10 @@ func addBindPortToStatsFrontend(confClient configuration.Configuration,
 		if bindv4 == nil {
 			name := "stats"
 			bind := models.Bind{
+				Name:       name,
 				Port:       new(hugConfig.StatsPort),
 				Address:    "0.0.0.0",
-				BindParams: models.BindParams{Name: name},
+				BindParams: models.BindParams{},
 			}
 			err := confClient.CreateBind("frontend", constants.StatsFrontendName, &bind, "", version)
 			if err != nil {
@@ -198,9 +199,10 @@ func addBindPortToStatsFrontend(confClient configuration.Configuration,
 		if bindv6 == nil {
 			name := "v6"
 			bind := models.Bind{
+				Name:       name,
 				Port:       new(hugConfig.StatsPort),
 				Address:    "::",
-				BindParams: models.BindParams{Name: name},
+				BindParams: models.BindParams{},
 			}
 			err := confClient.CreateBind("frontend", constants.StatsFrontendName, &bind, "", version)
 			if err != nil {

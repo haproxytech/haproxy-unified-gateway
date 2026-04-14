@@ -404,13 +404,14 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	if !b.params.DisableIPv4 {
 		bind := models.Bind{
 			Port: &port,
+			Name: "v4",
 			Address: func() string {
 				if b.params.IPv4BindAddress != "" {
 					return b.params.IPv4BindAddress
 				}
 				return "0.0.0.0"
 			}(),
-			BindParams: b.bindParams(frontendName, "v4", vListenerName, vListener),
+			BindParams: b.bindParams(frontendName, vListenerName, vListener),
 		}
 		if fe.Binds == nil {
 			fe.Binds = make(map[string]models.Bind)
@@ -420,13 +421,14 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	if !b.params.DisableIPv6 {
 		bind := models.Bind{
 			Port: &port,
+			Name: "v6",
 			Address: func() string {
 				if b.params.IPv6BindAddress != "" {
 					return b.params.IPv6BindAddress
 				}
 				return "::"
 			}(),
-			BindParams: b.bindParams(frontendName, "v6", vListenerName, vListener),
+			BindParams: b.bindParams(frontendName, vListenerName, vListener),
 		}
 		if fe.Binds == nil {
 			fe.Binds = make(map[string]models.Bind)
@@ -474,9 +476,8 @@ func DeepCopyFrontend(original *models.Frontend) (*models.Frontend, error) {
 	return &copied, nil
 }
 
-func (b *HaproxyConfMgrImpl) bindParams(_, bindName string, vListenerName string, vListener *tree.VirtualListener) models.BindParams {
+func (b *HaproxyConfMgrImpl) bindParams(_, vListenerName string, vListener *tree.VirtualListener) models.BindParams {
 	params := models.BindParams{}
-	params.Name = bindName
 
 	// If no TLS
 	if vListener.ProtocolCategory == protocols.ProtocolCategoryInsecure || vListener.ProtocolCategory == protocols.ProtocolCategoryTLS {
