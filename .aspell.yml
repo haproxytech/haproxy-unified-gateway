@@ -120,3 +120,4 @@ allowed:
   - subresource
   - GVK
   - Impl
+  - failfast

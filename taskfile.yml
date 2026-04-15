@@ -98,7 +98,9 @@ tasks:
           --format={{.FORMAT}} \
           --format-hide-empty-pkg \
           -- -count=1 \
+            -p 1 \
             -tags="{{.TEST_TAGS}}" \
+            -failfast \
             -v \
             {{.PKG}}
   tidy:
