@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 type Status string
@@ -64,7 +65,7 @@ type ClusterUpdates struct {
 	DefaultsCRs     map[types.NamespacedName]Update[*v3.Defaults]
 	HugConfs        map[types.NamespacedName]Update[*v3.HugConf]
 	EndpointSlices  map[types.NamespacedName]Update[*discoveryV1.EndpointSlice]
-	ReferenceGrants map[types.NamespacedName]Update[*gatewayv1.ReferenceGrant]
+	ReferenceGrants map[types.NamespacedName]Update[*gatewayv1beta1.ReferenceGrant]
 }
 
 func NewClusterUpdates() ClusterUpdates {
@@ -84,6 +85,6 @@ func NewClusterUpdates() ClusterUpdates {
 		DefaultsCRs:     make(map[types.NamespacedName]Update[*v3.Defaults]),
 		HugConfs:        make(map[types.NamespacedName]Update[*v3.HugConf]),
 		EndpointSlices:  make(map[types.NamespacedName]Update[*discoveryV1.EndpointSlice]),
-		ReferenceGrants: make(map[types.NamespacedName]Update[*gatewayv1.ReferenceGrant]),
+		ReferenceGrants: make(map[types.NamespacedName]Update[*gatewayv1beta1.ReferenceGrant]),
 	}
 }

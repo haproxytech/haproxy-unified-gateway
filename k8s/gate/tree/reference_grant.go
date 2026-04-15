@@ -5,17 +5,17 @@ import (
 	"log/slog"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 type ReferenceGrant struct {
 	// K8sResource is the source resource.
-	K8sResource *gatewayv1.ReferenceGrant
+	K8sResource *gatewayv1beta1.ReferenceGrant
 	// TreeStatus
 	TreeStatus TreeUpdate[ReferenceGrant]
 }
 
-func NewReferenceGrant(k8sObject *gatewayv1.ReferenceGrant) *ReferenceGrant {
+func NewReferenceGrant(k8sObject *gatewayv1beta1.ReferenceGrant) *ReferenceGrant {
 	return &ReferenceGrant{
 		K8sResource: k8sObject,
 		TreeStatus: TreeUpdate[ReferenceGrant]{
@@ -30,7 +30,7 @@ func (rg *ReferenceGrant) SetAsDeleted(logger *slog.Logger) {
 	rg.K8sResource = nil
 }
 
-func (rg *ReferenceGrant) SetAsUpserted(logger *slog.Logger, newK8sResource *gatewayv1.ReferenceGrant) {
+func (rg *ReferenceGrant) SetAsUpserted(logger *slog.Logger, newK8sResource *gatewayv1beta1.ReferenceGrant) {
 	setResourceStatus(logger, rg, newK8sResource, store.StatusUpserted)
 	rg.K8sResource = newK8sResource
 }

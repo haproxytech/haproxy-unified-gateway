@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // ClusterStore includes cluster resources necessary to build the Tree.
@@ -47,7 +48,7 @@ type ClusterStore struct {
 	DefaultsCRs     map[types.NamespacedName]*v3.Defaults
 	HugConfs        map[types.NamespacedName]*v3.HugConf
 	EndpointSlices  map[types.NamespacedName]*discoveryV1.EndpointSlice
-	ReferenceGrants map[types.NamespacedName]*gatewayv1.ReferenceGrant
+	ReferenceGrants map[types.NamespacedName]*gatewayv1beta1.ReferenceGrant
 	Updates         ClusterUpdates
 }
 
@@ -92,7 +93,7 @@ func NewClusterStoreUpdaterImpl(
 				extractGVK(&v3.Defaults{}):                     newObjectStoreImpl(clusterStore.DefaultsCRs, clusterStore.Updates.DefaultsCRs, logger),
 				extractGVK(&v3.HugConf{}):                      newObjectStoreImpl(clusterStore.HugConfs, clusterStore.Updates.HugConfs, logger),
 				extractGVK(&discoveryV1.EndpointSlice{}):       newObjectStoreImpl(clusterStore.EndpointSlices, clusterStore.Updates.EndpointSlices, logger),
-				extractGVK(&gatewayv1.ReferenceGrant{}):        newObjectStoreImpl(clusterStore.ReferenceGrants, clusterStore.Updates.ReferenceGrants, logger),
+				extractGVK(&gatewayv1beta1.ReferenceGrant{}):   newObjectStoreImpl(clusterStore.ReferenceGrants, clusterStore.Updates.ReferenceGrants, logger),
 			},
 		},
 		extractGVK: extractGVK,

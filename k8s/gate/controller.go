@@ -41,6 +41,7 @@ import (
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -169,7 +170,7 @@ func Add(
 		HugGates:        make(map[types.NamespacedName]*v3.HugGate),
 		HugConfs:        make(map[types.NamespacedName]*v3.HugConf),
 		EndpointSlices:  make(map[types.NamespacedName]*discoveryV1.EndpointSlice),
-		ReferenceGrants: make(map[types.NamespacedName]*gatewayv1.ReferenceGrant),
+		ReferenceGrants: make(map[types.NamespacedName]*gatewayv1beta1.ReferenceGrant),
 		BackendCRs:      make(map[types.NamespacedName]*v3.Backend),
 		GlobalCRs:       make(map[types.NamespacedName]*v3.Global),
 		DefaultsCRs:     make(map[types.NamespacedName]*v3.Defaults),
