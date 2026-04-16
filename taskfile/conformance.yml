@@ -220,6 +220,8 @@ tasks:
               -tags=conformance \
               -timeout 60m \
               -v \
+              -p 1 \
+              -failfast \
               {{if .CONFORMANCE_RUN_TEST}}-run-test '{{.CONFORMANCE_RUN_TEST}}'{{end}} \
               {{if .CONFORMANCE_SKIP_TESTS}}-skip-tests '{{.CONFORMANCE_SKIP_TESTS}}'{{end}}; then
           RUN_STATUS=0
