@@ -238,3 +238,12 @@ tasks:
       CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "conformance-junit.html" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
     cmds:
       - go run ./cmd/junit-report/main.go {{.CONFORMANCE_JUNIT_OUTPUT}} {{.CONFORMANCE_JUNIT_HTML_OUTPUT}}
+
+  conformance-create-local:
+    desc: "create a Kind cluster for local conformance testing (Linux host, no iptables required)"
+    cmds:
+      - task: kind-create-cluster
+        vars:
+          KIND_CONFIG: "kind-config.yaml"
+      - task: conformance-pull-images
+      - task: conformance-deploy-ci
