@@ -384,7 +384,7 @@ func requestRedirectRules(f *gatewayv1.HTTPRequestRedirectFilter, matchPrefix st
 		}
 		escapedPrefix := regexEscapePath(matchPrefix)
 		return models.HTTPRequestRules{
-			redirect(fmt.Sprintf("%s%%[path,regsub(^%s(/.*)?$,%s\\1)]",
+			redirect(fmt.Sprintf("%s%%[path,regsub(^%s,%s)]",
 				pfx, escapedPrefix, replacement), "", ""),
 		}
 	}

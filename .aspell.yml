@@ -109,3 +109,6 @@ allowed:
   - httpfilters
   - allowlist
   - inttest
+  - regsub
+  - backreference
+  - backreferences
