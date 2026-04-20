@@ -446,22 +446,25 @@ func (m *MapFileState) ApplyDesiredBackends(
 // It iterates over the entries in the map file state and checks if there are any differences between the desired state and the current state.
 // If there are differences, it writes the desired state to disk in the format "key value\n"
 func (m *MapFileState) WriteOnDiskIfChanged() error {
-	var f *os.File
-	var err error
 	dir := filepath.Dir(m.Path.FullPath())
-	if _, err = os.Stat(dir); os.IsNotExist(err) {
-		err = os.MkdirAll(dir, 0o755)
-		if err != nil {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 	}
-	if _, err = os.Stat(m.Path.FullPath()); os.IsNotExist(err) {
-		f, err = os.Create(m.Path.FullPath())
+
+	// The map file must exist on disk even when empty, because the HAProxy
+	// configuration references it at load time. Create an empty placeholder
+	// on first sync if it is missing.
+	if _, err := os.Stat(m.Path.FullPath()); os.IsNotExist(err) {
+		placeholder, err := os.Create(m.Path.FullPath())
 		if err != nil {
 			return err
 		}
+		if err := placeholder.Close(); err != nil {
+			return err
+		}
 	}
-	defer f.Close()
 
 	var hasDiff bool
 	for _, entryValue := range m.Entries {
@@ -482,10 +485,11 @@ func (m *MapFileState) WriteOnDiskIfChanged() error {
 		logging.LogAttrMapFileContent(m.PrettyString()),
 	)
 
-	f, err = os.Create(m.Path.FullPath())
+	f, err := os.Create(m.Path.FullPath())
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	orderedEntries := []EntryKey{}
 	for entryKey := range m.Entries {
