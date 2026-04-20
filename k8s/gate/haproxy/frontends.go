@@ -270,10 +270,10 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 			// Look for route name: selected_listener_route
 			{
 				//  listener-route-name exact match
-				// http-request set-var(txn.TMP)                        var(txn.selected_listener_name),concat("/",txn.host)
-				// http-request set-var(txn.selected_listener_route)    var(txn.TMP),map(listener_route_exact_match)
+				// http-request set-var(txn.tmp_exact)                   var(txn.selected_listener_name),concat("/",txn.host)
+				// http-request set-var(txn.selected_listener_route)    var(txn.tmp_exact),map(listener_route_exact_match)
 				Type:     "set-var",
-				VarName:  "TMP",
+				VarName:  "tmp_exact",
 				VarScope: "txn",
 				VarExpr:  "var(txn.selected_listener_name),concat(\"/\",txn.host)",
 			},
@@ -281,15 +281,15 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "selected_listener_route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "var(txn.TMP),map(" + listenerRouteExactMatchMap.Path.FullPath() + ")",
+				VarExpr:  "var(txn.tmp_exact),map(" + listenerRouteExactMatchMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "listener-route exact match selection"},
 			},
 			{
 				//  listener-route-name wildcard match
-				// http-request set-var(txn.TMP)                        var(txn.selected_listener_name),concat("/",txn.hostreversed)
-				// http-request set-var(txn.selected_listener_route)    var(txn.TMP),map(listener_route_exact_match)
+				// http-request set-var(txn.tmp_wild)                    var(txn.selected_listener_name),concat("/",txn.hostreversed)
+				// http-request set-var(txn.selected_listener_route)    var(txn.tmp_wild),map_beg(listener_route_wildcard_match)
 				Type:     "set-var",
-				VarName:  "TMP",
+				VarName:  "tmp_wild",
 				VarScope: "txn",
 				VarExpr:  "var(txn.selected_listener_name),concat(\"/\",txn.hostreversed)",
 			},
@@ -297,7 +297,7 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Type:     "set-var",
 				VarName:  "selected_listener_route,ifnotexists",
 				VarScope: "txn",
-				VarExpr:  "var(txn.TMP),map_beg(" + listenerRouteWildcardMatchMap.Path.FullPath() + ")",
+				VarExpr:  "var(txn.tmp_wild),map_beg(" + listenerRouteWildcardMatchMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
 			},
 			// -------------------
@@ -549,10 +549,10 @@ func tlsPassthroughRules(
 			Metadata: map[string]any{"hug": "listener wildcard match selection"},
 		},
 		{
-			// tcp-request content set-var(sess.TMP) var(sess.selected_listener_name),concat("/",sess.sni)
+			// tcp-request content set-var(sess.tmp_exact) var(sess.selected_listener_name),concat("/",sess.sni)
 			Type:     "content",
 			Action:   "set-var",
-			VarName:  "TMP",
+			VarName:  "tmp_exact",
 			VarScope: "sess",
 			Expr:     "var(sess.selected_listener_name),concat(\"/\",sess.sni)",
 		},
@@ -561,14 +561,14 @@ func tlsPassthroughRules(
 			Action:   "set-var",
 			VarName:  "selected_listener_route",
 			VarScope: "sess",
-			Expr:     "var(sess.TMP),map(" + listenerRouteExactMatch + ")",
+			Expr:     "var(sess.tmp_exact),map(" + listenerRouteExactMatch + ")",
 			Metadata: map[string]any{"hug": "listener-route exact match selection"},
 		},
 		{
-			// tcp-request content set-var(sess.TMP) var(sess.selected_listener_name),concat("/",sess.snireversed)
+			// tcp-request content set-var(sess.tmp_wild) var(sess.selected_listener_name),concat("/",sess.snireversed)
 			Type:     "content",
 			Action:   "set-var",
-			VarName:  "TMP",
+			VarName:  "tmp_wild",
 			VarScope: "sess",
 			Expr:     "var(sess.selected_listener_name),concat(\"/\",sess.snireversed)",
 		},
@@ -577,7 +577,7 @@ func tlsPassthroughRules(
 			Action:   "set-var",
 			VarName:  "selected_listener_route,ifnotexists",
 			VarScope: "sess",
-			Expr:     "var(sess.TMP),map_beg(" + listenerRouteWildcardMatch + ")",
+			Expr:     "var(sess.tmp_wild),map_beg(" + listenerRouteWildcardMatch + ")",
 			Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
 		},
 		{
