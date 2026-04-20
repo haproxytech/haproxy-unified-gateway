@@ -208,120 +208,13 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	var aclList []*models.ACL
 	switch {
 	case vListener.ProtocolCategory == protocols.ProtocolCategoryTLS:
-		// TLS Passthrough
-		tcpRules = []*models.TCPRequestRule{
-			{ // tcp-request content reject if !{ req.ssl_hello_type 1 }
-				Type:     "content",
-				Action:   "reject",
-				Cond:     "if",
-				CondTest: "!{ req.ssl_hello_type 1 }",
-			},
-			{
-				// tcp-request inspect-delay 50000
-				Type:    "inspect-delay",
-				Timeout: new(int64(50000)),
-			},
-			{
-				// tcp-request content set-var(sess.sni) req.ssl_sni
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "sni",
-				VarScope: "sess",
-				Expr:     "req.ssl_sni",
-			},
-			{
-				// tcp-request content set-var(sess.snireversed) var(sess.sni),lua.reverse_host
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "snireversed",
-				VarScope: "sess",
-				Expr:     "var(sess.sni),lua.reverse_host",
-			},
-			// -------------------
-			// Look for listener name: selected_listener_name
-			{
-				// tcp-request content set-var(sess.selected_listener_name) var(sess.sni),map(listener_exact_match)
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "selected_listener_name",
-				VarScope: "sess",
-				Expr:     "var(sess.sni),map(" + listenerExactMatchMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "listener exact match selection"},
-			},
-			{
-				// tcp-request content set-var(sess.selected_listener_name,ifnotexists) var(sess.snireversed),map_beg(listener_wildcard_match)
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "selected_listener_name,ifnotexists",
-				VarScope: "sess",
-				Expr:     "var(sess.snireversed),map_beg(" + listenerWildcardMatchMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "listener wildcard match selection"},
-			},
-			// -------------------
-			// Look for route name: selected_listener_route
-			{
-				// tcp-request content set-var(txn.TMP) var(txn.selected_listener_name),concat("/",sess.sni)
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "TMP",
-				VarScope: "sess",
-				Expr:     "var(sess.selected_listener_name),concat(\"/\",sess.sni)",
-			},
-			{
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "selected_listener_route",
-				VarScope: "sess",
-				Expr:     "var(sess.TMP),map(" + listenerRouteExactMatchMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "listener-route exact match selection"},
-			},
-			{
-				// tcp-request content set-var(txn.TMP) var(txn.selected_listener_name),concat("/",txn.snireversed)
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "TMP",
-				VarScope: "sess",
-				Expr:     "var(sess.selected_listener_name),concat(\"/\",sess.snireversed)",
-			},
-			{
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "selected_listener_route,ifnotexists",
-				VarScope: "sess",
-				Expr:     "var(sess.TMP),map_beg(" + listenerRouteWildcardMatchMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
-			},
-			// -------------------
-			// Look for backend: sni_match
-			{
-				// tcp-request content set-var(txn.sni_match) var(txn.selected_listener_route),map(sni.map)
-				Type:     "content",
-				Action:   "set-var",
-				VarName:  "sni_match",
-				VarScope: "sess",
-				Expr:     "var(sess.selected_listener_route),map(" + sniMap.Path.FullPath() + ")",
-			},
-		}
-		backendSwitchingRules = []*models.BackendSwitchingRule{
-			{
-				Name:     "%[var(txn.backend)]",
-				Cond:     "if",
-				CondTest: "route_is_json",
-			},
-			{
-				Name: "%[var(sess.sni_match),field(1,.)]",
-			},
-		}
-		aclList = []*models.ACL{
-			{ // acl route_is_json var(txn.sni_match),bytes(0,1) -m str
-				ACLName:   "route_is_json",
-				Criterion: "var(txn.sni_match),bytes(0,1)",
-				Value:     "-m str {",
-				Metadata: map[string]any{
-					"hug": "for lua routing",
-				},
-			},
-		}
+		tcpRules, backendSwitchingRules, aclList = tlsPassthroughRules(
+			listenerExactMatchMap.Path.FullPath(),
+			listenerWildcardMatchMap.Path.FullPath(),
+			listenerRouteExactMatchMap.Path.FullPath(),
+			listenerRouteWildcardMatchMap.Path.FullPath(),
+			sniMap.Path.FullPath(),
+		)
 
 	default:
 		httpRules = []*models.HTTPRequestRule{
@@ -597,4 +490,124 @@ func (b *HaproxyConfMgrImpl) bindParams(_, bindName string, vListenerName string
 		params.Ssl = true
 	}
 	return params
+}
+
+// tlsPassthroughRules returns the TCP request rules, backend-switching rules
+// and ACLs used by the TLS-passthrough frontend. All variables referenced in
+// this rule set live in the sess scope — keep it that way: the route_is_json
+// ACL reads var(sess.sni_match), matching the scope in which sni_match is
+// written. Mixing sess and txn leaves the ACL branch permanently dead.
+func tlsPassthroughRules(
+	listenerExactMatch, listenerWildcardMatch,
+	listenerRouteExactMatch, listenerRouteWildcardMatch,
+	sniMapPath string,
+) ([]*models.TCPRequestRule, []*models.BackendSwitchingRule, []*models.ACL) {
+	tcpRules := []*models.TCPRequestRule{
+		{ // tcp-request content reject if !{ req.ssl_hello_type 1 }
+			Type:     "content",
+			Action:   "reject",
+			Cond:     "if",
+			CondTest: "!{ req.ssl_hello_type 1 }",
+		},
+		{
+			// tcp-request inspect-delay 50000
+			Type:    "inspect-delay",
+			Timeout: new(int64(50000)),
+		},
+		{
+			// tcp-request content set-var(sess.sni) req.ssl_sni
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "sni",
+			VarScope: "sess",
+			Expr:     "req.ssl_sni",
+		},
+		{
+			// tcp-request content set-var(sess.snireversed) var(sess.sni),lua.reverse_host
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "snireversed",
+			VarScope: "sess",
+			Expr:     "var(sess.sni),lua.reverse_host",
+		},
+		{
+			// tcp-request content set-var(sess.selected_listener_name) var(sess.sni),map(listener_exact_match)
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "selected_listener_name",
+			VarScope: "sess",
+			Expr:     "var(sess.sni),map(" + listenerExactMatch + ")",
+			Metadata: map[string]any{"hug": "listener exact match selection"},
+		},
+		{
+			// tcp-request content set-var(sess.selected_listener_name,ifnotexists) var(sess.snireversed),map_beg(listener_wildcard_match)
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "selected_listener_name,ifnotexists",
+			VarScope: "sess",
+			Expr:     "var(sess.snireversed),map_beg(" + listenerWildcardMatch + ")",
+			Metadata: map[string]any{"hug": "listener wildcard match selection"},
+		},
+		{
+			// tcp-request content set-var(sess.TMP) var(sess.selected_listener_name),concat("/",sess.sni)
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "TMP",
+			VarScope: "sess",
+			Expr:     "var(sess.selected_listener_name),concat(\"/\",sess.sni)",
+		},
+		{
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "selected_listener_route",
+			VarScope: "sess",
+			Expr:     "var(sess.TMP),map(" + listenerRouteExactMatch + ")",
+			Metadata: map[string]any{"hug": "listener-route exact match selection"},
+		},
+		{
+			// tcp-request content set-var(sess.TMP) var(sess.selected_listener_name),concat("/",sess.snireversed)
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "TMP",
+			VarScope: "sess",
+			Expr:     "var(sess.selected_listener_name),concat(\"/\",sess.snireversed)",
+		},
+		{
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "selected_listener_route,ifnotexists",
+			VarScope: "sess",
+			Expr:     "var(sess.TMP),map_beg(" + listenerRouteWildcardMatch + ")",
+			Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
+		},
+		{
+			// tcp-request content set-var(sess.sni_match) var(sess.selected_listener_route),map(sni.map)
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "sni_match",
+			VarScope: "sess",
+			Expr:     "var(sess.selected_listener_route),map(" + sniMapPath + ")",
+		},
+	}
+	backendSwitchingRules := []*models.BackendSwitchingRule{
+		{
+			Name:     "%[var(txn.backend)]",
+			Cond:     "if",
+			CondTest: "route_is_json",
+		},
+		{
+			Name: "%[var(sess.sni_match),field(1,.)]",
+		},
+	}
+	aclList := []*models.ACL{
+		{ // acl route_is_json var(sess.sni_match),bytes(0,1) -m str {
+			ACLName:   "route_is_json",
+			Criterion: "var(sess.sni_match),bytes(0,1)",
+			Value:     "-m str {",
+			Metadata: map[string]any{
+				"hug": "for lua routing",
+			},
+		},
+	}
+	return tcpRules, backendSwitchingRules, aclList
 }
