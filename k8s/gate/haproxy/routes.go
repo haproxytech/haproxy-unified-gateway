@@ -229,21 +229,21 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(origin maps.ResourceOrigin, rout
 	return nil
 }
 
-// desiredBackendsMaps groups the four (hostname, path) → backends maps that
-// correspond to the four HAProxy map files (exact, prefix, regex, domain-wildcard).
+// desiredBackendsMaps groups the three (hostname, path) → backends maps that
+// correspond to the HAProxy path-match map files (exact, prefix, regex).
+// Wildcard-host matching is handled upstream by the listener/listener-route
+// map pipeline, not by a dedicated bucket here.
 type desiredBackendsMaps struct {
-	exact          map[maps.EntryKey]map[string]*maps.WeightedValue
-	prefix         map[maps.EntryKey]map[string]*maps.WeightedValue
-	regex          map[maps.EntryKey]map[string]*maps.WeightedValue
-	domainWildcard map[maps.EntryKey]map[string]*maps.WeightedValue
+	exact  map[maps.EntryKey]map[string]*maps.WeightedValue
+	prefix map[maps.EntryKey]map[string]*maps.WeightedValue
+	regex  map[maps.EntryKey]map[string]*maps.WeightedValue
 }
 
 func newDesiredBackendsMaps() desiredBackendsMaps {
 	return desiredBackendsMaps{
-		exact:          map[maps.EntryKey]map[string]*maps.WeightedValue{},
-		prefix:         map[maps.EntryKey]map[string]*maps.WeightedValue{},
-		regex:          map[maps.EntryKey]map[string]*maps.WeightedValue{},
-		domainWildcard: map[maps.EntryKey]map[string]*maps.WeightedValue{},
+		exact:  map[maps.EntryKey]map[string]*maps.WeightedValue{},
+		prefix: map[maps.EntryKey]map[string]*maps.WeightedValue{},
+		regex:  map[maps.EntryKey]map[string]*maps.WeightedValue{},
 	}
 }
 
@@ -265,9 +265,8 @@ func (d *desiredBackendsMaps) resolveEntry(hostname string, match gatewayv1.HTTP
 	selected := d.exact
 	switch pathType {
 	case gatewayv1.PathMatchExact:
-		if isDomainWildcard(originalHostname) {
-			selected = d.domainWildcard
-		}
+		// Wildcard-host + exact-path is routed via the listener/listener-route
+		// map pipeline upstream; the path bucket remains d.exact here.
 	case gatewayv1.PathMatchPathPrefix:
 		if isDomainWildcard(originalHostname) {
 			selected = d.regex
