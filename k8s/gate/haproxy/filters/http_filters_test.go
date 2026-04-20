@@ -198,6 +198,7 @@ func TestRequestRedirectRules(t *testing.T) {
 			matchPrefix: "/old",
 			wantLen:     1,
 			wantType:    "location",
+			wantValue:   "%[path,regsub(^/old,/new)]",
 		},
 		{
 			name: "custom status code",
