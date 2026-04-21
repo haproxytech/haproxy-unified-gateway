@@ -113,3 +113,4 @@ allowed:
   - regsub
   - backreference
   - backreferences
+  - iowriter
