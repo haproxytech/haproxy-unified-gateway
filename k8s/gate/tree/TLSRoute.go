@@ -247,6 +247,12 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 			continue
 		}
 
+		// Check if the route's namespace is permitted by allowedRoutes.namespaces
+		if !isRouteNamespaceAllowed(r.K8sResource.Namespace, listener, treeGw.K8sResource.Namespace, controllerStore.ClusterStore.Namespaces) {
+			conds.MergeOverrideConditions(rc.ConditionNotAcceptedRouteReasonNotAllowedByListeners())
+			continue
+		}
+
 		// Listener valide, attache la route
 		listener.addAttachedRoute(client.ObjectKeyFromObject(r.K8sResource), controllerStore)
 		validListeners = append(validListeners, listener)
