@@ -23,6 +23,7 @@ import (
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
+	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -88,7 +89,7 @@ func (b *CertificateBuilderImpl) computeCertificateDiffs() {
 	b.handleUpdatedSecretsStorage(previousSecretsReferenced, currentSecretsReferenced)
 
 	// crt-list
-	b.handleCrtList(previousSecretsReferenced, currentSecretsReferenced)
+	b.handleCrtList(currentSecretsReferenced)
 }
 
 func (b *CertificateBuilderImpl) ensureCertificatesStorage() {
@@ -210,8 +211,8 @@ func (b *CertificateBuilderImpl) handleUpdatedSecretsStorage(previousRefSecrets,
 //		  Namespace: "example", Name: "offload"}]   ===> SecretKey
 //		      map[client.ObjectKey{Namespace: "example", Name: hug-gateway_https"}]struct{}{}  ====> Set of GatewayListenerKey referencing this Secret
 //		}
-func (b *CertificateBuilderImpl) handleCrtList(previousRefSecrets, newRefSecrets map[client.ObjectKey]map[client.ObjectKey]struct{}) {
-	previousSecretsByGatewayListener := b.secretsPerVirtualListener(previousRefSecrets)
+func (b *CertificateBuilderImpl) handleCrtList(newRefSecrets map[client.ObjectKey]map[client.ObjectKey]struct{}) {
+	previousSecretsByGatewayListener := b.previousSecretsPerVirtualListener()
 	newSecretsByGatewayListener := b.secretsPerVirtualListener(newRefSecrets)
 
 	b.handleNewReferencedCrtList(previousSecretsByGatewayListener, newSecretsByGatewayListener)
@@ -249,6 +250,46 @@ func (b *CertificateBuilderImpl) secretsPerVirtualListener(mapSecret2Listeners m
 		}
 	}
 	return secretsPerVirtualListener
+}
+
+// previousSecretsPerVirtualListener rebuilds the previous virtual-listener→secret mapping
+// directly from GateTree.PreviousVirtualListeners instead of re-deriving it from the
+// previousReferencedSecrets index via GetListenerForKey.
+//
+// The indirect path breaks when a gateway is deleted: gateway.reset() clears g.Listeners
+// before the certificate builder runs, so GetListenerForKey returns nil and the deleted
+// gateway's secrets are silently dropped from the previous mapping. That causes
+// handleUpdatedCrtList to see no removed secrets and skip the crt-list update, leaving a
+// stale entry in the .list file that points to the already-deleted PEM.
+//
+// PreviousVirtualListeners holds *Listener values from the previous cycle. Those Listener
+// objects are referenced by the slice in each VirtualListener and survive gateway.reset()
+// because reset only replaces g.Listeners (the map on the Gateway), not the Listener
+// objects themselves.
+func (b *CertificateBuilderImpl) previousSecretsPerVirtualListener() map[string]map[client.ObjectKey]struct{} {
+	result := make(map[string]map[client.ObjectKey]struct{})
+	for vlName, vl := range b.GateTree.PreviousVirtualListeners {
+		for _, listener := range vl.Listeners {
+			if listener.K8sResource.TLS == nil {
+				continue
+			}
+			for _, certRef := range listener.K8sResource.TLS.CertificateRefs {
+				if !utilsk8s.IsSecretGroupKindSupported(certRef) {
+					continue
+				}
+				ns := listener.Owner.Namespace
+				if certRef.Namespace != nil {
+					ns = string(*certRef.Namespace)
+				}
+				secretKey := client.ObjectKey{Namespace: ns, Name: string(certRef.Name)}
+				if _, ok := result[vlName]; !ok {
+					result[vlName] = make(map[client.ObjectKey]struct{})
+				}
+				result[vlName][secretKey] = struct{}{}
+			}
+		}
+	}
+	return result
 }
 
 // handleNewReferencedCrtList creates crt-list entries for newly referenced virtual listeners.
