@@ -14,6 +14,7 @@
 package hugservice
 
 import (
+	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -22,6 +23,18 @@ import (
 
 func port(name string, port, nodePort int32) corev1.ServicePort {
 	return corev1.ServicePort{Name: name, Port: port, NodePort: nodePort, TargetPort: intstr.FromInt32(port)}
+}
+
+// vlPort builds a ServicePort as emitted by buildVirtualListenerServicePorts
+// (TCP, TargetPort==Port). nodePort=0 means "unset".
+func vlPort(name string, p, nodePort int32) corev1.ServicePort {
+	return corev1.ServicePort{
+		Name:       name,
+		Protocol:   corev1.ProtocolTCP,
+		Port:       p,
+		NodePort:   nodePort,
+		TargetPort: intstr.FromInt32(p),
+	}
 }
 
 func TestPortsEqual(t *testing.T) {
@@ -109,5 +122,50 @@ func TestPortsEqual(t *testing.T) {
 				t.Errorf("portsEqual() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestBuildDesiredPortsPreservesNodePort covers the two NodePort-preservation:
+// - a VL port matching an existing VL port by name/number.
+// - a VL port matching a pre-seeded entry only by port number.
+// Additionally, a brand-new listener must come out with NodePort=0 so
+// Kubernetes allocates.
+func TestBuildDesiredPortsPreservesNodePort(t *testing.T) {
+	existing := []corev1.ServicePort{
+		port("stat", 31024, 31721),         // reserved, kept verbatim
+		vlPort("tls-31443", 31443, 31364),  // matches desired by name
+		port("kube-example", 32132, 32132), // matches desired by port number
+	}
+	desiredVL := []corev1.ServicePort{
+		vlPort("tls-31443", 31443, 0),
+		vlPort("tls-32132", 32132, 0),
+		vlPort("tls-40000", 40000, 0), // new listener, no existing match
+	}
+	want := []corev1.ServicePort{
+		port("stat", 31024, 31721),
+		vlPort("tls-31443", 31443, 31364),
+		vlPort("tls-32132", 32132, 32132),
+		vlPort("tls-40000", 40000, 0),
+	}
+
+	got := buildDesiredPorts(existing, desiredVL)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("buildDesiredPorts() mismatch\n  got  = %#v\n  want = %#v", got, want)
+	}
+}
+
+// TestBuildDesiredPortsIsStable checks, after the first reconcile with
+// Kubernetes filling any unset NodePorts, that a second reconcile is a
+// no-op. This is what prevents the NodePort flip on each event batch.
+func TestBuildDesiredPortsIsStable(t *testing.T) {
+	desiredVL := []corev1.ServicePort{vlPort("tls-31443", 31443, 0)}
+	first := buildDesiredPorts([]corev1.ServicePort{port("stat", 31024, 31024)}, desiredVL)
+	for i := range first {
+		if first[i].NodePort == 0 {
+			first[i].NodePort = 30000 // simulate Kubernetes allocation
+		}
+	}
+	if second := buildDesiredPorts(first, desiredVL); !reflect.DeepEqual(first, second) {
+		t.Fatalf("reconcile is not stable\n  first  = %#v\n  second = %#v", first, second)
 	}
 }

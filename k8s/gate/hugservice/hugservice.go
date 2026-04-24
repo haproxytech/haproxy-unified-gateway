@@ -96,15 +96,7 @@ func (*ServiceReconciler) buildVirtualListenerServicePorts(virtualListeners map[
 // reconcileServicePorts patches a single Service's port list if it differs from
 // the desired state (reserved ports + VirtualListener ports).
 func (r *ServiceReconciler) reconcileServicePorts(ctx context.Context, svc *corev1.Service, desiredVLPorts []corev1.ServicePort) {
-	// Collect reserved ports from the current service (stat, metrics, …).
-	var reservedPorts []corev1.ServicePort
-	for _, p := range svc.Spec.Ports {
-		if reservedPortNames[p.Name] {
-			reservedPorts = append(reservedPorts, p)
-		}
-	}
-
-	desiredPorts := append(reservedPorts, desiredVLPorts...)
+	desiredPorts := buildDesiredPorts(svc.Spec.Ports, desiredVLPorts)
 
 	if portsEqual(svc.Spec.Ports, desiredPorts) {
 		return
@@ -127,10 +119,41 @@ func (r *ServiceReconciler) reconcileServicePorts(ctx context.Context, svc *core
 	)
 }
 
+// buildDesiredPorts merges the current Service ports with the desired set of
+// VirtualListener-derived ports (keeps reserved ports as-is, append the
+// VL ports, carrying over the NodePort assigned on the existing Service
+// whenever the port number matches - to keep it stable).
+func buildDesiredPorts(existing, desiredVLPorts []corev1.ServicePort) []corev1.ServicePort {
+	existingNodePortByPort := make(map[int32]int32, len(existing))
+	var reservedPorts []corev1.ServicePort
+	for _, p := range existing {
+		if p.NodePort != 0 {
+			existingNodePortByPort[p.Port] = p.NodePort
+		}
+		if reservedPortNames[p.Name] {
+			reservedPorts = append(reservedPorts, p)
+		}
+	}
+
+	merged := make([]corev1.ServicePort, 0, len(reservedPorts)+len(desiredVLPorts))
+	merged = append(merged, reservedPorts...)
+	for _, dp := range desiredVLPorts {
+		if dp.NodePort == 0 {
+			if np, ok := existingNodePortByPort[dp.Port]; ok {
+				dp.NodePort = np
+			}
+		}
+		merged = append(merged, dp)
+	}
+	return merged
+}
+
 // portsEqual returns true if both slices describe the same set of ports
 // (matched by name, port, and targetPort, order-independent).
-// NodePort is intentionally excluded: it is assigned by Kubernetes and not
-// managed by the reconciler.
+// NodePort is intentionally excluded from the comparison: it is assigned by
+// Kubernetes (or the user, via NodePort-typed Services) and carried over by
+// buildDesiredPorts, so a reconcile that only differs by NodePort should not
+// trigger a patch.
 func portsEqual(a, b []corev1.ServicePort) bool {
 	if len(a) != len(b) {
 		return false
