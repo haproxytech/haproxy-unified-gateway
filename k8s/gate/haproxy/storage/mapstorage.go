@@ -57,43 +57,35 @@ func NewMapsStorage(logger *slog.Logger, mapsBaseDir string) MapsStorage {
 }
 
 func (m *MapsStorageDefault) GetListenerExactMatchMapFile(frontendName string) *maps.MapFileState {
-	f := m.getMapFile(frontendName, MAP_LISTENER_EXACT_MATCH)
-	f.PlainValues = true
-	return f
+	return m.getMapFile(frontendName, MAP_LISTENER_EXACT_MATCH, true)
 }
 
 func (m *MapsStorageDefault) GetListenerWildcardMatchMapFile(frontendName string) *maps.MapFileState {
-	f := m.getMapFile(frontendName, MAP_LISTENER_WILDCARD_MATCH)
-	f.PlainValues = true
-	return f
+	return m.getMapFile(frontendName, MAP_LISTENER_WILDCARD_MATCH, true)
 }
 
 func (m *MapsStorageDefault) GetListenerRouteExactMatchMapFile(frontendName string) *maps.MapFileState {
-	f := m.getMapFile(frontendName, MAP_LISTENER_ROUTE_EXACT_MATCH)
-	f.PlainValues = true
-	return f
+	return m.getMapFile(frontendName, MAP_LISTENER_ROUTE_EXACT_MATCH, true)
 }
 
 func (m *MapsStorageDefault) GetListenerRouteWildcardMatchMapFile(frontendName string) *maps.MapFileState {
-	f := m.getMapFile(frontendName, MAP_LISTENER_ROUTE_WILDCARD_MATCH)
-	f.PlainValues = true
-	return f
+	return m.getMapFile(frontendName, MAP_LISTENER_ROUTE_WILDCARD_MATCH, true)
 }
 
 func (m *MapsStorageDefault) GetPathExactMapFile(frontendName string) *maps.MapFileState {
-	return m.getMapFile(frontendName, PATH_EXACT_MAP)
+	return m.getMapFile(frontendName, PATH_EXACT_MAP, false)
 }
 
 func (m *MapsStorageDefault) GetPathPrefixMapFile(frontendName string) *maps.MapFileState {
-	return m.getMapFile(frontendName, PATH_PREFIX_MAP)
+	return m.getMapFile(frontendName, PATH_PREFIX_MAP, false)
 }
 
 func (m *MapsStorageDefault) GetPathRegexMapFile(frontendName string) *maps.MapFileState {
-	return m.getMapFile(frontendName, PATH_REGEX_MAP)
+	return m.getMapFile(frontendName, PATH_REGEX_MAP, false)
 }
 
 func (m *MapsStorageDefault) GetSniMapFile(frontendName string) *maps.MapFileState {
-	return m.getMapFile(frontendName, SNI_MAP)
+	return m.getMapFile(frontendName, SNI_MAP, false)
 }
 
 // getMapFile returns the MapFileState for the given frontend name and map name.
@@ -101,7 +93,7 @@ func (m *MapsStorageDefault) GetSniMapFile(frontendName string) *maps.MapFileSta
 // reads the map file from disk, and stores the map file in the mapFiles map.
 // If there is an error reading the map file from disk, it logs an error message.
 // It returns a pointer to the MapFileState.
-func (m *MapsStorageDefault) getMapFile(frontendName string, mapName string) *maps.MapFileState {
+func (m *MapsStorageDefault) getMapFile(frontendName string, mapName string, plainValues bool) *maps.MapFileState {
 	mapBaseDir := filepath.Join(m.MapsBaseDir, frontendName)
 	mapFileName := mapName + ".map"
 
@@ -113,6 +105,7 @@ func (m *MapsStorageDefault) getMapFile(frontendName string, mapName string) *ma
 	mapFile := mapFilesInDir[mapFileName]
 	if mapFile == nil {
 		mapFile = maps.NewMapFileState(mapBaseDir, mapFileName, m.logger)
+		mapFile.PlainValues = plainValues
 		m.mapFiles[mapBaseDir][mapFileName] = mapFile
 	}
 	return mapFile
