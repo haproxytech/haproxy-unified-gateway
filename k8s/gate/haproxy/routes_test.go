@@ -85,6 +85,7 @@ func TestResolveEntry(t *testing.T) {
 		hostname   string
 		pathType   gatewayv1.PathMatchType
 		path       string
+		nilPath    bool // leave match.Path nil to exercise default-path handling
 		wantBucket bucket
 		wantKey    maps.EntryKey
 	}{
@@ -136,16 +137,45 @@ func TestResolveEntry(t *testing.T) {
 			wantBucket: bucketRegex,
 			wantKey:    maps.EntryKey{Hostname: `\.example\.com`, Path: "/foo"},
 		},
+		{
+			// nil match.Path → defaults to path="/" and type=PathPrefix
+			name:       "nil path defaults to slash prefix exact-host",
+			hostname:   "example.com",
+			nilPath:    true,
+			wantBucket: bucketPrefix,
+			wantKey:    maps.EntryKey{Hostname: "example.com", Path: "/"},
+		},
+		{
+			// regex path that starts with "^" — the caret must be stripped before sanitization
+			name:       "regex-path with leading caret exact-host",
+			hostname:   "example.com",
+			pathType:   gatewayv1.PathMatchRegularExpression,
+			path:       "^/foo",
+			wantBucket: bucketRegex,
+			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: "/foo"},
+		},
+		{
+			// root path "/" with prefix type and wildcard host → path becomes "/.*"
+			name:       "prefix-path root wildcard-host",
+			hostname:   "*.example.com",
+			pathType:   gatewayv1.PathMatchPathPrefix,
+			path:       "/",
+			wantBucket: bucketRegex,
+			wantKey:    maps.EntryKey{Hostname: `\.example\.com`, Path: "/.*"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := newDesiredBackendsMaps()
-			match := gatewayv1.HTTPRouteMatch{
-				Path: &gatewayv1.HTTPPathMatch{
-					Type:  ptr(tt.pathType),
-					Value: strPtr(tt.path),
-				},
+			var match gatewayv1.HTTPRouteMatch
+			if !tt.nilPath {
+				match = gatewayv1.HTTPRouteMatch{
+					Path: &gatewayv1.HTTPPathMatch{
+						Type:  ptr(tt.pathType),
+						Value: strPtr(tt.path),
+					},
+				}
 			}
 			innerMap, key := d.resolveEntry(tt.hostname, match)
 
@@ -172,5 +202,30 @@ func TestResolveEntry(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestResolveEntryLazyInit verifies that two calls with the same hostname+match
+// return the same inner-map instance (lazy initialisation must not replace an
+// already-populated map).
+func TestResolveEntryLazyInit(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	ptr := func(s gatewayv1.PathMatchType) *gatewayv1.PathMatchType { return &s }
+
+	d := newDesiredBackendsMaps()
+	match := gatewayv1.HTTPRouteMatch{
+		Path: &gatewayv1.HTTPPathMatch{
+			Type:  ptr(gatewayv1.PathMatchPathPrefix),
+			Value: strPtr("/bar"),
+		},
+	}
+
+	m1, _ := d.resolveEntry("example.com", match)
+	w := int32(100)
+	m1["backend-a"] = &maps.WeightedValue{ValueName: "backend-a", Weight: &w}
+
+	m2, _ := d.resolveEntry("example.com", match)
+	if m2["backend-a"] == nil {
+		t.Error("second resolveEntry call returned a fresh map, wanted the same instance")
 	}
 }
