@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
@@ -184,16 +185,13 @@ func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 	listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
 }
 
-// listenersForRoute returns all gateway Listener objects referenced by the route's parentRefs,
+// listenersForParentRefs returns all gateway Listener objects referenced by parentRefs,
 // regardless of hostname matching. Deleted gateways and missing section names are skipped.
-func (b *RouteMgrImpl) listenersForRoute(route *tree.HTTPRoute) []*tree.Listener {
-	if route.K8sResource == nil {
-		return nil
-	}
+func (b *RouteMgrImpl) listenersForParentRefs(parentRefs []gatewayv1.ParentReference, namespace string) []*tree.Listener {
 	controllerStore := b.topManager.controllerStore
 	var result []*tree.Listener
-	for _, parentRef := range route.K8sResource.Spec.ParentRefs {
-		gwKey := tree.GetParentRefNamespacedName(parentRef, route.K8sResource.Namespace)
+	for _, parentRef := range parentRefs {
+		gwKey := tree.GetParentRefNamespacedName(parentRef, namespace)
 		treeGw, ok := controllerStore.GateTree.Gateways[gwKey]
 		if !ok || treeGw.TreeStatus.Status == store.StatusDeleted {
 			continue
@@ -210,6 +208,13 @@ func (b *RouteMgrImpl) listenersForRoute(route *tree.HTTPRoute) []*tree.Listener
 		}
 	}
 	return result
+}
+
+func (b *RouteMgrImpl) listenersForRoute(route *tree.HTTPRoute) []*tree.Listener {
+	if route.K8sResource == nil {
+		return nil
+	}
+	return b.listenersForParentRefs(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace)
 }
 
 func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
@@ -386,32 +391,11 @@ func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
 	listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
 }
 
-// listenersForTLSRoute returns all gateway Listener objects referenced by the TLSRoute's parentRefs,
-// regardless of hostname matching. Deleted gateways and missing section names are skipped.
 func (b *RouteMgrImpl) listenersForTLSRoute(route *tree.TLSRoute) []*tree.Listener {
 	if route.K8sResource == nil {
 		return nil
 	}
-	controllerStore := b.topManager.controllerStore
-	var result []*tree.Listener
-	for _, parentRef := range route.K8sResource.Spec.ParentRefs {
-		gwKey := tree.GetParentRefNamespacedName(parentRef, route.K8sResource.Namespace)
-		treeGw, ok := controllerStore.GateTree.Gateways[gwKey]
-		if !ok || treeGw.TreeStatus.Status == store.StatusDeleted {
-			continue
-		}
-		if parentRef.SectionName != nil {
-			l, ok := treeGw.Listeners[string(*parentRef.SectionName)]
-			if ok {
-				result = append(result, l)
-			}
-		} else {
-			for _, l := range treeGw.Listeners {
-				result = append(result, l)
-			}
-		}
-	}
-	return result
+	return b.listenersForParentRefs(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace)
 }
 
 func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
