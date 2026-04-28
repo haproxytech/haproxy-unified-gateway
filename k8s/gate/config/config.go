@@ -51,12 +51,13 @@ type Configuration struct {
 	LogHandler                   *logging.CategoryFilterHandler
 	// TransferHaproxyConfChannel is used to send the HaproxyConfDiffs to the application
 	TransferHaproxyConfChannel chan diffs.HaproxyConfDiffs
-	// MetricsConfig specifies the metrics config.
-	MetricsConfig MetricsConfig
 	// ControllerPodConfig contains information about this Pod.
 	ControllerPodConfig ControllerPodConfig
 	//  Namespace and name of the controller conf CRD:  HugConf
 	HugConfCRD types.NamespacedName
+	// If we watch only 1 Gateway, the namespace and name of this Gateway can be specified here.
+	// If specified, only this Gateway will be watched, otherwise all Gateways will be watched.
+	GatewayNsName types.NamespacedName
 	// LogHandlerType defines the type of log Handler we want: json or text
 	// Default will be json
 	LogHandlerType logging.LogHandlerType
@@ -70,6 +71,8 @@ type Configuration struct {
 	Namespaces []string
 	// HaproxyConfParams contains the needed configuration to compute the FE/BE/...
 	HaproxyParams haproxy.HaproxyConfParams
+	// MetricsConfig specifies the metrics config.
+	MetricsConfig MetricsConfig
 	// SyncPeriod is the duration we wait after handling one batch before the next one
 	SyncPeriod time.Duration
 	// StartupSyncPeriod is the first (at startup) duration we wait after handling one batch before the next one

@@ -37,6 +37,7 @@ type HUGConfig struct {
 	LogSettings map[v3.Category]slog.Level
 	haproxy.HaproxyDirs
 	ControllerConfCRD        NamespaceNameValue `ff:"          long: hugconf-crd,                         usage: 'namespace/name of the HugConf CRD'"`
+	GatewayNsName            NamespaceNameValue `ff:"          long: gateway-ns-name,                 usage: 'if specified, only watch the Gateway with this namespace/name (format: namespace/name), otherwise watch all Gateways'"`
 	ControllerName           string             `ff:"          long: controller-name,                     usage: 'spec.controllerName' GatewayClass selector'"`
 	IPV4BindAddr             string             `ff:"          long: ipv4-bind-address,                   usage: 'IPv4 address to bind to'"`
 	IPV6BindAddr             string             `ff:"          long: ipv6-bind-address,	               usage: 'IPv6 address to bind to'"`

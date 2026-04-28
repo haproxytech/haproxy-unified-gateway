@@ -71,6 +71,10 @@ func SetupGateConfig(hugConfig hugconfig.HUGConfig) gateconfig.GateConfigOptions
 		opt.RuntimeUpdate(gateconfig.DefaultWaitForRuntimeTimeout),   // Send commands through runtime in Gate library
 		opt.StoreCertificateOnDisk(storage.StructureTypeCertDefault), // Store the certificates on disk
 		opt.StoreMapsOnDisk(storage.StructureTypeMapsDefault),        // Store the maps on disk
+		opt.GatewayNsName(types.NamespacedName{
+			Namespace: hugConfig.GatewayNsName.Namespace,
+			Name:      hugConfig.GatewayNsName.Name,
+		}), // If specified, only this Gateway will be watched, otherwise all Gateways will be watched.
 	}
 	if hugConfig.DisableIPv4 {
 		opts = append(opts, opt.DisableIPv4())

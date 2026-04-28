@@ -28,6 +28,7 @@ Available options:
 | DisableIPv4 |  |
 | DisableIPv6 |  |
 | FrontendNameTemplate | `template`(string) |
+| GatewayNsName | `gatewayNsName`(types.NamespacedName) |
 | HaproxyConfChannel | `treeCh`(*ast.ChanType) |
 | HaproxyDirs | `dirs`(haproxy.HaproxyDirs) |
 | IPV4BindAddr | `addr`(string) |
@@ -148,6 +149,19 @@ import (
 )
 
 controller, err := controller.New(opt.FrontendNameTemplate(template))
+```
+
+### GatewayNsName
+
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.GatewayNsName(gatewayNsName))
 ```
 
 ### HaproxyConfChannel

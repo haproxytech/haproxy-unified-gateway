@@ -42,6 +42,12 @@ FrontendNameTemplate:
     args:
         - name: template
           type: string
+GatewayNsName:
+    name: GatewayNsName
+    comment: ""
+    args:
+        - name: gatewayNsName
+          type: types.NamespacedName
 HaproxyConfChannel:
     name: HaproxyConfChannel
     comment: ""
