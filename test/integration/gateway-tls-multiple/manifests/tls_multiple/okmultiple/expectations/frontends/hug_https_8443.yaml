@@ -1,4 +1,3 @@
-from: haproxytech
 metadata:
   hug:
     Gateway:
@@ -7,17 +6,106 @@ metadata:
         LinkID: hug
 mode: http
 name: hug_https_8443
+from: haproxytech
 binds:
   v4:
+    address: 0.0.0.0
     crt_list: /tmp/hug/e2e-tests-gateway-tls-multiple/certlists/hug_https_8443.list
     name: v4
-    ssl: true
-    address: 0.0.0.0
     port: 8443
+    ssl: true
   v6:
+    address: '::'
     crt_list: /tmp/hug/e2e-tests-gateway-tls-multiple/certlists/hug_https_8443.list
     name: v6
-    ssl: true
-    address: '::'
     port: 8443
+    ssl: true
+acl_list:
+- acl_name: route_is_json
+  criterion: var(txn.route),bytes(0,1)
+  metadata:
+    hug: for lua routing
+  value: -m str {
+backend_switching_rule_list:
+- cond: if
+  cond_test: route_is_json
+  name: '%[var(txn.backend)]'
+- name: '%[var(txn.route)]'
+http_request_rule_list:
+- type: set-var
+  var_expr: path
+  var_name: path
+  var_scope: txn
+- type: set-var
+  var_expr: req.hdr(Host),host_only
+  var_name: host
+  var_scope: txn
+- type: set-var
+  var_expr: req.hdr(Host),host_only,lua.reverse_host
+  var_name: hostreversed
+  var_scope: txn
+- type: set-var
+  var_expr: var(txn.host),concat("",txn.path)
+  var_name: base
+  var_scope: txn
+- metadata:
+    hug: listener exact match selection
+  type: set-var
+  var_expr: var(txn.host),map(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/listener_exact_match.map)
+  var_name: selected_listener_name
+  var_scope: txn
+- metadata:
+    hug: listener wildcard match selection
+  type: set-var
+  var_expr: var(txn.hostreversed),map_beg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/listener_wildcard_match.map)
+  var_name: selected_listener_name,ifnotexists
+  var_scope: txn
+- type: set-var
+  var_expr: var(txn.selected_listener_name),concat("/",txn.host)
+  var_name: tmp_exact
+  var_scope: txn
+- metadata:
+    hug: listener-route exact match selection
+  type: set-var
+  var_expr: var(txn.tmp_exact),map(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/listener_route_exact_match.map)
+  var_name: selected_listener_route,ifnotexists
+  var_scope: txn
+- type: set-var
+  var_expr: var(txn.selected_listener_name),concat("/",txn.hostreversed)
+  var_name: tmp_wild
+  var_scope: txn
+- metadata:
+    hug: listener-route wildcard match selection
+  type: set-var
+  var_expr: var(txn.tmp_wild),map_beg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/listener_route_wildcard_match.map)
+  var_name: selected_listener_route,ifnotexists
+  var_scope: txn
+- type: set-var
+  var_expr: var(txn.selected_listener_route),concat("",txn.path)
+  var_name: base_listener_route,ifnotexists
+  var_scope: txn
+- metadata:
+    hug: exact domain + exact path
+  type: set-var
+  var_expr: var(txn.base_listener_route),map(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_exact.map)
+  var_name: route
+  var_scope: txn
+- metadata:
+    hug: exact domain + path prefix
+  type: set-var
+  var_expr: var(txn.base_listener_route),map_beg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_prefix.map)
+  var_name: route,ifnotexists
+  var_scope: txn
+- metadata:
+    hug: domain wildcard + path prefix or regex, exact domain + path regex
+  type: set-var
+  var_expr: var(txn.base_listener_route),map_reg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_regex.map)
+  var_name: route,ifnotexists
+  var_scope: txn
+- cond: if
+  cond_test: route_is_json
+  lua_action: route
+  metadata:
+    hug: lua routing
+  type: lua
 default_backend: backend_not_found

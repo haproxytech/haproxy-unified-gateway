@@ -12,12 +12,16 @@ backend_switching_rule_list:
 binds:
   v4:
     address: 0.0.0.0
+    crt_list: /tmp/hug/e2e-tests-gateway-tls-multiple/certlists/hug_https_8443.list
     name: v4
-    port: 8080
+    port: 8443
+    ssl: true
   v6:
     address: '::'
+    crt_list: /tmp/hug/e2e-tests-gateway-tls-multiple/certlists/hug_https_8443.list
     name: v6
-    port: 8080
+    port: 8443
+    ssl: true
 default_backend: backend_not_found
 from: haproxytech
 http_request_rule_list:
@@ -40,13 +44,13 @@ http_request_rule_list:
 - metadata:
     hug: listener exact match selection
   type: set-var
-  var_expr: var(txn.host),map(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/listener_exact_match.map)
+  var_expr: var(txn.host),map(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/listener_exact_match.map)
   var_name: selected_listener_name
   var_scope: txn
 - metadata:
     hug: listener wildcard match selection
   type: set-var
-  var_expr: var(txn.hostreversed),map_beg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/listener_wildcard_match.map)
+  var_expr: var(txn.hostreversed),map_beg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/listener_wildcard_match.map)
   var_name: selected_listener_name,ifnotexists
   var_scope: txn
 - type: set-var
@@ -56,7 +60,7 @@ http_request_rule_list:
 - metadata:
     hug: listener-route exact match selection
   type: set-var
-  var_expr: var(txn.tmp_exact),map(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/listener_route_exact_match.map)
+  var_expr: var(txn.tmp_exact),map(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/listener_route_exact_match.map)
   var_name: selected_listener_route,ifnotexists
   var_scope: txn
 - type: set-var
@@ -66,7 +70,7 @@ http_request_rule_list:
 - metadata:
     hug: listener-route wildcard match selection
   type: set-var
-  var_expr: var(txn.tmp_wild),map_beg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/listener_route_wildcard_match.map)
+  var_expr: var(txn.tmp_wild),map_beg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/listener_route_wildcard_match.map)
   var_name: selected_listener_route,ifnotexists
   var_scope: txn
 - type: set-var
@@ -76,19 +80,19 @@ http_request_rule_list:
 - metadata:
     hug: exact domain + exact path
   type: set-var
-  var_expr: var(txn.base_listener_route),map(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_exact.map)
+  var_expr: var(txn.base_listener_route),map(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_exact.map)
   var_name: route
   var_scope: txn
 - metadata:
     hug: exact domain + path prefix
   type: set-var
-  var_expr: var(txn.base_listener_route),map_beg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_prefix.map)
+  var_expr: var(txn.base_listener_route),map_beg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_prefix.map)
   var_name: route,ifnotexists
   var_scope: txn
 - metadata:
     hug: domain wildcard + path prefix or regex, exact domain + path regex
   type: set-var
-  var_expr: var(txn.base_listener_route),map_reg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_regex.map)
+  var_expr: var(txn.base_listener_route),map_reg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_regex.map)
   var_name: route,ifnotexists
   var_scope: txn
 - cond: if
@@ -100,8 +104,8 @@ http_request_rule_list:
 metadata:
   hug:
     Gateway:
-      e2e-tests-gateway/gateway:
+      e2e-tests-gateway-tls-multiple/gateway:
         Generation: 1
         LinkID: hug
 mode: http
-name: hug_http_8080
+name: hug_https_8443

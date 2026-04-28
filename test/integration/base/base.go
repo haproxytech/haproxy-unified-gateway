@@ -388,27 +388,6 @@ func (b *BaseSuite) CleanupFixturesInNamespace(fixturePath, namespace string, ma
 	b.Require().NoError(err)
 }
 
-// Return HAProxy master process if it exists.
-// func haproxyProcess(pidFile string) (*os.Process, error) {
-// 	file, err := os.Open(pidFile)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer file.Close()
-// 	scanner := bufio.NewScanner(file)
-// 	scanner.Scan()
-// 	pid, err := strconv.Atoi(scanner.Text())
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	process, err := os.FindProcess(pid)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	err = process.Signal(syscall.Signal(0))
-// 	return process, err
-// }
-
 // For now: only checks the following certificate fields:
 // - StorageName
 // - Subject (for CN)
@@ -530,6 +509,7 @@ func (b *BaseSuite) ExpectFrontends(ctx context.Context, expectationPath string,
 				return false
 			}
 
+			// utils.ExportFrontend(gotFrontend)
 			expectedFrontend := b.FrontendFromManifest(expectationPath, expectedFeName)
 			areSame := expectedFrontend.Equal(*gotFrontend)
 			if !areSame {
