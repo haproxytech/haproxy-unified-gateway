@@ -727,6 +727,10 @@ spec:
                     busy_polling:
                       description: busy polling
                       type: boolean
+                    fd_hard_limit:
+                      description: fd hard limit
+                      format: int64
+                      type: integer
                     max_spread_checks:
                       description: |-
                         max spread checks

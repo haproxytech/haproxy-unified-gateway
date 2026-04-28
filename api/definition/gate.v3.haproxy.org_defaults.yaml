@@ -2896,7 +2896,7 @@ spec:
                     - safe
                   type: string
                 http_send_name_header:
-                  description: http send name header
+                  description: Add the server name to a request
                   type: string
                 http_use_proxy_header:
                   description: |-
@@ -3127,7 +3127,7 @@ spec:
                     - disabled
                   type: string
                 max_keep_alive_queue:
-                  description: max keep alive queue
+                  description: Maximum server queue size for maintaining keep-alive connections
                   format: int64
                   type: integer
                 maxconn:
@@ -3321,7 +3321,7 @@ spec:
                   format: int64
                   type: integer
                 retry_on:
-                  description: retry on
+                  description: Specify when to attempt to automatically retry a failed request
                   type: string
                 server_fin_timeout:
                   description: |-

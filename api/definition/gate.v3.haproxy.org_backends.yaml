@@ -2957,7 +2957,7 @@ spec:
                     - safe
                   type: string
                 http_send_name_header:
-                  description: http send name header
+                  description: The header string to use to send the server name
                   type: string
                 httpchk_params:
                   description: httpchk params
@@ -3342,7 +3342,7 @@ spec:
                       ServerSwitchingRule Server Switching Rule
 
                       HAProxy server switching rule configuration (corresponds to use-server directive)
-                      Example: {"cond":"if","cond_test":"{ req_ssl_sni -i www.example.com }","target_server":"www"}
+                      Example: {"cond":"if","cond_test":"{ req.ssl_sni -i www.example.com }","target_server":"www"}
 
                       swagger:model server_switching_rule
                     properties:
