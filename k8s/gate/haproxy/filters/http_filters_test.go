@@ -201,6 +201,20 @@ func TestRequestRedirectRules(t *testing.T) {
 			wantValue:   "%[path,regsub(^/old,/new)]",
 		},
 		{
+			// replacePrefixMatch "/" with root matchPrefix keeps the path unchanged.
+			name: "replace root prefix with root preserves path",
+			filter: gatewayv1.HTTPRequestRedirectFilter{
+				Path: &gatewayv1.HTTPPathModifier{
+					Type:               gatewayv1.PrefixMatchHTTPPathModifier,
+					ReplacePrefixMatch: new("/"),
+				},
+			},
+			matchPrefix: "/",
+			wantLen:     1,
+			wantType:    "location",
+			wantValue:   "%[path]",
+		},
+		{
 			name: "custom status code",
 			filter: gatewayv1.HTTPRequestRedirectFilter{
 				Scheme:     new("https"),
@@ -277,12 +291,41 @@ func TestURLRewriteRules(t *testing.T) {
 			wantLen:     1,
 			wantType:    "replace-path",
 		},
+		{
+			// replacePrefixMatch "/" on a non-root prefix needs two rules:
+			// one for the exact prefix (→ "/") and one for prefix+suffix.
+			name: "strip prefix to root",
+			filter: gatewayv1.HTTPURLRewriteFilter{
+				Path: &gatewayv1.HTTPPathModifier{
+					Type:               gatewayv1.PrefixMatchHTTPPathModifier,
+					ReplacePrefixMatch: new("/"),
+				},
+			},
+			matchPrefix: "/strip-prefix",
+			wantLen:     2,
+			wantType:    "replace-path",
+		},
+		{
+			// replacePrefixMatch "/" with root matchPrefix is a no-op: every path
+			// maps to itself, so no rewrite rule should be emitted.
+			name: "replace root prefix with root is no-op",
+			filter: gatewayv1.HTTPURLRewriteFilter{
+				Path: &gatewayv1.HTTPPathModifier{
+					Type:               gatewayv1.PrefixMatchHTTPPathModifier,
+					ReplacePrefixMatch: new("/"),
+				},
+			},
+			matchPrefix: "/",
+			wantLen:     0,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			rules := urlRewriteRules(&tc.filter, tc.matchPrefix)
 			require.Len(t, rules, tc.wantLen)
-			assert.Equal(t, tc.wantType, rules[0].Type)
+			if len(rules) > 0 {
+				assert.Equal(t, tc.wantType, rules[0].Type)
+			}
 		})
 	}
 }

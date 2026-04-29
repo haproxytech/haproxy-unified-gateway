@@ -278,17 +278,40 @@ func urlRewriteRules(f *gatewayv1.HTTPURLRewriteFilter, matchPrefix string) mode
 			if f.Path.ReplacePrefixMatch != nil && matchPrefix != "" {
 				replacement := strings.TrimRight(*f.Path.ReplacePrefixMatch, "/")
 				if matchPrefix == "/" {
-					rules = append(rules, &models.HTTPRequestRule{
-						Type:    "set-path",
-						PathFmt: fmt.Sprintf("%s%%[path,regsub(^/$,)]", replacement),
-					})
+					// replacement=="" means ReplacePrefixMatch="/" on root match:
+					// every path maps to itself, so no rewrite rule is needed.
+					if replacement != "" {
+						rules = append(rules, &models.HTTPRequestRule{
+							Type:    "set-path",
+							PathFmt: fmt.Sprintf("%s%%[path,regsub(^/$,)]", replacement),
+						})
+					}
 				} else {
 					escapedPrefix := regexEscapePath(matchPrefix)
-					rules = append(rules, &models.HTTPRequestRule{
-						Type:      "replace-path",
-						PathMatch: fmt.Sprintf("^%s(/.*)?$", escapedPrefix),
-						PathFmt:   fmt.Sprintf("%s\\1", replacement),
-					})
+					if replacement == "" {
+						// replacePrefixMatch is "/" (trimmed to ""): two rules are
+						// needed because a single replace-path with \1 produces an
+						// empty path when the request path is exactly the prefix
+						// (no suffix), whereas the expected result is "/".
+						rules = append(rules,
+							&models.HTTPRequestRule{
+								Type:      "replace-path",
+								PathMatch: fmt.Sprintf("^%s$", escapedPrefix),
+								PathFmt:   "/",
+							},
+							&models.HTTPRequestRule{
+								Type:      "replace-path",
+								PathMatch: fmt.Sprintf("^%s(/.*)?$", escapedPrefix),
+								PathFmt:   "\\1",
+							},
+						)
+					} else {
+						rules = append(rules, &models.HTTPRequestRule{
+							Type:      "replace-path",
+							PathMatch: fmt.Sprintf("^%s(/.*)?$", escapedPrefix),
+							PathFmt:   fmt.Sprintf("%s\\1", replacement),
+						})
+					}
 				}
 			}
 		}
@@ -378,6 +401,9 @@ func requestRedirectRules(f *gatewayv1.HTTPRequestRedirectFilter, matchPrefix st
 		}
 		replacement := strings.TrimRight(*f.Path.ReplacePrefixMatch, "/")
 		if matchPrefix == "/" {
+			if replacement == "" {
+				return models.HTTPRequestRules{redirect(pfx+"%[path]", "", "")}
+			}
 			return models.HTTPRequestRules{
 				redirect(fmt.Sprintf("%s%s%%[path,regsub(^/$,)]", pfx, replacement), "", ""),
 			}
