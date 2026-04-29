@@ -14,16 +14,24 @@
 package predicate
 
 import (
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// GatewayPredicate implements a predicate function based on the gatewayClassName: of a Gateway.
-// This predicate will skip events for Gateways that don't reference this gatewayClass.
+// GatewayPredicate implements a predicate function based on specific Gateway to watch.
+// If the GatewayNsName field is empty, all events will be allowed. Otherwise, only events for the specified Gateway will be allowed.
+// This predicate will skip events for Gateways that don't reference this Gateway.
 type GatewayPredicate struct {
 	predicate.Funcs
-	GatewayClassNames map[string]struct{}
+	GatewayNsName types.NamespacedName
+}
+
+func NewGatewayPredicate(nsName types.NamespacedName) GatewayPredicate {
+	return GatewayPredicate{
+		GatewayNsName: nsName,
+	}
 }
 
 // Create implements default CreateEvent filter for validating a Gateway gatewayClassName.
@@ -31,29 +39,35 @@ func (gp GatewayPredicate) Create(e event.CreateEvent) bool {
 	if e.Object == nil {
 		return false
 	}
+	if gp.GatewayNsName.Name == "" && gp.GatewayNsName.Namespace == "" {
+		return true
+	}
 
-	gc, ok := e.Object.(*gatewayv1.Gateway)
+	g, ok := e.Object.(*gatewayv1.Gateway)
 	if !ok {
 		return false
 	}
-	_, allowed := gp.GatewayClassNames[string(gc.Spec.GatewayClassName)]
-
+	allowed := gp.GatewayNsName.Name == g.Name && gp.GatewayNsName.Namespace == g.Namespace
 	return allowed
 }
 
-// Update implements default UpdateEvent filter for validating a Gateway gatewayClassName.
+// Update implements default UpdateEvent filter for validating a Gateway.
 func (gp GatewayPredicate) Update(e event.UpdateEvent) bool {
+	if gp.GatewayNsName.Name == "" && gp.GatewayNsName.Namespace == "" {
+		return true
+	}
+
 	if e.ObjectOld != nil {
-		gcOld, ok := e.ObjectOld.(*gatewayv1.Gateway)
-		_, allowed := gp.GatewayClassNames[string(gcOld.Spec.GatewayClassName)]
+		gOld, ok := e.ObjectOld.(*gatewayv1.Gateway)
+		allowed := gp.GatewayNsName.Name == gOld.Name && gp.GatewayNsName.Namespace == gOld.Namespace
 		if ok && allowed {
 			return true
 		}
 	}
 
 	if e.ObjectNew != nil {
-		gcNew, ok := e.ObjectNew.(*gatewayv1.Gateway)
-		_, allowed := gp.GatewayClassNames[string(gcNew.Spec.GatewayClassName)]
+		gNew, ok := e.ObjectNew.(*gatewayv1.Gateway)
+		allowed := gp.GatewayNsName.Name == gNew.Name && gp.GatewayNsName.Namespace == gNew.Namespace
 		if ok && allowed {
 			return true
 		}
@@ -67,12 +81,15 @@ func (gp GatewayPredicate) Delete(e event.DeleteEvent) bool {
 	if e.Object == nil {
 		return false
 	}
+	if gp.GatewayNsName.Name == "" && gp.GatewayNsName.Namespace == "" {
+		return true
+	}
 
-	gc, ok := e.Object.(*gatewayv1.Gateway)
+	g, ok := e.Object.(*gatewayv1.Gateway)
 	if !ok {
 		return false
 	}
-	_, allowed := gp.GatewayClassNames[string(gc.Spec.GatewayClassName)]
+	allowed := gp.GatewayNsName.Name == g.Name && gp.GatewayNsName.Namespace == g.Namespace
 
 	return allowed
 }

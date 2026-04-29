@@ -20,7 +20,6 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/diffs"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
@@ -66,12 +65,14 @@ type StatusUpdater interface {
 }
 
 type StatusUpdaterConf struct {
-	logger         *slog.Logger
-	client         client.Client
-	extractGVK     utilsk8s.ExtractGVK
-	controllerName string
-	disableIPv4    bool
-	disableIPv6    bool
+	logger             *slog.Logger
+	client             client.Client
+	extractGVK         utilsk8s.ExtractGVK
+	controllerName     string
+	hugServiceLabelKey string
+	hugServiceLabelVal string
+	disableIPv4        bool
+	disableIPv6        bool
 }
 
 type StatusUpdaterImpl struct {
@@ -91,17 +92,21 @@ func NewStatusUpdaterConf(
 	k8sClient client.Client,
 	extractGVK utilsk8s.ExtractGVK,
 	controllerName string,
+	hugServiceLabelKey string,
+	hugServiceLabelVal string,
 	logger *slog.Logger,
 	disableIPv4 bool,
 	disableIPv6 bool,
 ) StatusUpdaterConf {
 	return StatusUpdaterConf{
-		logger:         logger,
-		extractGVK:     extractGVK,
-		client:         k8sClient,
-		controllerName: controllerName,
-		disableIPv4:    disableIPv4,
-		disableIPv6:    disableIPv6,
+		logger:             logger,
+		extractGVK:         extractGVK,
+		client:             k8sClient,
+		controllerName:     controllerName,
+		hugServiceLabelKey: hugServiceLabelKey,
+		hugServiceLabelVal: hugServiceLabelVal,
+		disableIPv4:        disableIPv4,
+		disableIPv6:        disableIPv6,
 	}
 }
 
@@ -288,7 +293,7 @@ func (s *StatusUpdaterImpl) UpdateStatus(ctx context.Context, updates PreparedSt
 func (s *StatusUpdaterImpl) fetchControllerAddresses(ctx context.Context) []gatewayv1.GatewayStatusAddress {
 	svcList := &corev1.ServiceList{}
 	if err := s.config.client.List(ctx, svcList, client.MatchingLabels{
-		constants.HugServiceLabelKey: constants.HugServiceLabelVal,
+		s.config.hugServiceLabelKey: s.config.hugServiceLabelVal,
 	}); err != nil {
 		s.config.logger.LogAttrs(ctx, slog.LevelError,
 			"Failed to list controller service",
@@ -298,7 +303,8 @@ func (s *StatusUpdaterImpl) fetchControllerAddresses(ctx context.Context) []gate
 	}
 	if len(svcList.Items) == 0 {
 		s.config.logger.LogAttrs(ctx, slog.LevelWarn,
-			"No controller service found (label app.kubernetes.io/name=haproxy-unified-gateway)",
+			"No controller service found",
+			slog.String("label", s.config.hugServiceLabelKey+"="+s.config.hugServiceLabelVal),
 		)
 		return nil
 	}

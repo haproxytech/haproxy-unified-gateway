@@ -60,6 +60,12 @@ HaproxyDirs:
     args:
         - name: dirs
           type: haproxy.HaproxyDirs
+HugServiceLabel:
+    name: HugServiceLabel
+    comment: ""
+    args:
+        - name: key
+          type: string
 IPV4BindAddr:
     name: IPV4BindAddr
     comment: ""

@@ -31,6 +31,7 @@ Available options:
 | GatewayNsName | `gatewayNsName`(types.NamespacedName) |
 | HaproxyConfChannel | `treeCh`(*ast.ChanType) |
 | HaproxyDirs | `dirs`(haproxy.HaproxyDirs) |
+| HugServiceLabel | `key`(string) |
 | IPV4BindAddr | `addr`(string) |
 | IPV6BindAddr | `addr`(string) |
 | InitialStructured | `structuredCfg`(structured.Structured) |
@@ -188,6 +189,19 @@ import (
 )
 
 controller, err := controller.New(opt.HaproxyDirs(dirs))
+```
+
+### HugServiceLabel
+
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.HugServiceLabel(key))
 ```
 
 ### IPV4BindAddr

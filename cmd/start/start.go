@@ -75,6 +75,7 @@ func SetupGateConfig(hugConfig hugconfig.HUGConfig) gateconfig.GateConfigOptions
 			Namespace: hugConfig.GatewayNsName.Namespace,
 			Name:      hugConfig.GatewayNsName.Name,
 		}), // If specified, only this Gateway will be watched, otherwise all Gateways will be watched.
+		opt.HugServiceLabel(hugConfig.HugServiceLabel.Key, hugConfig.HugServiceLabel.Value),
 	}
 	if hugConfig.DisableIPv4 {
 		opts = append(opts, opt.DisableIPv4())

@@ -18,7 +18,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	corev1 "k8s.io/api/core/v1"
@@ -36,16 +35,20 @@ var reservedPortNames = map[string]bool{
 // ServiceReconciler reconciles the HUG Kubernetes Service ports against the
 // active set of VirtualListeners.
 type ServiceReconciler struct {
-	client client.Client
-	logger *slog.Logger
+	client   client.Client
+	logger   *slog.Logger
+	labelKey string
+	labelVal string
 }
 
 // New creates a ServiceReconciler. The provided logger is wrapped with the
 // "hugservice" category so its output can be filtered independently.
-func New(k8sClient client.Client, logger *slog.Logger) *ServiceReconciler {
+func New(k8sClient client.Client, labelKey, labelVal string, logger *slog.Logger) *ServiceReconciler {
 	return &ServiceReconciler{
-		client: k8sClient,
-		logger: logger.With(logging.LogAttrCategory(logging.LogCategoryHugService)),
+		client:   k8sClient,
+		labelKey: labelKey,
+		labelVal: labelVal,
+		logger:   logger.With(logging.LogAttrCategory(logging.LogCategoryHugService)),
 	}
 }
 
@@ -54,9 +57,12 @@ func New(k8sClient client.Client, logger *slog.Logger) *ServiceReconciler {
 //   - Reserved ports (stat, metrics) are left untouched.
 //   - All other ports are replaced by the current set of VirtualListener ports.
 func (r *ServiceReconciler) ReconcilePorts(ctx context.Context, virtualListeners map[string]*tree.VirtualListener) {
+	if r.labelKey == "" {
+		return
+	}
 	svcList := &corev1.ServiceList{}
 	if err := r.client.List(ctx, svcList, client.MatchingLabels{
-		constants.HugServiceLabelKey: constants.HugServiceLabelVal,
+		r.labelKey: r.labelVal,
 	}); err != nil {
 		r.logger.LogAttrs(ctx, slog.LevelError,
 			"Failed to list HUG services for port reconciliation",

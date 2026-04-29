@@ -11,15 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package constants
+package opt
 
-const (
-	// BundleVersionAnnotation is the annotation on Gateway API CRDs that contains the installed version.
-	// https://gateway-api.sigs.k8s.io/guides/api-design/?h=version#supported-api-versions
-	BundleVersionAnnotation = "gateway.networking.k8s.io/bundle-version"
-
-	// Stats Frontend name
-	StatsFrontendName = "stats"
-	// DefaultsSectionName
-	DefaultsSectionName = "haproxytech"
+import (
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/config"
 )
+
+func HugServiceLabel(key, val string) func(o *config.Configuration) error {
+	return func(o *config.Configuration) error {
+		o.HugServiceLabelKey = key
+		o.HugServiceLabelVal = val
+		return nil
+	}
+}

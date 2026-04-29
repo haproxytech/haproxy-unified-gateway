@@ -37,11 +37,12 @@ type HUGConfig struct {
 	LogSettings map[v3.Category]slog.Level
 	haproxy.HaproxyDirs
 	ControllerConfCRD        NamespaceNameValue `ff:"          long: hugconf-crd,                         usage: 'namespace/name of the HugConf CRD'"`
-	GatewayNsName            NamespaceNameValue `ff:"          long: gateway-ns-name,                 usage: 'if specified, only watch the Gateway with this namespace/name (format: namespace/name), otherwise watch all Gateways'"`
+	GatewayNsName            NamespaceNameValue `ff:"          long: gateway-ns-name,                     usage: 'if specified, only watch the Gateway with this namespace/name (format: namespace/name), otherwise watch all Gateways'"`
+	HugServiceLabel          LabelSelectorValue `ff:"          long: hug-service-label,               default: app.kubernetes.io/name:haproxy-unified-gateway, usage: 'key:value label that identifies the HUG Kubernetes service'"`
 	ControllerName           string             `ff:"          long: controller-name,                     usage: 'spec.controllerName' GatewayClass selector'"`
 	IPV4BindAddr             string             `ff:"          long: ipv4-bind-address,                   usage: 'IPv4 address to bind to'"`
-	IPV6BindAddr             string             `ff:"          long: ipv6-bind-address,	               usage: 'IPv6 address to bind to'"`
-	LogType                  string             `ff:"          long: log-type,	      		               usage: 'sets up the log output type (possible values: text, json)"`
+	IPV6BindAddr             string             `ff:"          long: ipv6-bind-address,	                  usage: 'IPv6 address to bind to'"`
+	LogType                  string             `ff:"          long: log-type,	      		              usage: 'sets up the log output type (possible values: text, json)"`
 	JobGWAPI                 string             `ff:"          long: job-gwapi,                       usage: 'install Gateway API experimental CRDs for given version (e.g. 1.3.0) and exit'"`
 	MetricsAuth              string             `ff:"          long: metrics-auth, default: none,     usage: 'metrics endpoint auth mode: none, kube-rbac, basic'"`
 	MetricsBasicAuthUser     string             `ff:"          long: metrics-basic-auth-user,         usage: 'basic auth username for metrics endpoint'"`
@@ -62,7 +63,7 @@ type HUGConfig struct {
 	UseWiths6Overlay             bool `ff:"          long: with-s6-overlay,                 usage: 'use s6 overlay to start/stop/restart HAProxy'"`
 	UseWithPebble                bool `ff:"          long: with-pebble,                     usage: 'use pebble start/stop/restart HAProxy'"`
 	DisableIPv4                  bool `ff:"          long: disable-ipv4,                    usage: 'disable IPv4 support'"`
-	DisableIPv6                  bool `ff:"          long: disable-ipv6,			        usage: 'disable IPv6 support'"`
+	DisableIPv6                  bool `ff:"          long: disable-ipv6,			          usage: 'disable IPv6 support'"`
 	Version                      bool `ff:"          long: version,                         usage: 'print version and exit'"`
 	JobCheckCRD                  bool `ff:"          long: job-check-crd,                   usage: 'run CRD refresh job and exit'"`
 }
@@ -81,6 +82,29 @@ type External struct {
 // NamespaceNameValue used to automatically distinct namespace/name string
 type NamespaceNameValue struct {
 	Namespace, Name string
+}
+
+// LabelSelectorValue holds a single Kubernetes label key:value pair.
+// The separator is ':' which is not valid in either label keys or values.
+type LabelSelectorValue struct {
+	Key, Value string
+}
+
+func (lv *LabelSelectorValue) String() string {
+	if lv == nil {
+		return ""
+	}
+	return lv.Key + ":" + lv.Value
+}
+
+func (lv *LabelSelectorValue) Set(s string) error {
+	before, after, ok := strings.Cut(s, ":")
+	if !ok {
+		return errors.New("invalid format: expected key:value")
+	}
+	lv.Key = before
+	lv.Value = after
+	return nil
 }
 
 func (nv *NamespaceNameValue) String() string {

@@ -72,51 +72,59 @@ func getGatewayClassParamsRefKey(gwc gatewayv1.GatewayClass) (types.NamespacedNa
 // - The relationship is built via the `spec.parametersRef` field in the GatewayClass.
 // Indirect:
 // - related to the referenced GatewayClass that references this HugGate
-func enqueueGatewayForHugGate(ctrlclint client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		var requests []reconcile.Request
+// dg is used to restrict processing to a single dedicated Gateway when configured.
+func enqueueGatewayForHugGate(dg utils.DedicatedGateway) func(ctrlclint client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclint client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			var requests []reconcile.Request
 
-		// Gateways
-		gwList := &gatewayv1.GatewayList{}
+			// Gateways
+			gwList := &gatewayv1.GatewayList{}
 
-		listOpts := &client.ListOptions{}
-		if err := ctrlclint.List(ctx, gwList, listOpts); err != nil {
-			return []reconcile.Request{}
-		}
-
-		// GatewayClasses
-		gwcList := &gatewayv1.GatewayClassList{}
-		if err := ctrlclint.List(ctx, gwcList, listOpts); err != nil {
-			return []reconcile.Request{}
-		}
-
-		for _, gw := range gwList.Items {
-			// 1. Direct HugGate reference
-			if paramsRef, ok := getGatewayParamsRefKey(gw); ok {
-				if paramsRef.Name == o.GetName() && paramsRef.Namespace == o.GetNamespace() {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-						Namespace: gw.GetNamespace(),
-						Name:      gw.GetName(),
-					}})
-				}
+			listOpts := &client.ListOptions{}
+			if err := ctrlclint.List(ctx, gwList, listOpts); err != nil {
+				return []reconcile.Request{}
 			}
-			// 2. Gateway references a GatewayClass that refenrences this HugGate
-			gcName := string(gw.Spec.GatewayClassName)
-			for _, gwc := range gwcList.Items {
-				if gcName == gwc.Name {
-					if paramsRef, ok := getGatewayClassParamsRefKey(gwc); ok {
-						if paramsRef.Name == o.GetName() && paramsRef.Namespace == o.GetNamespace() {
-							requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-								Namespace: gw.GetNamespace(),
-								Name:      gw.GetName(),
-							}},
-							)
+
+			// GatewayClasses
+			gwcList := &gatewayv1.GatewayClassList{}
+			if err := ctrlclint.List(ctx, gwcList, listOpts); err != nil {
+				return []reconcile.Request{}
+			}
+
+			for _, gw := range gwList.Items {
+				// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
+				if !dg.Check(types.NamespacedName{Namespace: gw.GetNamespace(), Name: gw.GetName()}) {
+					continue
+				}
+				// 1. Direct HugGate reference
+				if paramsRef, ok := getGatewayParamsRefKey(gw); ok {
+					if paramsRef.Name == o.GetName() && paramsRef.Namespace == o.GetNamespace() {
+						requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+							Namespace: gw.GetNamespace(),
+							Name:      gw.GetName(),
+						}})
+					}
+				}
+				// 2. Gateway references a GatewayClass that refenrences this HugGate
+				gcName := string(gw.Spec.GatewayClassName)
+				for _, gwc := range gwcList.Items {
+					// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
+					if gcName == gwc.Name {
+						if paramsRef, ok := getGatewayClassParamsRefKey(gwc); ok {
+							if paramsRef.Name == o.GetName() && paramsRef.Namespace == o.GetNamespace() {
+								requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+									Namespace: gw.GetNamespace(),
+									Name:      gw.GetName(),
+								}},
+								)
+							}
 						}
 					}
 				}
 			}
+			return requests
 		}
-		return requests
 	}
 }
 
@@ -136,28 +144,35 @@ func getGatewayParamsRefKey(gw gatewayv1.Gateway) (types.NamespacedName, bool) {
 
 // enqueueGatewayForGatewayClass returns a handler.EventHandler that enqueues all Gateways
 // related to an observed GatewayClass.
-func enqueueGatewayForGatewayClass(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		var requests []reconcile.Request
+// dg is used to restrict processing to a single dedicated Gateway when configured.
+func enqueueGatewayForGatewayClass(dg utils.DedicatedGateway) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			var requests []reconcile.Request
 
-		// Gateways
-		gwList := &gatewayv1.GatewayList{}
+			// Gateways
+			gwList := &gatewayv1.GatewayList{}
 
-		listOpts := &client.ListOptions{}
-		if err := ctrlclient.List(ctx, gwList, listOpts); err != nil {
-			return []reconcile.Request{}
-		}
-
-		for _, gw := range gwList.Items {
-			gwcName := string(gw.Spec.GatewayClassName)
-			if gwcName == o.GetName() {
-				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-					Namespace: gw.GetNamespace(),
-					Name:      gw.GetName(),
-				}})
+			listOpts := &client.ListOptions{}
+			if err := ctrlclient.List(ctx, gwList, listOpts); err != nil {
+				return []reconcile.Request{}
 			}
+
+			for _, gw := range gwList.Items {
+				// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
+				if !dg.Check(types.NamespacedName{Namespace: gw.GetNamespace(), Name: gw.GetName()}) {
+					continue
+				}
+				gwcName := string(gw.Spec.GatewayClassName)
+				if gwcName == o.GetName() {
+					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+						Namespace: gw.GetNamespace(),
+						Name:      gw.GetName(),
+					}})
+				}
+			}
+			return requests
 		}
-		return requests
 	}
 }
 
@@ -165,59 +180,73 @@ func enqueueGatewayForGatewayClass(ctrlclient client.Client, _ utilsk8s.ExtractG
 // when the HUG controller service (identified by label app.kubernetes.io/name=haproxy-unified-gateway)
 // changes. This is needed so that Gateway.Status.Addresses is refreshed when the service
 // type or ingress addresses change (e.g. a LoadBalancer IP is assigned).
-func enqueueGatewayForHugService(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, _ client.Object) []reconcile.Request {
-		gwList := &gatewayv1.GatewayList{}
-		if err := ctrlclient.List(ctx, gwList); err != nil {
-			return []reconcile.Request{}
+// dg is used to restrict processing to a single dedicated Gateway when configured.
+func enqueueGatewayForHugService(dg utils.DedicatedGateway) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, _ client.Object) []reconcile.Request {
+			gwList := &gatewayv1.GatewayList{}
+			if err := ctrlclient.List(ctx, gwList); err != nil {
+				return []reconcile.Request{}
+			}
+			requests := make([]reconcile.Request, 0, len(gwList.Items))
+			for _, gw := range gwList.Items {
+				// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
+				if !dg.Check(types.NamespacedName{Namespace: gw.GetNamespace(), Name: gw.GetName()}) {
+					continue
+				}
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: gw.GetNamespace(),
+					Name:      gw.GetName(),
+				}})
+			}
+			return requests
 		}
-		requests := make([]reconcile.Request, 0, len(gwList.Items))
-		for _, gw := range gwList.Items {
-			requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-				Namespace: gw.GetNamespace(),
-				Name:      gw.GetName(),
-			}})
-		}
-		return requests
 	}
 }
 
 // enqueueGatewayForSecret returns a handler.EventHandler that enqueues all Gateways
 // related to an observed Secret.
-func enqueueGatewayForSecret(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		var requests []reconcile.Request
+// dg is used to restrict processing to a single dedicated Gateway when configured.
+func enqueueGatewayForSecret(dg utils.DedicatedGateway) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			var requests []reconcile.Request
 
-		// Gateways
-		gwList := &gatewayv1.GatewayList{}
+			// Gateways
+			gwList := &gatewayv1.GatewayList{}
 
-		listOpts := &client.ListOptions{}
-		if err := ctrlclient.List(ctx, gwList, listOpts); err != nil {
-			return []reconcile.Request{}
-		}
+			listOpts := &client.ListOptions{}
+			if err := ctrlclient.List(ctx, gwList, listOpts); err != nil {
+				return []reconcile.Request{}
+			}
 
-		for _, gw := range gwList.Items {
-			for _, listener := range gw.Spec.Listeners {
-				if listener.TLS == nil {
+			for _, gw := range gwList.Items {
+				// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
+				if !dg.Check(types.NamespacedName{Namespace: gw.GetNamespace(), Name: gw.GetName()}) {
 					continue
 				}
-				for _, certRef := range listener.TLS.CertificateRefs {
-					// We only accept v1.Secret
-					if !utilsk8s.IsSecretGroupKindSupported(certRef) {
+				for _, listener := range gw.Spec.Listeners {
+					if listener.TLS == nil {
 						continue
 					}
-					secretNsName := utils.GetNamespacedName(certRef.Name, certRef.Namespace, gw.GetNamespace())
+					for _, certRef := range listener.TLS.CertificateRefs {
+						// We only accept v1.Secret
+						if !utilsk8s.IsSecretGroupKindSupported(certRef) {
+							continue
+						}
+						secretNsName := utils.GetNamespacedName(certRef.Name, certRef.Namespace, gw.GetNamespace())
 
-					if secretNsName.Name == o.GetName() && secretNsName.Namespace == o.GetNamespace() {
-						requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-							Namespace: gw.GetNamespace(),
-							Name:      gw.GetName(),
-						}})
+						if secretNsName.Name == o.GetName() && secretNsName.Namespace == o.GetNamespace() {
+							requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+								Namespace: gw.GetNamespace(),
+								Name:      gw.GetName(),
+							}})
+						}
 					}
 				}
 			}
+			return requests
 		}
-		return requests
 	}
 }
 

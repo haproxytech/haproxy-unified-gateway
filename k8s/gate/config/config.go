@@ -64,6 +64,10 @@ type Configuration struct {
 	Kubeconfig     string
 	// ControllerName is the name of this controller.
 	ControllerName string
+	// HugServiceLabelKey is the label key used to identify the HUG Kubernetes service.
+	HugServiceLabelKey string
+	// HugServiceLabelVal is the label value used to identify the HUG Kubernetes service.
+	HugServiceLabelVal string
 	// LeaderElectionConfig contains the configuration for leader election.
 	LeaderElectionConfig LeaderElectionConfig
 	// Namespaces is a list of namespaces to watch.

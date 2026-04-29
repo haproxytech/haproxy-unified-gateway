@@ -33,6 +33,7 @@ import (
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/predicate"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -199,6 +200,8 @@ func Add(
 		ControllerName:             cfg.ControllerName,
 		DisableIPv4:                cfg.HaproxyParams.DisableIPv4,
 		DisableIPv6:                cfg.HaproxyParams.DisableIPv6,
+		HugServiceLabelKey:         cfg.HugServiceLabelKey,
+		HugServiceLabelVal:         cfg.HugServiceLabelVal,
 	}
 	haproxyCfgMgrParams, err := haproxy.NewHaproxyConfMgrParams(extractGVK, cfg.HaproxyParams, certificateStorage, mapsStorage)
 	if err != nil {
@@ -292,19 +295,20 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					k8spredicate.And(
 						k8spredicate.GenerationChangedPredicate{},
 						predicate.NewNamespacePredicate(cfg.Namespaces),
+						predicate.NewGatewayPredicate(cfg.GatewayNsName),
 					),
 				),
 				WithEnqueueFor([]enqueueForParams{
 					// Watch HugGate
 					{
 						watchSource: objtypes.ObjectTypeHugGate,
-						enqueueFunc: enqueueGatewayForHugGate,
+						enqueueFunc: enqueueGatewayForHugGate(utils.NewDedicatedGateway(cfg.GatewayNsName)),
 						predicate:   predicate.NewNamespacePredicate(cfg.Namespaces),
 					},
 					// Watch GatewayClass
 					{
 						watchSource: objtypes.ObjectTypeGatewayClass,
-						enqueueFunc: enqueueGatewayForGatewayClass,
+						enqueueFunc: enqueueGatewayForGatewayClass(utils.NewDedicatedGateway(cfg.GatewayNsName)),
 						predicate: k8spredicate.And(
 							k8spredicate.GenerationChangedPredicate{},
 							predicate.GatewayClassPredicate{ControllerName: cfg.ControllerName},
@@ -313,7 +317,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// Watch Secrets
 					{
 						watchSource: objtypes.ObjectTypeSecret,
-						enqueueFunc: enqueueGatewayForSecret,
+						enqueueFunc: enqueueGatewayForSecret(utils.NewDedicatedGateway(cfg.GatewayNsName)),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
@@ -323,11 +327,11 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// controller service (LoadBalancer IP assignment, type change, â¦) changes.
 					{
 						watchSource: objtypes.ObjectTypeService,
-						enqueueFunc: enqueueGatewayForHugService,
+						enqueueFunc: enqueueGatewayForHugService(utils.NewDedicatedGateway(cfg.GatewayNsName)),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							k8spredicate.NewPredicateFuncs(func(obj ctrlruntimeclient.Object) bool {
-								return obj.GetLabels()[constant.HugServiceLabelKey] == constant.HugServiceLabelVal
+								return obj.GetLabels()[cfg.HugServiceLabelKey] == cfg.HugServiceLabelVal
 							}),
 						),
 					},

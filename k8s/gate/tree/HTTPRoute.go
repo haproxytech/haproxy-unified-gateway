@@ -139,7 +139,6 @@ func (r *HTTPRoute) SetTreeStatus(treeStatus TreeUpdate[HTTPRoute]) {
 // processChecks processes the all checks for a HTTPRoute
 func (r *HTTPRoute) processChecks(controllerStore ControllerStore) {
 	r.checkParentRefs(controllerStore)
-	// g.checkGatewayClassIsValid(controllerStore)
 
 	r.Valid = r.CheckParentRefs.Valid
 }
