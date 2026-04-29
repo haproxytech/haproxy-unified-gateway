@@ -429,11 +429,26 @@ func requestHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPReques
 		})
 	}
 	for _, h := range f.Add {
-		rules = append(rules, &models.HTTPRequestRule{
-			Type:      "add-header",
-			HdrName:   string(h.Name),
-			HdrFormat: h.Value,
-		})
+		name := string(h.Name)
+		// Gateway API "add" semantics: append to the existing header value with a
+		// comma separator.  Two rules are needed: one that combines when the header
+		// is already present, and one that sets it when it is absent.
+		rules = append(rules,
+			&models.HTTPRequestRule{
+				Type:      "set-header",
+				HdrName:   name,
+				HdrFormat: fmt.Sprintf("%%[req.hdr(%s)],%s", name, h.Value),
+				Cond:      "if",
+				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
+			},
+			&models.HTTPRequestRule{
+				Type:      "add-header",
+				HdrName:   name,
+				HdrFormat: h.Value,
+				Cond:      "unless",
+				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
+			},
+		)
 	}
 	for _, name := range f.Remove {
 		rules = append(rules, &models.HTTPRequestRule{
@@ -455,11 +470,23 @@ func responseHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPRespo
 		})
 	}
 	for _, h := range f.Add {
-		rules = append(rules, &models.HTTPResponseRule{
-			Type:      "add-header",
-			HdrName:   string(h.Name),
-			HdrFormat: h.Value,
-		})
+		name := string(h.Name)
+		rules = append(rules,
+			&models.HTTPResponseRule{
+				Type:      "set-header",
+				HdrName:   name,
+				HdrFormat: fmt.Sprintf("%%[res.hdr(%s)],%s", name, h.Value),
+				Cond:      "if",
+				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
+			},
+			&models.HTTPResponseRule{
+				Type:      "add-header",
+				HdrName:   name,
+				HdrFormat: h.Value,
+				Cond:      "unless",
+				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
+			},
+		)
 	}
 	for _, name := range f.Remove {
 		rules = append(rules, &models.HTTPResponseRule{

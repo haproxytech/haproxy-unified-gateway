@@ -346,9 +346,33 @@ func TestToHAProxyRules(t *testing.T) {
 				},
 			},
 		}, "")
-		assert.Len(t, result.HTTPRequestRules, 3)
+		// 1 set-header + 2 rules per add (conditional set + fallback add) + 1 del-header
+		assert.Len(t, result.HTTPRequestRules, 4)
 		assert.Empty(t, result.HTTPResponseRules)
 		assert.False(t, result.IsRedirect)
+	})
+
+	t.Run("add header appends to existing value", func(t *testing.T) {
+		result := ToHAProxyRules([]gatewayv1.HTTPRouteFilter{
+			{
+				Type: gatewayv1.HTTPRouteFilterRequestHeaderModifier,
+				RequestHeaderModifier: &gatewayv1.HTTPHeaderFilter{
+					Add: []gatewayv1.HTTPHeader{{Name: "X-Append", Value: "new-val"}},
+				},
+			},
+		}, "")
+		require.Len(t, result.HTTPRequestRules, 2)
+		// Rule 0: conditional set-header combining existing + new value
+		r0 := result.HTTPRequestRules[0]
+		assert.Equal(t, "set-header", r0.Type)
+		assert.Equal(t, "X-Append", r0.HdrName)
+		assert.Equal(t, "%[req.hdr(X-Append)],new-val", r0.HdrFormat)
+		assert.Equal(t, "if", r0.Cond)
+		assert.Equal(t, "{ hdr_cnt(X-Append) gt 0 }", r0.CondTest)
+		// Rule 1: add-header when header is absent
+		r1 := result.HTTPRequestRules[1]
+		assert.Equal(t, "add-header", r1.Type)
+		assert.Equal(t, "unless", r1.Cond)
 	})
 
 	t.Run("response header modifier", func(t *testing.T) {
