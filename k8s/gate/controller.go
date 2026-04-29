@@ -248,6 +248,8 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 		schema.GroupVersionKind{Group: apiext.GroupName, Version: "v1", Kind: "CustomResourceDefinition"},
 	)
 
+	dedicatedNs := utils.NewDedicatedNamespaces(cfg.Namespaces)
+
 	controllerRegisterCfgs := []ctlrCfg{
 		{
 			// watch metadata of Gateway API CRDs
@@ -302,13 +304,13 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// Watch HugGate
 					{
 						watchSource: objtypes.ObjectTypeHugGate,
-						enqueueFunc: enqueueGatewayForHugGate(utils.NewDedicatedGateway(cfg.GatewayNsName)),
+						enqueueFunc: enqueueGatewayForHugGate(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
 						predicate:   predicate.NewNamespacePredicate(cfg.Namespaces),
 					},
 					// Watch GatewayClass
 					{
 						watchSource: objtypes.ObjectTypeGatewayClass,
-						enqueueFunc: enqueueGatewayForGatewayClass(utils.NewDedicatedGateway(cfg.GatewayNsName)),
+						enqueueFunc: enqueueGatewayForGatewayClass(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
 						predicate: k8spredicate.And(
 							k8spredicate.GenerationChangedPredicate{},
 							predicate.GatewayClassPredicate{ControllerName: cfg.ControllerName},
@@ -317,7 +319,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// Watch Secrets
 					{
 						watchSource: objtypes.ObjectTypeSecret,
-						enqueueFunc: enqueueGatewayForSecret(utils.NewDedicatedGateway(cfg.GatewayNsName)),
+						enqueueFunc: enqueueGatewayForSecret(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
@@ -327,7 +329,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// controller service (LoadBalancer IP assignment, type change, â¦) changes.
 					{
 						watchSource: objtypes.ObjectTypeService,
-						enqueueFunc: enqueueGatewayForHugService(utils.NewDedicatedGateway(cfg.GatewayNsName)),
+						enqueueFunc: enqueueGatewayForHugService(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							k8spredicate.NewPredicateFuncs(func(obj ctrlruntimeclient.Object) bool {
@@ -354,7 +356,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 				WithEnqueueFor([]enqueueForParams{
 					{
 						watchSource: objtypes.ObjectTypeGateway,
-						enqueueFunc: enqueueHTTPRouteForGateway,
+						enqueueFunc: enqueueHTTPRouteForGateway(dedicatedNs),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
@@ -363,7 +365,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// Watch Services
 					{
 						watchSource: objtypes.ObjectTypeService,
-						enqueueFunc: enqueueHTTPRouteForService,
+						enqueueFunc: enqueueHTTPRouteForService(dedicatedNs),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
@@ -372,7 +374,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// Watch Backend CRs
 					{
 						watchSource: objtypes.ObjectTypeBackend,
-						enqueueFunc: enqueueHTTPRouteForBackendCR,
+						enqueueFunc: enqueueHTTPRouteForBackendCR(dedicatedNs),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
@@ -542,7 +544,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 				WithEnqueueFor([]enqueueForParams{
 					{
 						watchSource: objtypes.ObjectTypeGateway,
-						enqueueFunc: enqueueTLSRouteForGateway,
+						enqueueFunc: enqueueTLSRouteForGateway(dedicatedNs),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
@@ -551,7 +553,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// Watch Services
 					{
 						watchSource: objtypes.ObjectTypeService,
-						enqueueFunc: enqueueTLSRouteForService,
+						enqueueFunc: enqueueTLSRouteForService(dedicatedNs),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),

@@ -73,7 +73,7 @@ func getGatewayClassParamsRefKey(gwc gatewayv1.GatewayClass) (types.NamespacedNa
 // Indirect:
 // - related to the referenced GatewayClass that references this HugGate
 // dg is used to restrict processing to a single dedicated Gateway when configured.
-func enqueueGatewayForHugGate(dg utils.DedicatedGateway) func(ctrlclint client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+func enqueueGatewayForHugGate(dg utils.DedicatedGateway, dns utils.DedicatedNamespaces) func(ctrlclint client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 	return func(ctrlclint client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 		return func(ctx context.Context, o client.Object) []reconcile.Request {
 			var requests []reconcile.Request
@@ -95,6 +95,9 @@ func enqueueGatewayForHugGate(dg utils.DedicatedGateway) func(ctrlclint client.C
 			for _, gw := range gwList.Items {
 				// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
 				if !dg.Check(types.NamespacedName{Namespace: gw.GetNamespace(), Name: gw.GetName()}) {
+					continue
+				}
+				if !dns.Check(types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name}) {
 					continue
 				}
 				// 1. Direct HugGate reference
@@ -145,7 +148,7 @@ func getGatewayParamsRefKey(gw gatewayv1.Gateway) (types.NamespacedName, bool) {
 // enqueueGatewayForGatewayClass returns a handler.EventHandler that enqueues all Gateways
 // related to an observed GatewayClass.
 // dg is used to restrict processing to a single dedicated Gateway when configured.
-func enqueueGatewayForGatewayClass(dg utils.DedicatedGateway) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+func enqueueGatewayForGatewayClass(dg utils.DedicatedGateway, dns utils.DedicatedNamespaces) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 		return func(ctx context.Context, o client.Object) []reconcile.Request {
 			var requests []reconcile.Request
@@ -161,6 +164,9 @@ func enqueueGatewayForGatewayClass(dg utils.DedicatedGateway) func(ctrlclient cl
 			for _, gw := range gwList.Items {
 				// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
 				if !dg.Check(types.NamespacedName{Namespace: gw.GetNamespace(), Name: gw.GetName()}) {
+					continue
+				}
+				if !dns.Check(types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name}) {
 					continue
 				}
 				gwcName := string(gw.Spec.GatewayClassName)
@@ -181,7 +187,7 @@ func enqueueGatewayForGatewayClass(dg utils.DedicatedGateway) func(ctrlclient cl
 // changes. This is needed so that Gateway.Status.Addresses is refreshed when the service
 // type or ingress addresses change (e.g. a LoadBalancer IP is assigned).
 // dg is used to restrict processing to a single dedicated Gateway when configured.
-func enqueueGatewayForHugService(dg utils.DedicatedGateway) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+func enqueueGatewayForHugService(dg utils.DedicatedGateway, dns utils.DedicatedNamespaces) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 		return func(ctx context.Context, _ client.Object) []reconcile.Request {
 			gwList := &gatewayv1.GatewayList{}
@@ -192,6 +198,9 @@ func enqueueGatewayForHugService(dg utils.DedicatedGateway) func(ctrlclient clie
 			for _, gw := range gwList.Items {
 				// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
 				if !dg.Check(types.NamespacedName{Namespace: gw.GetNamespace(), Name: gw.GetName()}) {
+					continue
+				}
+				if !dns.Check(types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name}) {
 					continue
 				}
 				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
@@ -207,7 +216,7 @@ func enqueueGatewayForHugService(dg utils.DedicatedGateway) func(ctrlclient clie
 // enqueueGatewayForSecret returns a handler.EventHandler that enqueues all Gateways
 // related to an observed Secret.
 // dg is used to restrict processing to a single dedicated Gateway when configured.
-func enqueueGatewayForSecret(dg utils.DedicatedGateway) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+func enqueueGatewayForSecret(dg utils.DedicatedGateway, dns utils.DedicatedNamespaces) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 		return func(ctx context.Context, o client.Object) []reconcile.Request {
 			var requests []reconcile.Request
@@ -223,6 +232,9 @@ func enqueueGatewayForSecret(dg utils.DedicatedGateway) func(ctrlclient client.C
 			for _, gw := range gwList.Items {
 				// If dedicated Gateway is configured, skip if the Gateway doesn't match the dedicated Gateway
 				if !dg.Check(types.NamespacedName{Namespace: gw.GetNamespace(), Name: gw.GetName()}) {
+					continue
+				}
+				if !dns.Check(types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name}) {
 					continue
 				}
 				for _, listener := range gw.Spec.Listeners {
@@ -252,63 +264,32 @@ func enqueueGatewayForSecret(dg utils.DedicatedGateway) func(ctrlclient client.C
 
 // enqueueHTTPRouteForGateway returns a handler.EventHandler that enqueues all HTTPRoutes
 // related to an observed Gateway.
-func enqueueHTTPRouteForGateway(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		var requests []reconcile.Request
+// dns is used to restrict processing to the watched namespaces when configured.
+func enqueueHTTPRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			var requests []reconcile.Request
 
-		// HTTPRoutes
-		routeList := &gatewayv1.HTTPRouteList{}
+			// HTTPRoutes
+			routeList := &gatewayv1.HTTPRouteList{}
 
-		listOpts := &client.ListOptions{}
-		if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
-			return []reconcile.Request{}
-		}
+			listOpts := &client.ListOptions{}
+			if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
+				return []reconcile.Request{}
+			}
 
-		for _, route := range routeList.Items {
-			for _, parentRef := range route.Spec.ParentRefs {
-				// We only accept v1.Gateway
-				if !utilsk8s.IsParentRefGroupKindSupported(parentRef, extractGVK) {
+			for _, route := range routeList.Items {
+				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
 					continue
 				}
-				gwNsName := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, route.GetNamespace())
-
-				if gwNsName.Name == o.GetName() && gwNsName.Namespace == o.GetNamespace() {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-						Namespace: route.GetNamespace(),
-						Name:      route.GetName(),
-					}})
-				}
-			}
-		}
-
-		return requests
-	}
-}
-
-// enqueueHTTPRouteForService returns a handler.EventHandler that enqueues all HTTPRoutes
-// related to an observed Service.
-func enqueueHTTPRouteForService(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		var requests []reconcile.Request
-
-		// HTTPRoutes
-		routeList := &gatewayv1.HTTPRouteList{}
-
-		listOpts := &client.ListOptions{}
-		if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
-			return []reconcile.Request{}
-		}
-
-		for _, route := range routeList.Items {
-			for _, rule := range route.Spec.Rules {
-				for _, backendRef := range rule.BackendRefs {
-					// We only accept v1.Service
-					if !utilsk8s.IsBackendRefGroupKindSupported(backendRef.BackendObjectReference, extractGVK) {
+				for _, parentRef := range route.Spec.ParentRefs {
+					// We only accept v1.Gateway
+					if !utilsk8s.IsParentRefGroupKindSupported(parentRef, extractGVK) {
 						continue
 					}
-					serviceNsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, route.GetNamespace())
+					gwNsName := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, route.GetNamespace())
 
-					if serviceNsName.Name == o.GetName() && serviceNsName.Namespace == o.GetNamespace() {
+					if gwNsName.Name == o.GetName() && gwNsName.Namespace == o.GetNamespace() {
 						requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
 							Namespace: route.GetNamespace(),
 							Name:      route.GetName(),
@@ -316,43 +297,41 @@ func enqueueHTTPRouteForService(ctrlclient client.Client, extractGVK utilsk8s.Ex
 					}
 				}
 			}
-		}
 
-		return requests
+			return requests
+		}
 	}
 }
 
-// enqueueHTTPRouteForBackendCR returns a handler.EventHandler that enqueues all HTTPRoutes
-// related to an observed Backend.
-func enqueueHTTPRouteForBackendCR(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		var requests []reconcile.Request
+// enqueueHTTPRouteForService returns a handler.EventHandler that enqueues all HTTPRoutes
+// related to an observed Service.
+// dns is used to restrict processing to the watched namespaces when configured.
+func enqueueHTTPRouteForService(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			var requests []reconcile.Request
 
-		// HTTPRoutes
-		routeList := &gatewayv1.HTTPRouteList{}
+			// HTTPRoutes
+			routeList := &gatewayv1.HTTPRouteList{}
 
-		listOpts := &client.ListOptions{}
-		if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
-			return []reconcile.Request{}
-		}
+			listOpts := &client.ListOptions{}
+			if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
+				return []reconcile.Request{}
+			}
 
-		for _, route := range routeList.Items {
-			for _, rule := range route.Spec.Rules {
-				// BackendRef Filters
-				for _, backendRef := range rule.BackendRefs {
-					for _, filter := range backendRef.Filters {
-						if filter.Type != gatewayv1.HTTPRouteFilterExtensionRef {
+			for _, route := range routeList.Items {
+				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
+					continue
+				}
+				for _, rule := range route.Spec.Rules {
+					for _, backendRef := range rule.BackendRefs {
+						// We only accept v1.Service
+						if !utilsk8s.IsBackendRefGroupKindSupported(backendRef.BackendObjectReference, extractGVK) {
 							continue
 						}
-						// We only accept v3.Backend
-						if !utilsk8s.IsFilterExtensionRefKindSupported(filter.ExtensionRef, extractGVK) {
-							continue
-						}
-						nsName := types.NamespacedName{
-							Namespace: route.Namespace,
-							Name:      string(filter.ExtensionRef.Name),
-						}
-						if nsName.Name == o.GetName() && nsName.Namespace == o.GetNamespace() {
+						serviceNsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, route.GetNamespace())
+
+						if serviceNsName.Name == o.GetName() && serviceNsName.Namespace == o.GetNamespace() {
 							requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
 								Namespace: route.GetNamespace(),
 								Name:      route.GetName(),
@@ -361,35 +340,133 @@ func enqueueHTTPRouteForBackendCR(ctrlclient client.Client, extractGVK utilsk8s.
 					}
 				}
 			}
+
+			return requests
 		}
-		return requests
+	}
+}
+
+// enqueueHTTPRouteForBackendCR returns a handler.EventHandler that enqueues all HTTPRoutes
+// related to an observed Backend.
+// dns is used to restrict processing to the watched namespaces when configured.
+func enqueueHTTPRouteForBackendCR(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			var requests []reconcile.Request
+
+			// HTTPRoutes
+			routeList := &gatewayv1.HTTPRouteList{}
+
+			listOpts := &client.ListOptions{}
+			if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
+				return []reconcile.Request{}
+			}
+
+			for _, route := range routeList.Items {
+				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
+					continue
+				}
+				for _, rule := range route.Spec.Rules {
+					// BackendRef Filters
+					for _, backendRef := range rule.BackendRefs {
+						for _, filter := range backendRef.Filters {
+							if filter.Type != gatewayv1.HTTPRouteFilterExtensionRef {
+								continue
+							}
+							// We only accept v3.Backend
+							if !utilsk8s.IsFilterExtensionRefKindSupported(filter.ExtensionRef, extractGVK) {
+								continue
+							}
+							nsName := types.NamespacedName{
+								Namespace: route.Namespace,
+								Name:      string(filter.ExtensionRef.Name),
+							}
+							if nsName.Name == o.GetName() && nsName.Namespace == o.GetNamespace() {
+								requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+									Namespace: route.GetNamespace(),
+									Name:      route.GetName(),
+								}})
+							}
+						}
+					}
+				}
+			}
+			return requests
+		}
 	}
 }
 
 // enqueueTLSRouteForService returns a handler.EventHandler that enqueues all TLSRoutes
 // related to an observed Service.
-func enqueueTLSRouteForService(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		var requests []reconcile.Request
+// dns is used to restrict processing to the watched namespaces when configured.
+func enqueueTLSRouteForService(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			var requests []reconcile.Request
 
-		// TLSRoutes
-		routeList := &gatewayv1alpha2.TLSRouteList{}
+			// TLSRoutes
+			routeList := &gatewayv1alpha2.TLSRouteList{}
 
-		listOpts := &client.ListOptions{}
-		if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
-			return []reconcile.Request{}
+			listOpts := &client.ListOptions{}
+			if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
+				return []reconcile.Request{}
+			}
+
+			for _, route := range routeList.Items {
+				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
+					continue
+				}
+				for _, rule := range route.Spec.Rules {
+					for _, backendRef := range rule.BackendRefs {
+						// We only accept v1.Service
+						if !utilsk8s.IsBackendRefGroupKindSupported(backendRef.BackendObjectReference, extractGVK) {
+							continue
+						}
+						serviceNsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, route.GetNamespace())
+
+						if serviceNsName.Name == o.GetName() && serviceNsName.Namespace == o.GetNamespace() {
+							requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+								Namespace: route.GetNamespace(),
+								Name:      route.GetName(),
+							}})
+						}
+					}
+				}
+			}
+
+			return requests
 		}
+	}
+}
 
-		for _, route := range routeList.Items {
-			for _, rule := range route.Spec.Rules {
-				for _, backendRef := range rule.BackendRefs {
-					// We only accept v1.Service
-					if !utilsk8s.IsBackendRefGroupKindSupported(backendRef.BackendObjectReference, extractGVK) {
+// enqueueTLSRouteForGateway returns a handler.EventHandler that enqueues all TLSRoutes
+// related to an observed Gateway.
+// dns is used to restrict processing to the watched namespaces when configured.
+func enqueueTLSRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			var requests []reconcile.Request
+
+			// TLSRoutes
+			routeList := &gatewayv1alpha2.TLSRouteList{}
+
+			listOpts := &client.ListOptions{}
+			if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
+				return []reconcile.Request{}
+			}
+
+			for _, route := range routeList.Items {
+				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
+					continue
+				}
+				for _, parentRef := range route.Spec.ParentRefs {
+					// We only accept v1.Gateway
+					if !utilsk8s.IsParentRefGroupKindSupported(parentRef, extractGVK) {
 						continue
 					}
-					serviceNsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, route.GetNamespace())
+					gwNsName := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, route.GetNamespace())
 
-					if serviceNsName.Name == o.GetName() && serviceNsName.Namespace == o.GetNamespace() {
+					if gwNsName.Name == o.GetName() && gwNsName.Namespace == o.GetNamespace() {
 						requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
 							Namespace: route.GetNamespace(),
 							Name:      route.GetName(),
@@ -397,44 +474,9 @@ func enqueueTLSRouteForService(ctrlclient client.Client, extractGVK utilsk8s.Ext
 					}
 				}
 			}
+
+			return requests
 		}
-
-		return requests
-	}
-}
-
-// enqueueTLSRouteForGateway returns a handler.EventHandler that enqueues all TLSRoutes
-// related to an observed Gateway.
-func enqueueTLSRouteForGateway(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		var requests []reconcile.Request
-
-		// TLSRoutes
-		routeList := &gatewayv1alpha2.TLSRouteList{}
-
-		listOpts := &client.ListOptions{}
-		if err := ctrlclient.List(ctx, routeList, listOpts); err != nil {
-			return []reconcile.Request{}
-		}
-
-		for _, route := range routeList.Items {
-			for _, parentRef := range route.Spec.ParentRefs {
-				// We only accept v1.Gateway
-				if !utilsk8s.IsParentRefGroupKindSupported(parentRef, extractGVK) {
-					continue
-				}
-				gwNsName := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, route.GetNamespace())
-
-				if gwNsName.Name == o.GetName() && gwNsName.Namespace == o.GetNamespace() {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-						Namespace: route.GetNamespace(),
-						Name:      route.GetName(),
-					}})
-				}
-			}
-		}
-
-		return requests
 	}
 }
 
