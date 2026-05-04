@@ -25,11 +25,13 @@ tasks:
         vars:
           KIND_CONFIG: "kind-config-conformance.yaml"
       - task: conformance-pull-images
-      # Patch kubeconfig to use the dind service hostname instead of 127.0.0.1.
-      # In GitLab DinD, kind runs inside the Docker daemon and its containers
-      # are not reachable by their internal IP from the CI runner.
-      # The dind service is reachable via the "docker" hostname on port 7443.
-      - /{{.kubectl}} config set-cluster kind-{{.CLUSTER_NAME}} --server=https://docker:7443 --insecure-skip-tls-verify=true
+      # Patch kubeconfig to use the dind service IP instead of 127.0.0.1.
+      # In GitLab DinD, kind's containers are inside the dind daemon and not directly
+      # reachable from the CI runner. The API server is reachable via the dind service
+      # IP on the mapped port 7443.
+      - |
+        DOCKER_IP=$(getent hosts docker | awk '{ print $1 }')
+        /{{.kubectl}} config set-cluster kind-{{.CLUSTER_NAME}} --server=https://${DOCKER_IP}:7443 --insecure-skip-tls-verify=true
       - task: conformance-deploy-ci
       # Run the routing fix here
       - task: conformance-setup-routing-ci
@@ -68,53 +70,122 @@ tasks:
 
   conformance-setup-routing-ci:
     internal: true
-    desc: "Dynamically redirect NodeIP traffic to the reachable Docker host port"
+    desc: "Log network info for CI debugging"
     deps:
       - task: check-kubectl
     vars:
       kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
     cmds:
       - |
-        echo kubectl /{{.kubectl}}
-        # 1. Get the reachable IP of the 'docker' service (the DinD host)
         DOCKER_HOST_IP=$(getent hosts docker | awk '{ print $1 }')
-        echo "Docker Host (Reachable): ${DOCKER_HOST_IP}"
-
-
-        # 2. Dynamically find the Internal IP of the Kind Control Plane node
-        # This is the IP the Controller puts in the Gateway status
         TARGET_NODE_IP=$(/{{.kubectl}} get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' | awk '{print $1}')
-
         echo "--- Network Info ---"
         echo "DinD Host (Reachable): ${DOCKER_HOST_IP}"
         echo "Kind Node (Internal):  ${TARGET_NODE_IP}"
         echo "--------------------"
 
-        if [ -z "$TARGET_NODE_IP" ]; then
-          echo "Error: Could not find Kind Node IP. Is the cluster up?"
-          exit 1
+
+  conformance-deploy-metallb:
+    desc: "install MetalLB in the kind cluster and configure a LoadBalancer IP pool from the kind network"
+    deps:
+      - task: check-kubectl
+    vars:
+      kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
+      METALLB_VERSION: "v0.14.9"
+    cmds:
+      - /{{.kubectl}} apply -f https://raw.githubusercontent.com/metallb/metallb/{{.METALLB_VERSION}}/config/manifests/metallb-native.yaml
+      - /{{.kubectl}} wait --for=condition=established --timeout=60s crd/ipaddresspools.metallb.io crd/l2advertisements.metallb.io
+      - /{{.kubectl}} wait --for=condition=ready --timeout=120s pod -l app=metallb,component=controller -n metallb-system
+      - /{{.kubectl}} wait --for=condition=ready --timeout=120s pod -l app=metallb,component=speaker -n metallb-system
+      - |
+        SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+' | head -n 1)
+        PREFIX=$(echo ${SUBNET} | cut -d. -f1-2)
+        echo "MetalLB pool: ${PREFIX}.255.200-${PREFIX}.255.250"
+        /{{.kubectl}} apply -f - <<EOF
+        apiVersion: metallb.io/v1beta1
+        kind: IPAddressPool
+        metadata:
+          name: kind-pool
+          namespace: metallb-system
+        spec:
+          addresses:
+          - ${PREFIX}.255.200-${PREFIX}.255.250
+        ---
+        apiVersion: metallb.io/v1beta1
+        kind: L2Advertisement
+        metadata:
+          name: kind-l2
+          namespace: metallb-system
+        spec:
+          ipAddressPools:
+          - kind-pool
+        EOF
+
+  conformance-build-test-image:
+    desc: "build the conformance test Docker image and load it into the kind cluster"
+    cmds:
+      - docker build --build-arg GO_VERSION=${GO_VERSION} -t haproxytech/hug-conformance:latest -f ci/conformance/Dockerfile .
+      - $(check-go-tool {{.KIND}}) load docker-image haproxytech/hug-conformance:latest --name={{.CLUSTER_NAME}}
+
+  ### Run the conformance tests as a Kubernetes Job inside the kind cluster, with results extracted via hostPath volume
+  ### Used in CI
+  conformance-run-job:
+    desc: "run Gateway API conformance tests as a Kubernetes Job inside the kind cluster"
+    deps:
+      - task: check-kubectl
+    vars:
+      kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
+      CONFORMANCE_REPORT_OUTPUT: '{{default "conformance-report.yaml" .CONFORMANCE_REPORT_OUTPUT}}'
+      CONFORMANCE_JUNIT_OUTPUT: '{{default "conformance-junit.xml" .CONFORMANCE_JUNIT_OUTPUT}}'
+      CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "conformance-junit.html" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
+      CONFORMANCE_RUN_TEST: '{{default "" .CONFORMANCE_RUN_TEST}}'
+      CONFORMANCE_SKIP_TESTS: '{{default "" .CONFORMANCE_SKIP_TESTS}}'
+    cmds:
+      - |
+        # 1. Apply the job
+        sed \
+          -e "s|\${CONFORMANCE_RUN_TEST}|{{.CONFORMANCE_RUN_TEST}}|g" \
+          -e "s|\${CONFORMANCE_SKIP_TESTS}|{{.CONFORMANCE_SKIP_TESTS}}|g" \
+          example/deploy/hug-conformance-ci/conformance-job.yaml | /{{.kubectl}} apply -f -
+
+        # 2. Wait for success OR failure (Timeout after 90m)
+        echo "Waiting for conformance tests to finish (Success or Failure)..."
+        timeout 90m bash -c 'until /{{.kubectl}} wait job/conformance-tests --for=condition=Complete --timeout=1s 2>/dev/null || /{{.kubectl}} wait job/conformance-tests --for=condition=Failed --timeout=1s 2>/dev/null; do sleep 5; done' || echo "Wait timed out"
+
+        # 3. CRITICAL: Add a small sleep to ensure hostPath is synced
+        sleep 5
+
+        # 4. Debug: Check if the file actually exists on the node before copying
+        echo "Checking for results on Kind node..."
+        docker exec {{.CLUSTER_NAME}}-control-plane ls -lh /tmp/conformance-results/
+
+        # 5. Extract reports from kind docker container
+        echo "Streaming reports from Kind node..."
+        docker exec {{.CLUSTER_NAME}}-control-plane cat /tmp/conformance-results/junit.xml > {{.CONFORMANCE_JUNIT_OUTPUT}}
+        docker exec {{.CLUSTER_NAME}}-control-plane cat /tmp/conformance-results/conformance-report.yaml > {{.CONFORMANCE_REPORT_OUTPUT}}
+
+        # 6. Check Job Status for final exit code
+        SUCCESS_VAL=$(/{{.kubectl}} get job conformance-tests -o jsonpath='{.status.succeeded}' 2>/dev/null || echo 0)
+        if [ "${SUCCESS_VAL}" = "1" ]; then
+          JOB_STATUS=0
+          echo "✅ Job completed with SUCCESS."
+        else
+          JOB_STATUS=1
+          echo "❌ Job completed with FAILURE."
         fi
 
-        echo "Redirecting traffic: ${TARGET_NODE_IP}:80 -> ${DOCKER_HOST_IP}:8080"
-        echo "Redirecting traffic: ${TARGET_NODE_IP}:443 -> ${DOCKER_HOST_IP}:8443"
+        # 7. Generate HTML (Only if XML exists to avoid crash)
+        if [ -f "{{.CONFORMANCE_JUNIT_OUTPUT}}" ]; then
+           go run ./cmd/junit-report/main.go {{.CONFORMANCE_JUNIT_OUTPUT}} {{.CONFORMANCE_JUNIT_HTML_OUTPUT}}
+        else
+           echo "Warning: JUnit XML not found, skipping HTML generation."
+        fi
 
-        # 3. Apply DNAT rules for HTTP and HTTPS
-        # We use -I (Insert) to ensure these rules hit before any default rejections
-        iptables -t nat -I OUTPUT -d ${TARGET_NODE_IP} -p tcp --dport 80 -j DNAT --to-destination ${DOCKER_HOST_IP}:8080
-        iptables -t nat -I OUTPUT -d ${TARGET_NODE_IP} -p tcp --dport 443 -j DNAT --to-destination ${DOCKER_HOST_IP}:8443
-
-        # 4. Apply Masquerade to ensure the return path works in DinD
-        iptables -t nat -I POSTROUTING -j MASQUERADE
-
-        # 5. Log the active rules for CI debugging
-        iptables -t nat -L OUTPUT -n -v
-
-        # 6. Debug
-        SVC=$(/{{.kubectl}} get svc haproxy-unified-gateway-ci -n haproxy-unified-gateway -o jsonpath='{.spec.ports[0].nodePort}')
-        echo "SVC: ${SVC}"
+        exit ${JOB_STATUS}
 
   ### -----------------
-  ### Tasks common for CI and local tests
+  ### Tasks used for local tests
+  ### Conformance tester runs outside the cluster
   ### -----------------
 
   ## To run a specific test: set env variable
@@ -136,25 +207,25 @@ tasks:
       CONFORMANCE_SKIP_TESTS: '{{default "" .CONFORMANCE_SKIP_TESTS}}'
     cmds:
       - |
-        CONFORMANCE_REPORT_OUTPUT={{.CONFORMANCE_REPORT_OUTPUT}} \
-        $(check-go-tool {{.GOTESTSUM}}) \
-          --format-icons=hivis \
-          --format={{.FORMAT}} \
-          --format-hide-empty-pkg \
-          --junitfile {{.CONFORMANCE_JUNIT_OUTPUT}} \
-          -- ./test/conformance/ \
-            -count=1 \
-            -tags=conformance \
-            -timeout 60m \
-            -v \
-            {{if .CONFORMANCE_RUN_TEST}}-run-test '{{.CONFORMANCE_RUN_TEST}}'{{end}} \
-            {{if .CONFORMANCE_SKIP_TESTS}}-skip-tests '{{.CONFORMANCE_SKIP_TESTS}}'{{end}}
-      - echo "Conformance report written to {{.CONFORMANCE_REPORT_OUTPUT}}"
-      - echo "JUnit report written to {{.CONFORMANCE_JUNIT_OUTPUT}}"
-      - task: conformance-report
-        vars:
-          CONFORMANCE_JUNIT_OUTPUT: "{{.CONFORMANCE_JUNIT_OUTPUT}}"
-          CONFORMANCE_JUNIT_HTML_OUTPUT: "{{.CONFORMANCE_JUNIT_HTML_OUTPUT}}"
+        if CONFORMANCE_REPORT_OUTPUT={{.CONFORMANCE_REPORT_OUTPUT}} \
+          $(check-go-tool {{.GOTESTSUM}}) \
+            --format-icons=hivis \
+            --format={{.FORMAT}} \
+            --format-hide-empty-pkg \
+            --junitfile {{.CONFORMANCE_JUNIT_OUTPUT}} \
+            -- ./test/conformance/ \
+              -count=1 \
+              -tags=conformance \
+              -timeout 60m \
+              -v \
+              {{if .CONFORMANCE_RUN_TEST}}-run-test '{{.CONFORMANCE_RUN_TEST}}'{{end}} \
+              {{if .CONFORMANCE_SKIP_TESTS}}-skip-tests '{{.CONFORMANCE_SKIP_TESTS}}'{{end}}; then
+          RUN_STATUS=0
+        else
+          RUN_STATUS=1
+        fi
+        go run ./cmd/junit-report/main.go {{.CONFORMANCE_JUNIT_OUTPUT}} {{.CONFORMANCE_JUNIT_HTML_OUTPUT}} || true
+        exit ${RUN_STATUS}
 
   conformance-report:
     desc: "print passed/skipped/failed summary from a JUnit XML report"

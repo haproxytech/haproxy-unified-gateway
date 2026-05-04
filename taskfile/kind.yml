@@ -117,6 +117,7 @@ tasks:
       - task: kind-create-internal
         vars:
           KIND_CONFIG: "kind-config.yaml"
+          HUG_CONTROLLER_DEPLOYMENT: "{{.CONFIG_DIR}}/hug-dev/controller.yaml"
 
   kind-create-internal:
     internal: true
@@ -160,7 +161,9 @@ tasks:
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/rbac.yaml
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/hugconf.yaml
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/global.yaml
-      - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug-dev/controller.yaml
+      - task: kind-deploy-hug
+        vars:
+          HUG_CONTROLLER_DEPLOYMENT: '{{.HUG_CONTROLLER_DEPLOYMENT}}'
       - task: delimiter
       - echo "deploying a complete example in `example` namespace ..."
       - /{{.kubectl}} create ns example
@@ -174,6 +177,20 @@ tasks:
       - /{{.kubectl}} apply -n example -f {{.DEV_INIT_DIR}}/route.yaml
       - task: delimiter
       - /{{.kubectl}} wait --for=condition=ready --timeout=10s pod -l run=haproxy-unified-gateway -n haproxy-unified-gateway
+
+  kind-deploy-hug:
+    internal: true
+    vars:
+      kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
+    deps:
+      - task: check-go-tool
+        vars:
+          TOOL: KIND
+      - task: check-kubectl
+    cmds:
+      - echo "deploying Controller from {{.HUG_CONTROLLER_DEPLOYMENT}} ..."
+      - /{{.kubectl}} apply -f {{.HUG_CONTROLLER_DEPLOYMENT}}
+
 
   kind-redeploy-controller:
     deps:

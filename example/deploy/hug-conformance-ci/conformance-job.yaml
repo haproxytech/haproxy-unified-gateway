@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: conformance-tests
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: conformance-tests-cluster-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: conformance-tests
+  namespace: default
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: conformance-tests
+  namespace: default
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never  ### Ensure the job does not restart on failure to allow for proper test result collection
+      serviceAccountName: conformance-tests
+      containers:
+      - name: conformance
+        image: haproxytech/hug-conformance:latest
+        imagePullPolicy: Never
+        volumeMounts:
+        - name: results
+          mountPath: /tmp/results
+        env:
+        - name: CONFORMANCE_RUN_TEST
+          value: "${CONFORMANCE_RUN_TEST}"
+        - name: CONFORMANCE_SKIP_TESTS
+          value: "${CONFORMANCE_SKIP_TESTS}"
+      volumes:
+      - name: results
+        hostPath:
+          path: /tmp/conformance-results
+          type: DirectoryOrCreate

@@ -6,11 +6,7 @@ networking:
 kind: Cluster
 nodes:
   - role: control-plane
-    extraPortMappings:
-    - containerPort: 31080
-      hostPort: 8080
-    - containerPort: 31443
-      hostPort: 8443
+
     kubeadmConfigPatches:
     - |
       kind: ClusterConfiguration

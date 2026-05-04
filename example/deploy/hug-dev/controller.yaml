@@ -39,6 +39,7 @@ spec:
             # specify the hugconf CRD location, all other params are in configuration file
             - --hugconf-crd=haproxy-unified-gateway/hugconf
             - --log-type=text  ## default is json output
+            # --namespaces=example,test
             # metrics auth: none (default), kube-rbac, or basic
             # - --metrics-auth=kube-rbac
             # - --metrics-auth=basic
