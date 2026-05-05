@@ -52,7 +52,7 @@ jobs:
           echo "BUILD_DATE=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
           echo "GIT_SHA=$(git rev-parse --short HEAD | cut -c1-7)" >> $GITHUB_ENV
           echo "GIT_REF=$(git symbolic-ref -q --short HEAD || git describe --tags --exact-match)" >> $GITHUB_ENV
-          echo "LATEST_BRANCH=$(curl -sfSL 'https://raw.githubusercontent.com/haproxytech/haproxy-unified-gateway/dev/documentation/doc.yaml' 2>/dev/null | awk -F: '/^active_version/ {gsub(/^ /,"",$2); print $2}' || echo $LATEST_BRANCH)" >> $GITHUB_ENV
+          echo "LATEST_BRANCH=$(curl -sfSL 'https://raw.githubusercontent.com/haproxytech/haproxy-unified-gateway/dev/documentation/doc.yaml' 2>/dev/null | awk -F: '/^active_version/ {gsub(/[" ]/,"",$2); print $2}' || echo $LATEST_BRANCH)" >> $GITHUB_ENV
 
       - name: Build and push latest stable branch
         if: ${{ env.BUILD_BRANCH == env.LATEST_BRANCH }}
