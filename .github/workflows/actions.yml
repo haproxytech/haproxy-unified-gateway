@@ -19,6 +19,8 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: commit-policy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: task check-commit
   generate-files:
     runs-on: ubuntu-latest
