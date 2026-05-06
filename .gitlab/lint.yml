@@ -172,6 +172,8 @@ check-committer:
       for COMMIT in $(git log --format='%H' origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}..HEAD); do
         BODY=$(git log -1 --format='%b' "$COMMIT")
         MSG=$(git log -1 --format='%s' "$COMMIT")
+        AUTHOR_EMAIL=$(git log -1 --format='%ae' "$COMMIT")
+        AUTHOR_EMAIL_ESC=$(printf '%s' "$AUTHOR_EMAIL" | sed 's/[].[^$*\/]/\\&/g')
         MATCHED=$(echo "$BODY" | grep -i 'Co-authored-by' || true)
         if [ -n "$MATCHED" ]; then
           SHORT=$(echo "$COMMIT" | cut -c1-8)
@@ -184,7 +186,7 @@ check-committer:
           ASSISTED="${ASSISTED}${SHORT} ${MSG}\n$(echo "$MATCHED" | sed 's/^/  /')\n"
           junit-report add --status=failed --file="assisted-by" --message="$MSG" --description="$(printf "commit contains Assisted-by trailer\n\n%s\n%s" "$MSG" "$MATCHED")"
         fi
-        MATCHED=$(echo "$BODY" | grep -i 'Signed-off-by' || true)
+        MATCHED=$(echo "$BODY" | grep -i 'Signed-off-by' | grep -iv "$AUTHOR_EMAIL_ESC" || true)
         if [ -n "$MATCHED" ]; then
           SHORT=$(echo "$COMMIT" | cut -c1-8)
           SIGNED_OFF="${SIGNED_OFF}${SHORT} ${MSG}\n$(echo "$MATCHED" | sed 's/^/  /')\n"
