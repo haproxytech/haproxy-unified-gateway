@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package status
 
 import (
@@ -423,7 +424,7 @@ func (sp *gatewayListenerFeedbackStatusPatcher) StatusEqual(obj client.Object) (
 			if want.ObservedGeneration < cond.ObservedGeneration {
 				return true, nil
 			}
-			if cond.Status != want.Status || cond.Reason != want.Reason {
+			if cond.Status != want.Status || cond.Reason != want.Reason || cond.Message != want.Message {
 				return false, nil
 			}
 		}
