@@ -58,17 +58,15 @@ func (gp GatewayPredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	if e.ObjectOld != nil {
-		gOld, ok := e.ObjectOld.(*gatewayv1.Gateway)
-		allowed := gp.GatewayNsName.Name == gOld.Name && gp.GatewayNsName.Namespace == gOld.Namespace
-		if ok && allowed {
+		if gOld, ok := e.ObjectOld.(*gatewayv1.Gateway); ok &&
+			gp.GatewayNsName.Name == gOld.Name && gp.GatewayNsName.Namespace == gOld.Namespace {
 			return true
 		}
 	}
 
 	if e.ObjectNew != nil {
-		gNew, ok := e.ObjectNew.(*gatewayv1.Gateway)
-		allowed := gp.GatewayNsName.Name == gNew.Name && gp.GatewayNsName.Namespace == gNew.Namespace
-		if ok && allowed {
+		if gNew, ok := e.ObjectNew.(*gatewayv1.Gateway); ok &&
+			gp.GatewayNsName.Name == gNew.Name && gp.GatewayNsName.Namespace == gNew.Namespace {
 			return true
 		}
 	}

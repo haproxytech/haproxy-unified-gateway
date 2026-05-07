@@ -58,6 +58,7 @@ func New(k8sClient client.Client, labelKey, labelVal string, logger *slog.Logger
 //   - All other ports are replaced by the current set of VirtualListener ports.
 func (r *ServiceReconciler) ReconcilePorts(ctx context.Context, virtualListeners map[string]*tree.VirtualListener) {
 	if r.labelKey == "" {
+		r.logger.LogAttrs(ctx, slog.LevelDebug, "HUG service label key is empty, skipping port reconciliation")
 		return
 	}
 	svcList := &corev1.ServiceList{}

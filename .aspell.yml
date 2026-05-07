@@ -33,6 +33,7 @@ allowed:
   - haproxytech
   - huggate
   - hugconf
+  - hugservice
   - http
   - httproute
   - https

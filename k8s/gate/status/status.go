@@ -291,6 +291,10 @@ func (s *StatusUpdaterImpl) UpdateStatus(ctx context.Context, updates PreparedSt
 }
 
 func (s *StatusUpdaterImpl) fetchControllerAddresses(ctx context.Context) []gatewayv1.GatewayStatusAddress {
+	if s.config.hugServiceLabelKey == "" {
+		s.config.logger.LogAttrs(ctx, slog.LevelDebug, "HUG service label key is empty, skipping address fetch")
+		return nil
+	}
 	svcList := &corev1.ServiceList{}
 	if err := s.config.client.List(ctx, svcList, client.MatchingLabels{
 		s.config.hugServiceLabelKey: s.config.hugServiceLabelVal,
