@@ -36,7 +36,7 @@ Examples about deployment can be seen in [example](./example/README.md) folder.
 
 ## HAProxy Helm Charts
 
-Helm Chart are available in [haproxytech/haproxy-unified-gateway](https://github.com/haproxytech/haproxy-unified-gateway/) repository
+Helm Chart are available in [haproxytech/helm-charts](https://github.com/haproxytech/helm-charts) repository
 
 ### Contributing
 
