@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"math"
 	"net/http"
@@ -165,37 +166,66 @@ func compareMetrics(baselineJobs, currentJobs []jobData) []comparisonResult {
 	return results
 }
 
-// formatComparisonReport generates a markdown section for the comparison.
-func formatComparisonReport(results []comparisonResult, baselinePipelineID string) string {
-	if len(results) == 0 {
-		return ""
-	}
+// comparisonTally counts results by status.
+type comparisonTally struct {
+	Better, Worse, Same int
+}
 
-	var better, worse, same int
+func tallyResults(results []comparisonResult) comparisonTally {
+	var t comparisonTally
 	for _, r := range results {
 		switch r.Status {
 		case "better":
-			better++
+			t.Better++
 		case "worse":
-			worse++
+			t.Worse++
 		default:
-			same++
+			t.Same++
 		}
 	}
+	return t
+}
+
+// formatComparisonSummary returns the heading + one-line tally only — for the MR comment.
+func formatComparisonSummary(results []comparisonResult, baselinePipelineID string) string {
+	if len(results) == 0 {
+		return ""
+	}
+	t := tallyResults(results)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Metrics Comparison (vs pipeline #%s)\n\n", baselinePipelineID)
-
-	// Global summary
-	if worse > 0 {
-		fmt.Fprintf(&b, "**%d worse**, %d better, %d unchanged\n\n", worse, better, same)
-	} else if better > 0 {
-		fmt.Fprintf(&b, "%d better, %d unchanged\n\n", better, same)
-	} else {
+	switch {
+	case t.Worse > 0:
+		fmt.Fprintf(&b, "**%d worse**, %d better, %d unchanged\n\n", t.Worse, t.Better, t.Same)
+	case t.Better > 0:
+		fmt.Fprintf(&b, "%d better, %d unchanged\n\n", t.Better, t.Same)
+	default:
 		b.WriteString("No significant changes\n\n")
 	}
+	return b.String()
+}
 
-	// Only show details if there are changes
+// renderComparisonHTML returns a full comparison block (summary + table of
+// non-unchanged rows) as inline HTML for embedding in the artifact report.
+func renderComparisonHTML(results []comparisonResult, baselinePipelineID string) string {
+	if len(results) == 0 {
+		return ""
+	}
+	t := tallyResults(results)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, `<h2>Metrics Comparison (vs pipeline #%s)</h2>`, html.EscapeString(baselinePipelineID))
+
+	switch {
+	case t.Worse > 0:
+		fmt.Fprintf(&b, "<p><strong>%d worse</strong>, %d better, %d unchanged</p>", t.Worse, t.Better, t.Same)
+	case t.Better > 0:
+		fmt.Fprintf(&b, "<p>%d better, %d unchanged</p>", t.Better, t.Same)
+	default:
+		b.WriteString("<p>No significant changes</p>")
+	}
+
 	hasChanges := false
 	for _, r := range results {
 		if r.Status != "same" {
@@ -207,40 +237,48 @@ func formatComparisonReport(results []comparisonResult, baselinePipelineID strin
 		return b.String()
 	}
 
-	b.WriteString("| Metric | Job | Baseline | Current | Change | Status |\n")
-	b.WriteString("| ---:|:---:|---:|---:|---:|:--- |\n")
-
+	b.WriteString(`<table class="cmp"><thead><tr>` +
+		`<th>Metric</th><th>Job</th><th>Baseline</th><th>Current</th><th>Change</th><th>Status</th>` +
+		`</tr></thead><tbody>`)
 	for _, r := range results {
-		statusIcon := ""
-		switch r.Status {
-		case "better":
-			statusIcon = "OK"
-		case "worse":
-			statusIcon = "WORSE"
-		case "same":
-			continue // skip unchanged in detailed table
-		case "new":
-			statusIcon = "NEW"
-		default:
-			statusIcon = r.Status
+		row := comparisonRowHTML(r)
+		if row != "" {
+			b.WriteString(row)
 		}
-
-		unit := ""
-		if r.Unit != "" {
-			unit = " " + r.Unit
-		}
-
-		changeStr := fmt.Sprintf("%+.1f%%", r.PctChange)
-		if r.Status == "new" {
-			changeStr = "n/a"
-		}
-
-		fmt.Fprintf(&b, "| %s | %s | %.2f%s | %.2f%s | %s | %s |\n",
-			r.Title, r.JobName, r.Baseline, unit, r.Current, unit, changeStr, statusIcon)
 	}
-	b.WriteRune('\n')
-
+	b.WriteString("</tbody></table>")
 	return b.String()
+}
+
+func comparisonRowHTML(r comparisonResult) string {
+	statusLabel := ""
+	switch r.Status {
+	case "better":
+		statusLabel = "OK"
+	case "worse":
+		statusLabel = "WORSE"
+	case "same":
+		return ""
+	case "new":
+		statusLabel = "NEW"
+	default:
+		statusLabel = r.Status
+	}
+	unit := ""
+	if r.Unit != "" {
+		unit = " " + r.Unit
+	}
+	change := fmt.Sprintf("%+.1f%%", r.PctChange)
+	if r.Status == "new" {
+		change = "n/a"
+	}
+	return fmt.Sprintf(
+		`<tr class="status-%s"><td>%s</td><td>%s</td><td>%.2f%s</td><td>%.2f%s</td><td>%s</td><td>%s</td></tr>`,
+		html.EscapeString(r.Status),
+		html.EscapeString(r.Title), html.EscapeString(r.JobName),
+		r.Baseline, html.EscapeString(unit), r.Current, html.EscapeString(unit),
+		html.EscapeString(change), statusLabel,
+	)
 }
 
 // --- GitLab API helpers for fetching baseline ---

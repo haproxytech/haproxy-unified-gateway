@@ -22,3 +22,4 @@ metrics-report:
     when: always
     paths:
       - metrics-output/metrics-report.md
+      - metrics-output/metrics-report.html
