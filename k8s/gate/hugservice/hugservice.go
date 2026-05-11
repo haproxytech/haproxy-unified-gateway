@@ -109,6 +109,8 @@ func (r *ServiceReconciler) reconcileServicePorts(ctx context.Context, svc *core
 		return
 	}
 
+	r.logDroppedPorts(ctx, svc, desiredPorts)
+
 	patch := client.MergeFrom(svc.DeepCopy())
 	svc.Spec.Ports = desiredPorts
 	if err := r.client.Patch(ctx, svc, patch); err != nil {
@@ -124,6 +126,29 @@ func (r *ServiceReconciler) reconcileServicePorts(ctx context.Context, svc *core
 		slog.String("service", svc.Namespace+"/"+svc.Name),
 		slog.Int("ports", len(desiredPorts)),
 	)
+}
+
+// logDroppedPorts warns about ports present on the Service that won't survive
+// reconcile. Helps users trace user-supplied nodePort/port values (e.g. from
+// Helm chart service.http/https) that disappear because no Gateway listener
+// uses that port number.
+func (r *ServiceReconciler) logDroppedPorts(ctx context.Context, svc *corev1.Service, desired []corev1.ServicePort) {
+	keep := make(map[string]bool, len(desired))
+	for _, p := range desired {
+		keep[p.Name] = true
+	}
+	for _, p := range svc.Spec.Ports {
+		if keep[p.Name] {
+			continue
+		}
+		r.logger.LogAttrs(ctx, slog.LevelWarn,
+			"Dropping Service port not backed by any Gateway listener",
+			slog.String("service", svc.Namespace+"/"+svc.Name),
+			slog.String("name", p.Name),
+			slog.Int("port", int(p.Port)),
+			slog.Int("nodePort", int(p.NodePort)),
+		)
+	}
 }
 
 // buildDesiredPorts merges the current Service ports with the desired set of
