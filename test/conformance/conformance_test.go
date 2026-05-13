@@ -22,8 +22,11 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/haproxytech/haproxy-unified-gateway/test/conformance/deployer"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
@@ -52,8 +55,9 @@ const (
 
 var (
 	gwClassName = envOrDefault("HUG_GATEWAY_CLASS", "haproxy")
-	httpPort    = envOrDefault("HUG_HTTP_PORT", "31080")
-	httpsPort   = envOrDefault("HUG_HTTPS_PORT", "31443")
+	// ClusterIP for CI where conformance tests run in kind cluster without a load-balancer.
+	// LoadBalancer for local testing (where LoadBalancer services typically get an external IP via MetalLB or cloud-provider-kind).
+	hugSvcType = envOrDefault("HUG_SERVICE_TYPE", string(corev1.ServiceTypeLoadBalancer))
 )
 
 func envOrDefault(key, fallback string) string {
@@ -86,6 +90,7 @@ func TestConformance(t *testing.T) {
 		features.SupportHTTPRoute,
 		features.SupportReferenceGrant,
 		features.SupportGatewayAddressEmpty,
+		// features.SupportGatewayHTTPListenerIsolation,
 	)
 
 	conformanceProfiles := sets.New(
@@ -135,10 +140,33 @@ func TestConformance(t *testing.T) {
 	cSuite, err := suite.NewConformanceTestSuite(opts)
 	require.NoError(t, err, "error initializing conformance suite")
 
-	// Always write the report, even on failure.
-	// t.Cleanup runs after t.FailNow(), so the report captures whatever
+	// Start the deployer and wait for its cache to sync before running any
+	// conformance tests, so Gateway objects created by the suite are
+	// immediately visible to the reconciler.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	deployerDone, restoreDone, err := deployer.Start(ctx, cfg, deployer.Config{
+		DeployerNs:       "haproxy-unified-gateway",
+		ControllerImage:  "haproxytech/haproxy-unified-gateway:latest",
+		HugConfCRD:       "haproxy-unified-gateway/hugconf",
+		GatewayClassName: gwClassName,
+		WatchNamespaces:  []string{"gateway-conformance-infra", "haproxy-unified-gateway"},
+		ServiceType:      corev1.ServiceType(hugSvcType),
+	})
+	require.NoError(t, err, "starting gateway deployer")
+	require.NoError(t, <-deployerDone, "scaling down default controller")
+
+	// Always write the report and stop the deployer on test completion, even on
+	// failure. t.Cleanup runs after t.FailNow(), so the report captures whatever
 	// progress was made (partial results, setup failures, etc.).
 	t.Cleanup(func() {
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer waitCancel()
+		if err := deployer.WaitForCleanup(waitCtx, cfg, "haproxy-unified-gateway", "gateway-conformance-infra"); err != nil {
+			t.Logf("waiting for deployer cleanup: %v", err)
+		}
+		cancel()
+		<-restoreDone
 		report, err := cSuite.Report()
 		if err != nil {
 			t.Logf("error generating conformance report: %v", err)
