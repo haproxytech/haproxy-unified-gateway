@@ -140,12 +140,14 @@ tasks:
       CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "conformance-junit.html" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
       CONFORMANCE_RUN_TEST: '{{default "" .CONFORMANCE_RUN_TEST}}'
       CONFORMANCE_SKIP_TESTS: '{{default "" .CONFORMANCE_SKIP_TESTS}}'
+      HUG_SERVICE_TYPE: '{{default "ClusterIP" .HUG_SERVICE_TYPE}}'
     cmds:
       - |
         # 1. Apply the job
         sed \
           -e "s|\${CONFORMANCE_RUN_TEST}|{{.CONFORMANCE_RUN_TEST}}|g" \
           -e "s|\${CONFORMANCE_SKIP_TESTS}|{{.CONFORMANCE_SKIP_TESTS}}|g" \
+          -e "s|\${HUG_SERVICE_TYPE}|{{.HUG_SERVICE_TYPE}}|g" \
           example/deploy/hug-conformance-ci/conformance-job.yaml | /{{.kubectl}} apply -f -
 
         # 2. Wait for success OR failure (Timeout after 90m)

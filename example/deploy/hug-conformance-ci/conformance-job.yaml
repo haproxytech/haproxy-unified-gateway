@@ -40,6 +40,8 @@ spec:
           value: "${CONFORMANCE_RUN_TEST}"
         - name: CONFORMANCE_SKIP_TESTS
           value: "${CONFORMANCE_SKIP_TESTS}"
+        - name: HUG_SERVICE_TYPE
+          value: "${HUG_SERVICE_TYPE}"
       volumes:
       - name: results
         hostPath:
