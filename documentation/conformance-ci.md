@@ -29,12 +29,30 @@ CI runner container
 ├── kubectl / docker CLI   # orchestrate the cluster from outside
 │
 └── Kind cluster (inside DinD)
-      ├── HUG controller   # the Gateway implementation under test
+      ├── haproxy-unified-gateway namespace
+      │     ├── default HUG controller (scaled to 0 by deployer)
+      │     └── per-Gateway: 1 HUG Deployment + 1 ClusterIP Service  ← created by deployer
       └── conformance-tests Job pod   ← tests run here
             └── /run.sh
                   ├── /conformance.test   (compiled Go test binary)
                   └── /gotestsum          (wraps test output → JUnit XML)
 ```
+
+### Per-Gateway deployer
+
+There is no static `controller.yaml` that watches all namespaces. Instead,
+`conformance_test.go` starts a lightweight `deployer` (from
+`test/conformance/deployer/`) that runs a controller-runtime reconciler inside
+the test binary. This reconciler watches `Gateway` objects and, for each one
+matching the configured `GatewayClass`, creates:
+
+- one HUG controller **Deployment** scoped to that Gateway (`--gateway` flag),
+- one **ClusterIP Service** labeled so the controller can report its address in
+  the Gateway status.
+
+In CI, `HUG_SERVICE_TYPE=ClusterIP` is set so that the per-Gateway Services are
+of type `ClusterIP` — no load-balancer is needed because the conformance test
+binary runs inside the cluster and reaches Services directly.
 
 Results flow:
 
@@ -145,8 +163,10 @@ The job runs on every push and merge request. Its script executes three tasks:
 ### Step 1 — `conformance-create-ci`
 
 Creates the Kind cluster, pulls conformance images, patches the kubeconfig to reach the
-Kind API server via the DinD service IP (`DOCKER_IP:7443`), and deploys HUG and its
-prerequisites.
+Kind API server via the DinD service IP (`DOCKER_IP:7443`), and deploys HUG prerequisites
+(CRDs, RBAC, namespace, HugConf). The HUG controller itself is **not** deployed here as a
+static manifest — per-Gateway controller instances are created at test runtime by the
+deployer (see [Per-Gateway deployer](#per-gateway-deployer) above).
 
 ### Step 2 — `conformance-build-test-image`
 

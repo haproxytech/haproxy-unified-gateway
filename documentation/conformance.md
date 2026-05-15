@@ -9,15 +9,46 @@ For CI, see [conformance-ci.md](conformance-ci.md).
 
 ---
 
+## Architecture — per-Gateway deployer
+
+`task kind-create` deploys a **default HUG controller** (from
+`example/deploy/hug-dev/controller.yaml`) that watches all namespaces. Before the
+conformance suite starts, `conformance_test.go` starts a lightweight deployer (from
+`test/conformance/deployer/`) that runs a controller-runtime reconciler embedded
+inside the test binary itself. The deployer **scales the default controller to 0
+replicas** so it does not conflict with the per-Gateway controllers it is about to
+create. When the test binary exits (whether the tests pass or fail), the deployer
+restores the default controller to 1 replica.
+
+The deployer reconciler watches `Gateway` objects and, for each one matching the
+configured `GatewayClass`, creates:
+
+- one HUG controller **Deployment** scoped to that Gateway (`--gateway` flag),
+- one **Service** labeled so the controller can report its address in the Gateway
+  status.
+
+The Service type used for the per-Gateway Services depends on the environment:
+
+| Environment | `HUG_SERVICE_TYPE` | Service type |
+|---|---|---|
+| Local (`task conformance-run`) | _(unset, defaults to `LoadBalancer`)_ | `LoadBalancer` |
+| CI (inside Kind cluster) | `ClusterIP` | `ClusterIP` |
+
+Locally, [cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind)
+assigns real IPs to `LoadBalancer` services so the test binary — running on your
+machine outside the cluster — can reach them. In CI, the test binary runs as a Pod
+inside the cluster and reaches `ClusterIP` services directly.
+
+---
+
 ## Local development
 
 ### How it works
 
-Tester runs **outside the cluster**, on your machine. The test binary makes HTTP/HTTPS
-requests directly to the Gateway's `LoadBalancer` service IP.
-[cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind) assigns
-real IPs to `LoadBalancer` services in the local Kind cluster, making them reachable
-from your machine. `task kind-create` starts cloud-provider-kind automatically.
+The test binary runs **outside the cluster**, on your machine. It makes HTTP/HTTPS
+requests directly to the per-Gateway `LoadBalancer` service IPs assigned by
+[cloud-provider-kind](https://github.com/kubernetes-sigs/cloud-provider-kind).
+`task kind-create` starts cloud-provider-kind automatically.
 
 ### Quick start
 
