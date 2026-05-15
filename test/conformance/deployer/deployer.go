@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -106,26 +107,32 @@ func Start(ctx context.Context, restCfg *rest.Config, cfg Config) (scaledDown <-
 		return nil, nil, fmt.Errorf("setting up reconciler: %w", err)
 	}
 
+	_, _ = fmt.Fprintln(os.Stderr, "deployer: manager created, starting")
 	go func() {
 		if err := mgr.Start(ctx); err != nil && ctx.Err() == nil {
-			ctrl.Log.Error(err, "deployer manager exited")
+			_, _ = fmt.Fprintf(os.Stderr, "deployer: manager exited: %v\n", err)
 		}
 	}()
 
+	_, _ = fmt.Fprintln(os.Stderr, "deployer: waiting for cache sync")
 	if !mgr.GetCache().WaitForCacheSync(ctx) {
+		_, _ = fmt.Fprintln(os.Stderr, "deployer: cache sync failed")
 		return nil, nil, errors.New("deployer cache sync failed")
 	}
+	_, _ = fmt.Fprintln(os.Stderr, "deployer: cache synced")
 
 	deployerDone := make(chan error, 1)
 	restored := make(chan struct{})
 
 	go func() {
 		defer close(restored)
+		_, _ = fmt.Fprintln(os.Stderr, "deployer: scaling down default controller")
 		restore, err := ScaleDefaultControllerToZero(ctx, mgr.GetAPIReader(), mgr.GetClient())
 		deployerDone <- err
 		if err != nil {
 			return
 		}
+		_, _ = fmt.Fprintln(os.Stderr, "deployer: scale-down done, watching for gateways")
 		<-ctx.Done()
 		// Use a fresh client: the manager's client may be shutting down after ctx is cancelled.
 		restoreClient, err := client.New(restCfg, client.Options{Scheme: scheme})
@@ -156,18 +163,22 @@ func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // Reconcile is called for every Gateway create/update/delete event.
 func (r *GatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	_, _ = fmt.Fprintf(os.Stderr, "deployer: reconcile triggered gateway=%s\n", req.NamespacedName)
 	gw := &gatewayv1.Gateway{}
 	if err := r.Get(ctx, req.NamespacedName, gw); err != nil {
 		if k8serrors.IsNotFound(err) {
+			_, _ = fmt.Fprintf(os.Stderr, "deployer: gateway deleted, cleaning up %s\n", req.NamespacedName)
 			return ctrl.Result{}, r.deleteResources(ctx, req.Namespace, req.Name)
 		}
 		return ctrl.Result{}, err
 	}
 
 	if r.Config.GatewayClassName != "" && string(gw.Spec.GatewayClassName) != r.Config.GatewayClassName {
+		_, _ = fmt.Fprintf(os.Stderr, "deployer: skipping %s class=%s expected=%s\n", req.NamespacedName, gw.Spec.GatewayClassName, r.Config.GatewayClassName)
 		return ctrl.Result{}, nil
 	}
 
+	_, _ = fmt.Fprintf(os.Stderr, "deployer: reconciling resources for %s\n", req.NamespacedName)
 	return ctrl.Result{}, r.reconcileResources(ctx, gw)
 }
 
@@ -199,12 +210,14 @@ func (r *GatewayReconciler) reconcileDeployment(ctx context.Context, gw *gateway
 	existing := &appsv1.Deployment{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: r.Config.DeployerNs, Name: resourceName}, existing)
 	if k8serrors.IsNotFound(err) {
+		_, _ = fmt.Fprintf(os.Stderr, "deployer: creating deployment %s/%s\n", r.Config.DeployerNs, resourceName)
 		return r.Create(ctx, desired)
 	}
 	if err != nil {
 		return err
 	}
 
+	_, _ = fmt.Fprintf(os.Stderr, "deployer: updating deployment %s/%s\n", r.Config.DeployerNs, resourceName)
 	existing.Spec.Template.Spec.Containers[0].Args = desired.Spec.Template.Spec.Containers[0].Args
 	existing.Spec.Template.Spec.Containers[0].Image = desired.Spec.Template.Spec.Containers[0].Image
 	return r.Update(ctx, existing)
@@ -215,6 +228,7 @@ func (r *GatewayReconciler) reconcileService(ctx context.Context, gw *gatewayv1.
 	existing := &corev1.Service{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: r.Config.DeployerNs, Name: resourceName}, existing)
 	if k8serrors.IsNotFound(err) {
+		_, _ = fmt.Fprintf(os.Stderr, "deployer: creating service %s/%s\n", r.Config.DeployerNs, resourceName)
 		return r.Create(ctx, r.buildService(resourceName, gw.Namespace, gw.Name, svcLabelVal))
 	}
 	return err
@@ -374,6 +388,7 @@ func ScaleDefaultControllerToZero(ctx context.Context, apiReader client.Reader, 
 		return nil, fmt.Errorf("listing default controller: %w", err)
 	}
 
+	_, _ = fmt.Fprintf(os.Stderr, "deployer: found %d default controller deployments to scale down\n", len(list.Items))
 	zero := int32(0)
 	one := int32(1)
 	for i := range list.Items {

@@ -18,6 +18,7 @@ package conformance_test
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"strings"
@@ -68,16 +69,19 @@ func envOrDefault(key, fallback string) string {
 }
 
 func TestConformance(t *testing.T) {
-	log.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseDevMode(true)))
+	fmt.Fprintln(os.Stderr, "conformance: test starting")
+	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
 	cfg, err := config.GetConfig()
 	require.NoError(t, err, "error loading Kubernetes config")
+	fmt.Fprintln(os.Stderr, "conformance: k8s config loaded")
 
 	c, err := client.New(cfg, client.Options{})
 	require.NoError(t, err, "error initializing Kubernetes client")
 
 	cs, err := clientset.NewForConfig(cfg)
 	require.NoError(t, err, "error initializing Kubernetes clientset")
+	fmt.Fprintln(os.Stderr, "conformance: k8s clients ready")
 
 	require.NoError(t, gatewayv1.Install(c.Scheme()))
 	require.NoError(t, v1beta1.Install(c.Scheme()))
@@ -137,8 +141,10 @@ func TestConformance(t *testing.T) {
 	// Build the suite ourselves instead of using RunConformanceWithOptions,
 	// so we can register a t.Cleanup that always writes the report —
 	// even when Setup() or Run() fail via require/t.FailNow().
+	fmt.Fprintln(os.Stderr, "conformance: calling NewConformanceTestSuite")
 	cSuite, err := suite.NewConformanceTestSuite(opts)
 	require.NoError(t, err, "error initializing conformance suite")
+	fmt.Fprintln(os.Stderr, "conformance: suite created")
 
 	// Start the deployer and wait for its cache to sync before running any
 	// conformance tests, so Gateway objects created by the suite are
@@ -154,7 +160,9 @@ func TestConformance(t *testing.T) {
 		ServiceType:      corev1.ServiceType(hugSvcType),
 	})
 	require.NoError(t, err, "starting gateway deployer")
+	fmt.Fprintln(os.Stderr, "conformance: deployer started, waiting for scale-down signal")
 	require.NoError(t, <-deployerDone, "scaling down default controller")
+	fmt.Fprintln(os.Stderr, "conformance: scale-down complete, running suite setup")
 
 	// Always write the report and stop the deployer on test completion, even on
 	// failure. t.Cleanup runs after t.FailNow(), so the report captures whatever
