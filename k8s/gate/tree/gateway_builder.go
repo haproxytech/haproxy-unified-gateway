@@ -191,6 +191,7 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 			listener.checkProtocol(gateSupportedRouteKindsByProtocol)
 			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
 		}
+		listener.checkPort(b.ControllerStore.PortBinder)
 	}
 }
 

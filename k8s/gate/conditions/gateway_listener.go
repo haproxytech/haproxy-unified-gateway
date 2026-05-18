@@ -91,6 +91,21 @@ func NewListenerProgrammedInvalid() generic.Conditions {
 	}
 }
 
+// NewListenerAcceptedPortPermissionDenied rejects the listener because the
+// controller process cannot bind to the requested port — typically a
+// privileged port (<1024) without CAP_NET_BIND_SERVICE. BuildConditions
+// turns this into Programmed=Invalid as well.
+func NewListenerAcceptedPortPermissionDenied(msg string) generic.Conditions {
+	return generic.Conditions{
+		generic.ConditionType(gatewayv1.ListenerConditionAccepted): {
+			Type:    generic.ConditionType(gatewayv1.ListenerConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(gatewayv1.ListenerReasonInvalid),
+			Message: msg,
+		},
+	}
+}
+
 func NewListenerProgrammedOK() generic.Conditions {
 	return generic.Conditions{
 		generic.ConditionType(gatewayv1.ListenerConditionProgrammed): {

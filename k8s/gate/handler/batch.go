@@ -20,6 +20,7 @@ import (
 	"time"
 
 	hapi "github.com/haproxytech/haproxy-unified-gateway/hug/haproxy/api"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/events"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/certificate"
@@ -110,13 +111,14 @@ func NewEventHandlerImpl(
 	unmanagedGateTree := tree.NewGateTree()
 	referencedObjects := tree.NewReferencedObjects(gateTreeConfig.ExtractGVK)
 
+	capsLogger := gateTreeConfig.BaseLogger.With(logging.LogAttrCategory(logging.LogCategoryGate))
 	controllerStore := tree.ControllerStore{
 		ClusterStore:      clusterStore,
 		GateTree:          gateTree,
 		ReferencedObjects: referencedObjects,
 		UnmanagedGateTree: unmanagedGateTree,
 		ExtractGVK:        gateTreeConfig.ExtractGVK,
-		Logger:            gateTreeConfig.BaseLogger.With(logging.LogAttrCategory(logging.LogCategoryGate)),
+		Logger:            capsLogger,
 		InstalledGwAPIVersions: &tree.InstalledVersions{
 			Versions: make(map[string]int),
 		},
@@ -130,6 +132,7 @@ func NewEventHandlerImpl(
 			Updated: make(map[string]certificate.CrtListData),
 			Deleted: make(map[string]certificate.CrtListData),
 		},
+		PortBinder:     caps.Detect(context.Background(), capsLogger),
 		ControllerName: gateTreeConfig.ControllerName,
 	}
 
