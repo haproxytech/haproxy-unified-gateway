@@ -184,8 +184,8 @@ func TestReferenceGrantManager_DeleteMultiToNoLeftovers(t *testing.T) {
 	mgr.RemoveReferenceGrant(deleted(k8s))
 	mgr.ComputeToFrom()
 
-	assert.Empty(t, mgr.ToReferenceGrantFrom, "ToReferenceGrantFrom must be empty after delete")
-	assert.Empty(t, mgr.ReferenceGrantsTo, "ReferenceGrantsTo must be empty after delete")
+	assert.Empty(t, mgr.toReferenceGrantFrom, "ToReferenceGrantFrom must be empty after delete")
+	assert.Empty(t, mgr.referenceGrantsTo, "ReferenceGrantsTo must be empty after delete")
 	assert.False(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns", "", "Service", "backend-ns", "svc-a"))
 	assert.False(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns", "", "Service", "backend-ns", "svc-b"))
 }

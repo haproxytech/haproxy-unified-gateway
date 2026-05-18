@@ -19,18 +19,18 @@ type ReferenceGrantNamespacedName types.NamespacedName
 // ReferenceGrantManager tracks which cross-namespace references are permitted
 // by ReferenceGrant resources. It maintains three maps:
 //
-//   - ToReferenceGrantFrom: for each target (To), which ReferenceGrants cover it
-//     and from which source types (From). Used to incrementally update ToFrom.
+//   - toReferenceGrantFrom: for each target (To), which ReferenceGrants cover it
+//     and from which source types (From). Used to incrementally update toFrom.
 //
-//   - ReferenceGrantsTo: inverse index — for each ReferenceGrant, which targets
+//   - referenceGrantsTo: inverse index — for each ReferenceGrant, which targets
 //     (To) it covers. Required to efficiently remove all entries for a deleted grant.
 //
-//   - ToFrom: the resolved flat map consumed by IsAccessGranted. Rebuilt from
-//     ToReferenceGrantFrom by ComputeToFrom after each reconcile cycle.
+//   - toFrom: the resolved flat map consumed by IsAccessGranted. Rebuilt from
+//     toReferenceGrantFrom by ComputeToFrom after each reconcile cycle.
 type ReferenceGrantManager struct {
-	ToReferenceGrantFrom map[To]map[ReferenceGrantNamespacedName]map[From]struct{}
-	ReferenceGrantsTo    map[ReferenceGrantNamespacedName]map[To]struct{}
-	ToFrom               map[To]map[From]struct{}
+	toReferenceGrantFrom map[To]map[ReferenceGrantNamespacedName]map[From]struct{}
+	referenceGrantsTo    map[ReferenceGrantNamespacedName]map[To]struct{}
+	toFrom               map[To]map[From]struct{}
 }
 
 // ConvertTo builds a To key from the target resource's namespace, API group,
@@ -58,16 +58,16 @@ func ConvertReferenceGrantNamespacedName(referenceGrant ReferenceGrant) Referenc
 // internal maps allocated.
 func NewReferenceGrantManager() *ReferenceGrantManager {
 	return &ReferenceGrantManager{
-		ToReferenceGrantFrom: map[To]map[ReferenceGrantNamespacedName]map[From]struct{}{},
-		ReferenceGrantsTo:    map[ReferenceGrantNamespacedName]map[To]struct{}{},
-		ToFrom:               map[To]map[From]struct{}{},
+		toReferenceGrantFrom: map[To]map[ReferenceGrantNamespacedName]map[From]struct{}{},
+		referenceGrantsTo:    map[ReferenceGrantNamespacedName]map[To]struct{}{},
+		toFrom:               map[To]map[From]struct{}{},
 	}
 }
 
 // IsAccessGranted reports whether a resource of type (fromGroup, fromKind) in
 // fromNamespace may reference a resource of type (toGroup, toKind) named toName
 // in toNamespace. Same-namespace references are always permitted. Cross-namespace
-// access requires a matching entry in ToFrom, covering both named grants and
+// access requires a matching entry in toFrom, covering both named grants and
 // wildcard grants (empty name).
 func (mgr *ReferenceGrantManager) IsAccessGranted(fromGroup, fromKind, fromNamespace,
 	toGroup, toKind, toNamespace, toName string,
@@ -79,8 +79,8 @@ func (mgr *ReferenceGrantManager) IsAccessGranted(fromGroup, fromKind, fromNames
 	convertedTo := ConvertTo(toNamespace, toGroup, toKind, toName)
 	convertedToWithoutName := ConvertTo(toNamespace, toGroup, toKind, "")
 	convertedFrom := ConvertFrom(fromNamespace, fromGroup, fromKind)
-	froms := mgr.ToFrom[convertedTo]
-	fromsWithoutName := mgr.ToFrom[convertedToWithoutName]
+	froms := mgr.toFrom[convertedTo]
+	fromsWithoutName := mgr.toFrom[convertedToWithoutName]
 	if froms == nil && fromsWithoutName == nil {
 		// No grants for this 'To'
 		return false
@@ -95,7 +95,7 @@ func (mgr *ReferenceGrantManager) IsAccessGranted(fromGroup, fromKind, fromNames
 // UpsertReferenceGrant registers or updates the access grants defined by the given
 // ReferenceGrant. It clears any previous entries for the grant before inserting the
 // current Spec, so that updates are handled correctly without diffing old vs new rules.
-// ToReferenceGrantFrom and ReferenceGrantsTo are updated; call ComputeToFrom afterwards
+// toReferenceGrantFrom and referenceGrantsTo are updated; call ComputeToFrom afterwards
 // to reflect the change in IsAccessGranted.
 func (mgr *ReferenceGrantManager) UpsertReferenceGrant(referenceGrant ReferenceGrant) {
 	if referenceGrant.K8sResource == nil ||
@@ -113,8 +113,8 @@ func (mgr *ReferenceGrantManager) UpsertReferenceGrant(referenceGrant ReferenceG
 			string(to.Kind),
 			string(utils.PointerDefaultValueIfNil(to.Name)))
 		// ___________________________
-		// Update ToReferenceGrantFrom
-		referenceGrantFrom := mgr.ToReferenceGrantFrom[convertedTo]
+		// Update toReferenceGrantFrom
+		referenceGrantFrom := mgr.toReferenceGrantFrom[convertedTo]
 		for _, from := range referenceGrant.K8sResource.Spec.From {
 			convertedFrom := ConvertFrom(string(from.Namespace),
 				string(from.Group),
@@ -127,7 +127,7 @@ func (mgr *ReferenceGrantManager) UpsertReferenceGrant(referenceGrant ReferenceG
 						convertedFrom: {},
 					},
 				}
-				mgr.ToReferenceGrantFrom[convertedTo] = referenceGrantFrom
+				mgr.toReferenceGrantFrom[convertedTo] = referenceGrantFrom
 			} else {
 				// Subsequent association so update the association
 				froms := referenceGrantFrom[referenceGrantNamespacedName]
@@ -139,13 +139,13 @@ func (mgr *ReferenceGrantManager) UpsertReferenceGrant(referenceGrant ReferenceG
 			}
 		}
 		// ________________________
-		// Update ReferenceGrantsTo
-		referenceGrantsTo := mgr.ReferenceGrantsTo[referenceGrantNamespacedName]
+		// Update referenceGrantsTo
+		referenceGrantsTo := mgr.referenceGrantsTo[referenceGrantNamespacedName]
 		if referenceGrantsTo == nil {
 			referenceGrantsTo = map[To]struct{}{
 				convertedTo: {},
 			}
-			mgr.ReferenceGrantsTo[referenceGrantNamespacedName] = referenceGrantsTo
+			mgr.referenceGrantsTo[referenceGrantNamespacedName] = referenceGrantsTo
 		} else {
 			referenceGrantsTo[convertedTo] = struct{}{}
 		}
@@ -170,21 +170,21 @@ func (mgr *ReferenceGrantManager) RemoveReferenceGrantWithCheck(referenceGrant R
 	}
 	referenceGrantNamespacedName := ConvertReferenceGrantNamespacedName(referenceGrant)
 	// Get all the To from ReferenceGrant with inverse index
-	tos := mgr.ReferenceGrantsTo[referenceGrantNamespacedName]
+	tos := mgr.referenceGrantsTo[referenceGrantNamespacedName]
 	// For each To
 	for to := range tos {
-		referenceGrantFrom, exists := mgr.ToReferenceGrantFrom[to]
+		referenceGrantFrom, exists := mgr.toReferenceGrantFrom[to]
 		// If no association for this 'To'
 		if referenceGrantFrom == nil && !exists {
-			// Delete the 'To' key in inverse map ReferenceGrantsTo
+			// Delete the 'To' key in inverse map referenceGrantsTo
 			delete(tos, to)
 			continue
 		}
 		// If empty association for this 'To'
 		if exists && len(referenceGrantFrom) == 0 {
-			// Delete the 'To' key in full map ToReferenceGrantFrom
-			delete(mgr.ToReferenceGrantFrom, to)
-			// Delete the 'To' key in inverse map ReferenceGrantsTo
+			// Delete the 'To' key in full map toReferenceGrantFrom
+			delete(mgr.toReferenceGrantFrom, to)
+			// Delete the 'To' key in inverse map referenceGrantsTo
 			delete(tos, to)
 			// And continue
 			continue
@@ -193,12 +193,12 @@ func (mgr *ReferenceGrantManager) RemoveReferenceGrantWithCheck(referenceGrant R
 		delete(referenceGrantFrom, referenceGrantNamespacedName)
 		// Cleanup if empty
 		if len(referenceGrantFrom) == 0 {
-			delete(mgr.ToReferenceGrantFrom, to)
+			delete(mgr.toReferenceGrantFrom, to)
 		}
 		delete(tos, to)
 	}
 	if len(tos) == 0 {
-		delete(mgr.ReferenceGrantsTo, referenceGrantNamespacedName)
+		delete(mgr.referenceGrantsTo, referenceGrantNamespacedName)
 	}
 }
 
@@ -208,20 +208,20 @@ func (mgr *ReferenceGrantManager) RemoveReferenceGrant(referenceGrant ReferenceG
 	mgr.RemoveReferenceGrantWithCheck(referenceGrant, true)
 }
 
-// ComputeToFrom rebuilds the ToFrom map from ToReferenceGrantFrom. It must be called
+// ComputeToFrom rebuilds the toFrom map from toReferenceGrantFrom. It must be called
 // after all UpsertReferenceGrant and RemoveReferenceGrant calls for a reconcile cycle
 // have completed, and before any IsAccessGranted call consults the result.
 func (mgr *ReferenceGrantManager) ComputeToFrom() {
-	mgr.ToFrom = map[To]map[From]struct{}{}
-	for to, referenceGrantFrom := range mgr.ToReferenceGrantFrom {
+	mgr.toFrom = map[To]map[From]struct{}{}
+	for to, referenceGrantFrom := range mgr.toReferenceGrantFrom {
 		for _, froms := range referenceGrantFrom {
 			for from := range froms {
-				existingroms := mgr.ToFrom[to]
-				if existingroms == nil {
-					existingroms = map[From]struct{}{}
-					mgr.ToFrom[to] = existingroms
+				existingFroms := mgr.toFrom[to]
+				if existingFroms == nil {
+					existingFroms = map[From]struct{}{}
+					mgr.toFrom[to] = existingFroms
 				}
-				existingroms[from] = struct{}{}
+				existingFroms[from] = struct{}{}
 			}
 		}
 	}
