@@ -195,6 +195,7 @@ func (mgr *ReferenceGrantManager) RemoveReferenceGrantWithCheck(referenceGrant R
 		if len(referenceGrantFrom) == 0 {
 			delete(mgr.ToReferenceGrantFrom, to)
 		}
+		delete(tos, to)
 	}
 	if len(tos) == 0 {
 		delete(mgr.ReferenceGrantsTo, referenceGrantNamespacedName)
