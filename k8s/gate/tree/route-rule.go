@@ -82,8 +82,8 @@ func (r *HTTPRouteRule) checkBackendRef(httpRoute *HTTPRoute, controllerStore Co
 			Valid:      true,
 			Conditions: rc.ConditionOKResolvedRef(),
 		})
-		r.Valid = routeValid
 	}
+	r.Valid = routeValid
 }
 
 // checkFilters validates the HTTPRoute filters at both rule and backendRef level.

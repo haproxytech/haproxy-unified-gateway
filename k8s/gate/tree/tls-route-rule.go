@@ -78,8 +78,8 @@ func (r *TLSRouteRule) checkBackendRef(tlsRoute *TLSRoute, controllerStore Contr
 			Valid:      true,
 			Conditions: rc.ConditionOKResolvedRef(),
 		})
-		r.Valid = routeValid
 	}
+	r.Valid = routeValid
 }
 
 // ServiceNsNameKey returns the service Ns/Name
