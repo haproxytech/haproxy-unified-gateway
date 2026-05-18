@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -217,9 +218,14 @@ func (r *GatewayReconciler) reconcileDeployment(ctx context.Context, gw *gateway
 		return err
 	}
 
+	c0 := &existing.Spec.Template.Spec.Containers[0]
+	d0 := desired.Spec.Template.Spec.Containers[0]
+	if c0.Image == d0.Image && slices.Equal(c0.Args, d0.Args) {
+		return nil
+	}
 	_, _ = fmt.Fprintf(os.Stderr, "deployer: updating deployment %s/%s\n", r.Config.DeployerNs, resourceName)
-	existing.Spec.Template.Spec.Containers[0].Args = desired.Spec.Template.Spec.Containers[0].Args
-	existing.Spec.Template.Spec.Containers[0].Image = desired.Spec.Template.Spec.Containers[0].Image
+	c0.Args = d0.Args
+	c0.Image = d0.Image
 	return r.Update(ctx, existing)
 }
 
