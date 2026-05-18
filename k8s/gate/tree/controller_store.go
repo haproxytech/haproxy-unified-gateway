@@ -16,6 +16,7 @@ package tree
 import (
 	"log/slog"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/certificate"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
@@ -34,6 +35,9 @@ type ControllerStore struct {
 	ExtractGVK             utilsk8s.ExtractGVK
 	CertUpdates            *CertUpdates
 	CrtListUpdates         *CrtListUpdates
+	// PortBinder reports whether the controller process can bind to a given
+	// port — derived from CAP_NET_BIND_SERVICE and the netns sysctl.
+	PortBinder caps.PortBinder
 	// mapPort2Listeners is a map for each port:
 	// that contains for each listener if it has a conflict or not
 	previousMapPort2Listeners map[gatewayv1.PortNumber]listenerConflict

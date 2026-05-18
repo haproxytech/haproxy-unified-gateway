@@ -16,8 +16,12 @@ package tree
 import (
 	"testing"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -202,4 +206,126 @@ func Test_hostnameConflicts(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newListenerForPortTest builds a Listener + parent Gateway minimally wired
+// for checkPort + BuildConditions. Other checks are left empty so the only
+// failure mode under test is the port-permission check.
+func newListenerForPortTest(port int32) (*Listener, *Gateway) {
+	gw := &Gateway{
+		K8sResource: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default", Generation: 1},
+		},
+	}
+	l := &Listener{
+		K8sResource: gatewayv1.Listener{
+			Name:     "http",
+			Port:     gatewayv1.PortNumber(port),
+			Protocol: gatewayv1.HTTPProtocolType,
+		},
+		Conditions: make(generic.Conditions),
+	}
+	return l, gw
+}
+
+func TestCheckPort_BuildConditions(t *testing.T) {
+	const (
+		acceptedT   = generic.ConditionType("Accepted")
+		programmedT = generic.ConditionType("Programmed")
+	)
+
+	tests := []struct {
+		name             string
+		port             int32
+		binder           caps.PortBinder
+		wantValid        bool
+		wantAccepted     bool
+		wantAcceptedCond metav1.ConditionStatus
+		wantProgCond     metav1.ConditionStatus
+	}{
+		{
+			name:             "privileged port without cap rejected",
+			port:             80,
+			binder:           caps.Static(1024, false),
+			wantValid:        false,
+			wantAccepted:     false,
+			wantAcceptedCond: metav1.ConditionFalse,
+			wantProgCond:     metav1.ConditionFalse,
+		},
+		{
+			name:             "privileged port with cap accepted",
+			port:             80,
+			binder:           caps.Static(1024, true),
+			wantValid:        true,
+			wantAccepted:     true,
+			wantAcceptedCond: metav1.ConditionTrue,
+			wantProgCond:     metav1.ConditionUnknown, // Pending
+		},
+		{
+			name:             "unprivileged port without cap accepted",
+			port:             8080,
+			binder:           caps.Static(1024, false),
+			wantValid:        true,
+			wantAccepted:     true,
+			wantAcceptedCond: metav1.ConditionTrue,
+			wantProgCond:     metav1.ConditionUnknown, // Pending
+		},
+		{
+			name:             "sysctl-relaxed allows port 80 without cap",
+			port:             80,
+			binder:           caps.Static(0, false),
+			wantValid:        true,
+			wantAccepted:     true,
+			wantAcceptedCond: metav1.ConditionTrue,
+			wantProgCond:     metav1.ConditionUnknown,
+		},
+		{
+			name:             "nil binder is a no-op",
+			port:             80,
+			binder:           nil,
+			wantValid:        true,
+			wantAccepted:     true,
+			wantAcceptedCond: metav1.ConditionTrue,
+			wantProgCond:     metav1.ConditionUnknown,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			l, gw := newListenerForPortTest(tc.port)
+			l.checkPort(tc.binder)
+			l.BuildConditions(gw)
+
+			assert.Equal(t, tc.wantValid, l.Valid, "Valid")
+			assert.Equal(t, tc.wantAccepted, l.Accepted, "Accepted field")
+
+			acc, ok := l.Conditions.GetCondition(acceptedT)
+			if assert.True(t, ok, "Accepted condition missing") {
+				assert.Equal(t, tc.wantAcceptedCond, acc.Status, "Accepted status")
+			}
+			prog, ok := l.Conditions.GetCondition(programmedT)
+			if assert.True(t, ok, "Programmed condition missing") {
+				assert.Equal(t, tc.wantProgCond, prog.Status, "Programmed status")
+			}
+			if !tc.wantAccepted {
+				assert.Contains(t, acc.Message, "CAP_NET_BIND_SERVICE",
+					"rejection message should explain the cause")
+			}
+		})
+	}
+}
+
+// When an earlier check has already rejected the listener, checkPort must
+// not run — otherwise its Reason=Invalid would overwrite the more specific
+// reason (e.g. UnsupportedProtocol) during the merge in BuildConditions.
+func TestCheckPort_SkipsWhenEarlierCheckFailed(t *testing.T) {
+	l, _ := newListenerForPortTest(80)
+	l.CheckProtocol = CheckResult{
+		Valid:      false,
+		Conditions: conditions.NewListenerAcceptedUnsupportedProtocol("unsupported"),
+	}
+
+	l.checkPort(caps.Static(1024, false))
+
+	assert.Empty(t, l.CheckPort.Conditions, "checkPort should be a no-op when an earlier check already rejected the listener")
 }

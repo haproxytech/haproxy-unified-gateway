@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
@@ -51,6 +52,7 @@ type Listener struct {
 	CheckProtocol       CheckResult
 	CheckSecret         CheckResult
 	CheckConflict       CheckResult
+	CheckPort           CheckResult
 	// AllowedRouteKinds is the list of allowed route kinds for this listener.
 	AllowedRouteKinds []gatewayv1.RouteGroupKind
 	// Valid indicates the listener is fully programmed (Accepted, no conflicts, all refs resolved).
@@ -323,6 +325,38 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 	}
 }
 
+// checkPort rejects the listener when the controller process cannot bind to
+// listener.Port (e.g. privileged port without CAP_NET_BIND_SERVICE). Sets
+// Accepted=False so routes don't silently attach to a listener that will
+// never serve traffic; Programmed=Invalid is derived by BuildConditions.
+//
+// Skipped when an earlier check already failed, so the user-visible Reason
+// reflects the first cause (e.g. UnsupportedProtocol) rather than being
+// overwritten by Invalid from this check during the condition merge.
+func (l *Listener) checkPort(portBinder caps.PortBinder) {
+	if portBinder == nil {
+		return
+	}
+	if len(l.CheckRouteGroupKind.Conditions) > 0 ||
+		len(l.CheckProtocol.Conditions) > 0 ||
+		len(l.CheckSecret.Conditions) > 0 ||
+		len(l.CheckConflict.Conditions) > 0 {
+		return
+	}
+	port := uint16(l.K8sResource.Port)
+	if portBinder.CanBind(port) {
+		return
+	}
+	msg := fmt.Sprintf(
+		"cannot bind to port %d: process lacks CAP_NET_BIND_SERVICE and net.ipv4.ip_unprivileged_port_start=%d. Use a port >= %d, grant the capability, or lower the sysctl.",
+		port, portBinder.MinUnprivilegedPort(), portBinder.MinUnprivilegedPort(),
+	)
+	l.CheckPort = CheckResult{
+		Valid:      false,
+		Conditions: conditions.NewListenerAcceptedPortPermissionDenied(msg),
+	}
+}
+
 // checkConflict checks if the listener has conflict with other listeners
 // If it has, it set the listener condition type gatewayv1.ListenerConditionConflicted
 // with the reason:
@@ -406,6 +440,7 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	l.Conditions.MergeOverrideConditions(l.CheckProtocol.Conditions)
 	l.Conditions.MergeOverrideConditions(l.CheckSecret.Conditions)
 	l.Conditions.MergeOverrideConditions(l.CheckConflict.Conditions)
+	l.Conditions.MergeOverrideConditions(l.CheckPort.Conditions)
 	// Should we process with Haproxy programmation
 	shouldProgramm := true
 	// isAccepted tracks whether the listener is accepted (routes can attach even with unresolved refs)
@@ -485,6 +520,7 @@ func (l *Listener) resetChecks() {
 	l.CheckProtocol = CheckResult{}
 	l.CheckSecret = CheckResult{}
 	l.CheckConflict = CheckResult{}
+	l.CheckPort = CheckResult{}
 }
 
 // NewListenerKey returns the Listener owner key appending the listener name to it
