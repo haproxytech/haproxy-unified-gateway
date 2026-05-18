@@ -80,7 +80,6 @@ conformance-MR-GW-API-1_5_0:
       HTTPRouteRequestHeaderModifier,\
       HTTPRouteServiceTypes,\
       HTTPRouteSimpleSameNamespace,\
-      HTTPRouteWeight,\
       GatewaySecretInvalidReferenceGrant,\
       GatewaySecretMissingReferenceGrant,\
       GatewaySecretReferenceGrantAllInNamespace,\
