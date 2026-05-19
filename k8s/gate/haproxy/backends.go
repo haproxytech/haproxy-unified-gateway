@@ -1007,6 +1007,10 @@ func (b *HaproxyConfMgrImpl) processBackendsDeletedInCycle() utils.Errors {
 	var errs utils.Errors
 
 	for backendName := range b.backendsImpactedInCycle.Deleted {
+		if _, alsoUpserted := b.backendsImpactedInCycle.Upserted[backendName]; alsoUpserted {
+			// Another route upserted this backend in the same cycle: keep it.
+			continue
+		}
 		if err := b.configuration.deleteBackend(b.logger, backendName); err != nil {
 			errs.Add(err)
 			continue
