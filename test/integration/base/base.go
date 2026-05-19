@@ -318,6 +318,7 @@ func (b *BaseSuite) CreateFixtures(fixturePath string, manifestNames []string) {
 		Dir:               fixturePath,
 		WaitForResult:     true,
 		ManifestNames:     manifestNames,
+		PortMap:           b.test.PortMap,
 	}
 	err := utils.CreateRuntimeObjectsFromYAMLFiles(params)
 	b.Require().NoError(err)
@@ -341,6 +342,7 @@ func (b *BaseSuite) CleanupFixturesCheckMapFiles(fixturePath string, manifestNam
 		Dir:               fixturePath,
 		WaitForResult:     true,
 		ManifestNames:     manifestNames,
+		PortMap:           b.test.PortMap,
 	}
 	err := utils.DeleteRuntimeObjectsFromYAMLFiles(params)
 	b.Require().NoError(err)
@@ -357,6 +359,7 @@ func (b *BaseSuite) CreateFixturesInNamespace(fixturePath, namespace string, man
 		Dir:               fixturePath,
 		WaitForResult:     true,
 		ManifestNames:     manifestNames,
+		PortMap:           b.test.PortMap,
 	}
 	err := utils.CreateRuntimeObjectsFromYAMLFiles(params)
 	b.Require().NoError(err)
@@ -370,6 +373,7 @@ func (b *BaseSuite) CleanupFixtures(fixturePath string, manifestNames []string) 
 		Dir:               fixturePath,
 		WaitForResult:     true,
 		ManifestNames:     manifestNames,
+		PortMap:           b.test.PortMap,
 	}
 	err := utils.DeleteRuntimeObjectsFromYAMLFiles(params)
 	b.Require().NoError(err)
@@ -383,6 +387,7 @@ func (b *BaseSuite) CleanupFixturesInNamespace(fixturePath, namespace string, ma
 		Dir:               fixturePath,
 		WaitForResult:     true,
 		ManifestNames:     manifestNames,
+		PortMap:           b.test.PortMap,
 	}
 	err := utils.DeleteRuntimeObjectsFromYAMLFiles(params)
 	b.Require().NoError(err)
@@ -458,10 +463,16 @@ func (b *BaseSuite) ExpectCrtLists(ctx context.Context, expectedCrtLists map[fut
 		}
 
 		for crtListFilePath, expectedCrtListContent := range expectedCrtLists {
-			if _, ok := gotCrtListSkeletonMap[crtListFilePath.FullPath()]; !ok {
+			// HAProxy names the crt-list file after the actual (remapped) port.
+			actualFullPath := utils.SubstitutePortsInString(crtListFilePath.FullPath(), b.test.PortMap)
+			if _, ok := gotCrtListSkeletonMap[actualFullPath]; !ok {
 				return false
 			}
-			gotContent, err := crtListFilePath.ReadLines()
+			actualFilePath := futils.FilePath{
+				Dir:      filepath.Dir(actualFullPath),
+				FileName: "/" + filepath.Base(actualFullPath),
+			}
+			gotContent, err := actualFilePath.ReadLines()
 			b.Require().NoError(err)
 			slices.Sort(gotContent)
 			// Runtime command to actually get the CrtList content
@@ -503,13 +514,17 @@ func (b *BaseSuite) ExpectFrontends(ctx context.Context, expectationPath string,
 		}
 
 		for _, expectedFeName := range expectedFrontends {
+			// Translate template port name (e.g. "hug_http_8080") to the actual
+			// port name HAProxy created (e.g. "hug_http_45123").
+			actualFeName := utils.SubstitutePortsInString(expectedFeName, b.test.PortMap)
 			var gotFrontend *models.Frontend
 			var ok bool
-			if gotFrontend, ok = gotFrontends[expectedFeName]; !ok {
+			if gotFrontend, ok = gotFrontends[actualFeName]; !ok {
 				return false
 			}
 
-			// utils.ExportFrontend(gotFrontend)
+			// Read expectation from the template-named file; FrontendFromManifest
+			// substitutes port numbers in the YAML content before unmarshalling.
 			expectedFrontend := b.FrontendFromManifest(expectationPath, expectedFeName)
 			areSame := expectedFrontend.Equal(*gotFrontend)
 			if !areSame {
@@ -527,6 +542,8 @@ func (b *BaseSuite) FrontendFromManifest(manifestPath, manifestName string) *mod
 	mpath := path.Join(manifestPath, manifestName+".yaml")
 	yamlFile, err := os.ReadFile(mpath)
 	b.Require().NoError(err)
+
+	yamlFile = utils.SubstitutePortsInContent(yamlFile, b.test.PortMap)
 
 	var fe models.Frontend
 	err = yaml.Unmarshal(yamlFile, &fe)
@@ -603,8 +620,8 @@ func (b *BaseSuite) BackendFromManifest(manifestPath, manifestName string) *mode
 }
 
 func (b *BaseSuite) GetMapFileFrom(mapFileRelativePath string) ([]string, error) {
-	var mapFile []byte
-	mapFile, err := os.ReadFile(filepath.Join(b.test.HaproxyCfgDir, "maps", mapFileRelativePath))
+	actualRelativePath := utils.SubstitutePortsInString(mapFileRelativePath, b.test.PortMap)
+	mapFile, err := os.ReadFile(filepath.Join(b.test.HaproxyCfgDir, "maps", actualRelativePath))
 	if err != nil {
 		return nil, err
 	}
@@ -670,15 +687,21 @@ func (b *BaseSuite) checkMapFileContents(mapFileRelativePath, expectedMapPath st
 }
 
 func (b *BaseSuite) check1MapContent(mapFileRelativePath, expectedMapPath, mapName string) bool {
-	// For Route mapping (maps in expectedMapPath)
+	// Expectation files are stored under the template port name (as committed to the repo).
 	expectedFilePath := path.Join(expectedMapPath, mapFileRelativePath, mapName)
 
-	// Check if expectation exists
-	expectedContent, err := os.ReadFile(expectedFilePath)
+	// Check if expectation exists; substitute ports in the content so that
+	// listener names like "gateway_http-8080" match the actual "gateway_http-28823".
+	rawExpected, err := os.ReadFile(expectedFilePath)
 	expectationExists := err == nil
+	var expectedContent string
+	if expectationExists {
+		expectedContent = string(utils.SubstitutePortsInContent(rawExpected, b.test.PortMap))
+	}
 
-	// Read actual map
-	actualMapPath := filepath.Join(b.test.HaproxyCfgDir, "maps", mapFileRelativePath, mapName)
+	// HAProxy writes maps under the actual (remapped) port name.
+	actualRelativePath := utils.SubstitutePortsInString(mapFileRelativePath, b.test.PortMap)
+	actualMapPath := filepath.Join(b.test.HaproxyCfgDir, "maps", actualRelativePath, mapName)
 
 	actualContent, err := os.ReadFile(actualMapPath)
 	// If actual map doesn't exist, we treat it as empty string
@@ -689,8 +712,8 @@ func (b *BaseSuite) check1MapContent(mapFileRelativePath, expectedMapPath, mapNa
 
 	if expectationExists {
 		// Check if content matches
-		if string(expectedContent) != actualString {
-			b.T().Logf("  map [file] mismatch for %s: \nexpected %q, \ngot      %q", mapName, string(expectedContent), actualString)
+		if expectedContent != actualString {
+			b.T().Logf("  map [file] mismatch for %s: \nexpected %q, \ngot      %q", mapName, expectedContent, actualString)
 			return false
 		}
 	} else {
@@ -895,17 +918,19 @@ func (b *BaseSuite) checkRuntimeMapContents(mapFileRelativePath, expectedMapPath
 func (b *BaseSuite) check1RuntimeMapContent(mapFileRelativePath, expectedMapPath, mapName string) bool {
 	socketPath := filepath.Join(b.test.HaproxyCfgDir, "haproxy-runtime-api.sock")
 
+	// Expectation files are stored under the template port name.
 	expectedFilePath := path.Join(expectedMapPath, mapFileRelativePath, mapName)
 
-	// Check if expectation exists
-	expectedContent, err := os.ReadFile(expectedFilePath)
+	// Check if expectation exists; substitute ports so listener names match.
+	rawExpected, err := os.ReadFile(expectedFilePath)
 	expectationExists := err == nil
 
-	// Build runtime map path (must match HAProxy config path exactly)
+	// Build runtime map path using the actual (remapped) port name.
+	actualRelativePath := utils.SubstitutePortsInString(mapFileRelativePath, b.test.PortMap)
 	runtimeMapPath := filepath.Join(
 		b.test.HaproxyCfgDir,
 		"maps",
-		mapFileRelativePath,
+		actualRelativePath,
 		mapName,
 	)
 
@@ -916,7 +941,7 @@ func (b *BaseSuite) check1RuntimeMapContent(mapFileRelativePath, expectedMapPath
 		actualString = ""
 	}
 
-	expectedNormalized := normalizeMapContent(string(expectedContent))
+	expectedNormalized := normalizeMapContent(string(utils.SubstitutePortsInContent(rawExpected, b.test.PortMap)))
 	actualNormalized := normalizeMapContent(actualString)
 	if strings.HasPrefix(actualNormalized, "Unknown map identifier") {
 		actualNormalized = ""
