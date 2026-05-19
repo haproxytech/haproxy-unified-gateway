@@ -280,8 +280,9 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 			continue
 		}
 		isAccessGranted := referenceGrantManager.IsAccessGranted(
-			gatewayv1.GroupName, "Gateway", treeGw.K8sResource.GetNamespace(),
-			"", "Secret", treeSecret.K8sResource.GetNamespace(), treeSecret.K8sResource.GetName())
+			GrantFrom{Group: gatewayv1.GroupName, Kind: "Gateway", Namespace: treeGw.K8sResource.GetNamespace()},
+			GrantTo{Group: "", Kind: "Secret", Namespace: treeSecret.K8sResource.GetNamespace(), Name: treeSecret.K8sResource.GetName()},
+		)
 		if !isAccessGranted {
 			msg := fmt.Sprintf("Secret reference %s/%s is not granted for listener in gateway %s/%s", nsName.Namespace, nsName.Name, treeGw.K8sResource.GetNamespace(), treeGw.K8sResource.GetName())
 			l.CheckSecret = CheckResult{

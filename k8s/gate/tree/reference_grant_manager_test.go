@@ -67,11 +67,11 @@ func TestReferenceGrantManager_WildcardTo(t *testing.T) {
 	mgr.UpsertReferenceGrant(upserted(k8s))
 	mgr.ComputeToFrom()
 
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns", "", "Service", "backend-ns", "svc-a"),
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "svc-a"}),
 		"wildcard grant should permit any named service")
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns", "", "Service", "backend-ns", "svc-b"),
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "svc-b"}),
 		"wildcard grant should permit a different service name")
-	assert.False(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "other-ns", "", "Service", "backend-ns", "svc-a"),
+	assert.False(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "other-ns"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "svc-a"}),
 		"grant should not cover a route from a different namespace")
 }
 
@@ -99,15 +99,15 @@ func TestReferenceGrantManager_NamedTo(t *testing.T) {
 	mgr.UpsertReferenceGrant(upserted(k8s))
 	mgr.ComputeToFrom()
 
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns", "", "Service", "backend-ns", "my-svc"),
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "my-svc"}),
 		"named grant should permit the exact service")
-	assert.False(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns", "", "Service", "backend-ns", "other-svc"),
+	assert.False(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "other-svc"}),
 		"named grant must not permit a different service name")
 }
 
 // TestReferenceGrantManager_UpdateWipesPreviousFootprint verifies that upserting a
 // modified grant clears the old From entries before inserting the new ones.
-// This exercises the RemoveReferenceGrantWithCheck(_, false) call inside Upsert.
+// This exercises the removeReferenceGrantWithCheck(_, false) call inside Upsert.
 func TestReferenceGrantManager_UpdateWipesPreviousFootprint(t *testing.T) {
 	mgr := NewReferenceGrantManager()
 
@@ -129,7 +129,7 @@ func TestReferenceGrantManager_UpdateWipesPreviousFootprint(t *testing.T) {
 
 	mgr.UpsertReferenceGrant(upserted(k8sV1))
 	mgr.ComputeToFrom()
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns-old", "", "Service", "backend-ns", "svc"))
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns-old"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "svc"}))
 
 	// Update the grant: only route-ns-new is now authorised.
 	k8sV2 := &gatewayv1beta1.ReferenceGrant{
@@ -151,9 +151,9 @@ func TestReferenceGrantManager_UpdateWipesPreviousFootprint(t *testing.T) {
 	mgr.UpsertReferenceGrant(upserted(k8sV2))
 	mgr.ComputeToFrom()
 
-	assert.False(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns-old", "", "Service", "backend-ns", "svc"),
+	assert.False(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns-old"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "svc"}),
 		"old From must be revoked after update")
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns-new", "", "Service", "backend-ns", "svc"),
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns-new"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "svc"}),
 		"new From must be allowed after update")
 }
 
@@ -186,8 +186,8 @@ func TestReferenceGrantManager_DeleteMultiToNoLeftovers(t *testing.T) {
 
 	assert.Empty(t, mgr.toReferenceGrantFrom, "ToReferenceGrantFrom must be empty after delete")
 	assert.Empty(t, mgr.referenceGrantsTo, "ReferenceGrantsTo must be empty after delete")
-	assert.False(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns", "", "Service", "backend-ns", "svc-a"))
-	assert.False(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns", "", "Service", "backend-ns", "svc-b"))
+	assert.False(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "svc-a"}))
+	assert.False(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "svc-b"}))
 }
 
 // TestReferenceGrantManager_SameNamespaceAlwaysGranted verifies that same-namespace
@@ -195,7 +195,7 @@ func TestReferenceGrantManager_DeleteMultiToNoLeftovers(t *testing.T) {
 func TestReferenceGrantManager_SameNamespaceAlwaysGranted(t *testing.T) {
 	mgr := NewReferenceGrantManager()
 
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "ns", "", "Service", "ns", "svc"),
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "ns"}, GrantTo{Kind: "Service", Namespace: "ns", Name: "svc"}),
 		"same-namespace access must be permitted with no grants at all")
 }
 
@@ -231,15 +231,15 @@ func TestReferenceGrantManager_TwoGrantsSameTo_DeleteOneKeepsOther(t *testing.T)
 	mgr.UpsertReferenceGrant(upserted(k8sB))
 	mgr.ComputeToFrom()
 
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns-a", "", "Service", "backend-ns", "shared-svc"))
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns-b", "", "Service", "backend-ns", "shared-svc"))
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns-a"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "shared-svc"}))
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns-b"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "shared-svc"}))
 
 	// Delete grant-a only.
 	mgr.RemoveReferenceGrant(deleted(k8sA))
 	mgr.ComputeToFrom()
 
-	assert.False(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns-a", "", "Service", "backend-ns", "shared-svc"),
+	assert.False(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns-a"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "shared-svc"}),
 		"route-ns-a must lose access after its grant is deleted")
-	assert.True(t, mgr.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", "route-ns-b", "", "Service", "backend-ns", "shared-svc"),
+	assert.True(t, mgr.IsAccessGranted(GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: "route-ns-b"}, GrantTo{Kind: "Service", Namespace: "backend-ns", Name: "shared-svc"}),
 		"route-ns-b must retain access via its own grant")
 }

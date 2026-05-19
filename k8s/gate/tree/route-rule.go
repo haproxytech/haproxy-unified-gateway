@@ -66,8 +66,10 @@ func (r *HTTPRouteRule) checkBackendRef(httpRoute *HTTPRoute, controllerStore Co
 		// 3- Check if a ReferenceGrant is needed and if so is it valid
 		backendNs := getNamespace(backendRef.BackendObjectReference.Namespace, httpRoute.K8sResource.Namespace)
 		accessGranted := backendNs == httpRoute.K8sResource.Namespace ||
-			referenceGrantManager.IsAccessGranted(gatewayv1.GroupName, "HTTPRoute", httpRoute.K8sResource.Namespace,
-				"", "Service", backendNs, string(backendRef.BackendObjectReference.Name))
+			referenceGrantManager.IsAccessGranted(
+				GrantFrom{Group: gatewayv1.GroupName, Kind: "HTTPRoute", Namespace: httpRoute.K8sResource.Namespace},
+				GrantTo{Group: "", Kind: "Service", Namespace: backendNs, Name: string(backendRef.BackendObjectReference.Name)},
+			)
 		if !accessGranted {
 			cond := rc.ConditionKORefNotPermitted(utils.BackendObjectReferenceToKey(backendRef.BackendObjectReference))
 			r.CheckBackendRef.Set(backendRef.BackendObjectReference, CheckResult{

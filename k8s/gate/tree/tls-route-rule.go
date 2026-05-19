@@ -62,8 +62,10 @@ func (r *TLSRouteRule) checkBackendRef(tlsRoute *TLSRoute, controllerStore Contr
 		// 3- Check if a ReferenceGrant is needed and if so is it valid
 		backendNs := getNamespace(backendRef.BackendObjectReference.Namespace, tlsRoute.K8sResource.Namespace)
 		accessGranted := backendNs == tlsRoute.K8sResource.Namespace ||
-			referenceGrantManager.IsAccessGranted(gatewayv1.GroupName, "TLSRoute", tlsRoute.K8sResource.Namespace,
-				"", "Service", backendNs, string(backendRef.BackendObjectReference.Name))
+			referenceGrantManager.IsAccessGranted(
+				GrantFrom{Group: gatewayv1.GroupName, Kind: "TLSRoute", Namespace: tlsRoute.K8sResource.Namespace},
+				GrantTo{Group: "", Kind: "Service", Namespace: backendNs, Name: string(backendRef.BackendObjectReference.Name)},
+			)
 		if !accessGranted {
 			cond := rc.ConditionKORefNotPermitted(utils.BackendObjectReferenceToKey(backendRef.BackendObjectReference))
 			r.CheckBackendRef.Set(backendRef.BackendObjectReference, CheckResult{
