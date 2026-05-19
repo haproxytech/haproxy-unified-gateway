@@ -207,6 +207,7 @@ tasks:
       CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "conformance-junit.html" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
       CONFORMANCE_RUN_TEST: '{{default "" .CONFORMANCE_RUN_TEST}}'
       CONFORMANCE_SKIP_TESTS: '{{default "" .CONFORMANCE_SKIP_TESTS}}'
+      SEQUENTIAL: '{{default "false" .SEQUENTIAL}}'
     cmds:
       - |
         if CONFORMANCE_REPORT_OUTPUT={{.CONFORMANCE_REPORT_OUTPUT}} \
@@ -220,7 +221,7 @@ tasks:
               -tags=conformance \
               -timeout 60m \
               -v \
-              -p 1 \
+              {{if eq .SEQUENTIAL "true"}}-p 1{{end}}\
               -failfast \
               {{if .CONFORMANCE_RUN_TEST}}-run-test '{{.CONFORMANCE_RUN_TEST}}'{{end}} \
               {{if .CONFORMANCE_SKIP_TESTS}}-skip-tests '{{.CONFORMANCE_SKIP_TESTS}}'{{end}}; then

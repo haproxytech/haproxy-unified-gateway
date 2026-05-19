@@ -80,6 +80,7 @@ tasks:
       TOOL: envtest
       PKG: '{{default "./..." .PKG}}'
       FORMAT: '{{default "testdox" .FORMAT}}'
+      SEQUENTIAL: '{{default "false" .SEQUENTIAL}}'
       POD_IP: "1.2.3.4"
       POD_NAME: "hug-7469984948-qgnfw"
       POD_NAMESPACE: "hug"
@@ -98,7 +99,7 @@ tasks:
           --format={{.FORMAT}} \
           --format-hide-empty-pkg \
           -- -count=1 \
-            -p 1 \
+            {{if eq .SEQUENTIAL "true"}}-p 1{{end}}\
             -tags="{{.TEST_TAGS}}" \
             -failfast \
             -v \
