@@ -37,6 +37,7 @@ import (
 type RuntimeYamlParams struct {
 	Ctx               context.Context
 	CrtlruntimeClient ctrlruntimeclient.Client
+	PortMap           map[int]int // template port → actual port; applied to YAML before parse
 	Dir               string
 	Namespace         string
 	ManifestNames     []string
@@ -106,6 +107,7 @@ func CreateRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 		if err != nil {
 			return err
 		}
+		manifestData = SubstitutePortsInContent(manifestData, params.PortMap)
 		manifests := bytes.SplitSeq(manifestData, []byte("\n---\n"))
 
 		for manifest := range manifests {
@@ -261,6 +263,7 @@ func DeleteRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 		if err != nil {
 			return err
 		}
+		manifestData = SubstitutePortsInContent(manifestData, params.PortMap)
 		manifests := bytes.SplitSeq(manifestData, []byte("\n---\n"))
 
 		for manifest := range manifests {

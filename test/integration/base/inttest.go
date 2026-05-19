@@ -92,6 +92,7 @@ type IntTest struct {
 	TestEnv           *envtest.Environment
 	cancel            context.CancelFunc
 	mgrStopped        chan struct{}
+	PortMap           map[int]int // template port → unique ephemeral port for this test run
 	Namespace         string
 	HaproxyCfgDir     string
 	RuntimeSocketPath string
@@ -105,6 +106,8 @@ func NewIntTest(t *testing.T, crdRelativePath string, levelsUp int) (test IntTes
 	// Namespace
 	namespace, err := utils.GetIntTestNamespace(levelsUp)
 	g.Expect(err).ToNot(gomega.HaveOccurred())
+
+	portMap := utils.DerivePortMap(namespace, utils.TemplatePorts)
 
 	testEnvVersion := os.Getenv("ENVTEST_VERSION")
 	installPath := os.Getenv("KUBEBUILDER_ASSETS")
@@ -140,6 +143,7 @@ func NewIntTest(t *testing.T, crdRelativePath string, levelsUp int) (test IntTes
 		cancel:    cancel,
 		TestEnv:   testEnv,
 		Namespace: namespace,
+		PortMap:   portMap,
 	}
 
 	return test, nil

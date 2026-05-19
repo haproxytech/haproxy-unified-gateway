@@ -20,6 +20,7 @@ import (
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
+	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +31,7 @@ import (
 func (b *BaseSuite) YamlToConditions(yamlPath string) conditions.Conditions {
 	yamlFile, err := os.ReadFile(yamlPath)
 	assert.NoError(b.T(), err, "Failed to read YAML file")
+	yamlFile = utils.SubstitutePortsInContent(yamlFile, b.test.PortMap)
 
 	var expectedConditionsMetaV1 []metav1.Condition
 	err = yaml.Unmarshal(yamlFile, &expectedConditionsMetaV1)
@@ -40,6 +42,7 @@ func (b *BaseSuite) YamlToConditions(yamlPath string) conditions.Conditions {
 func (b *BaseSuite) YamlToRouteConditions(yamlPath string) rc.RouteConditions {
 	yamlFile, err := os.ReadFile(yamlPath)
 	assert.NoError(b.T(), err, "Failed to read YAML file")
+	yamlFile = utils.SubstitutePortsInContent(yamlFile, b.test.PortMap)
 
 	var expectedConditionsV1 gatewayv1.HTTPRouteStatus
 	err = yaml.Unmarshal(yamlFile, &expectedConditionsV1)
@@ -50,6 +53,7 @@ func (b *BaseSuite) YamlToRouteConditions(yamlPath string) rc.RouteConditions {
 func (b *BaseSuite) YamlToListenerStatuses(yamlPath string) []gatewayv1.ListenerStatus {
 	yamlFile, err := os.ReadFile(yamlPath)
 	assert.NoError(b.T(), err, "Failed to read YAML file")
+	yamlFile = utils.SubstitutePortsInContent(yamlFile, b.test.PortMap)
 
 	var expectedListenerStatuses []gatewayv1.ListenerStatus
 	err = yaml.Unmarshal(yamlFile, &expectedListenerStatuses)
