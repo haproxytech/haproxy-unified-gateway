@@ -69,28 +69,11 @@ http_request_rule_list:
   var_expr: var(txn.tmp_wild),map_beg(/tmp/hug/e2e-tests-gateway/maps/hug_http_9090/listener_route_wildcard_match.map)
   var_name: selected_listener_route,ifnotexists
   var_scope: txn
-- type: set-var
-  var_expr: var(txn.selected_listener_route),concat("",txn.path)
-  var_name: base_listener_route,ifnotexists
-  var_scope: txn
-- metadata:
-    hug: exact domain + exact path
-  type: set-var
-  var_expr: var(txn.base_listener_route),map(/tmp/hug/e2e-tests-gateway/maps/hug_http_9090/path_exact.map)
-  var_name: route
-  var_scope: txn
-- metadata:
-    hug: exact domain + path prefix
-  type: set-var
-  var_expr: var(txn.base_listener_route),map_beg(/tmp/hug/e2e-tests-gateway/maps/hug_http_9090/path_prefix.map)
-  var_name: route,ifnotexists
-  var_scope: txn
-- metadata:
-    hug: domain wildcard + path prefix or regex, exact domain + path regex
-  type: set-var
-  var_expr: var(txn.base_listener_route),map_reg(/tmp/hug/e2e-tests-gateway/maps/hug_http_9090/path_regex.map)
-  var_name: route,ifnotexists
-  var_scope: txn
+- lua_action: find_route
+  lua_params: /tmp/hug/e2e-tests-gateway/maps/hug_http_9090
+  metadata:
+    hug: 'lua find_route: BLR computation + path map lookup'
+  type: lua
 - cond: if
   cond_test: route_is_json
   lua_action: route

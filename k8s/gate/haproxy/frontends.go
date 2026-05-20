@@ -194,8 +194,6 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	md := b.metadataManager.FrontendMetaData(vListener)
 
 	pathExactMap := b.params.mapsStorage.GetPathExactMapFile(frontendName)
-	pathPrefixMap := b.params.mapsStorage.GetPathPrefixMapFile(frontendName)
-	pathRegexMap := b.params.mapsStorage.GetPathRegexMapFile(frontendName)
 	sniMap := b.params.mapsStorage.GetSniMapFile(frontendName)
 
 	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile(frontendName)
@@ -303,47 +301,16 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 			},
 			// -------------------
 			// Lookups based on the selected listener route (selected_listener_route)
-			// in the final routing maps
-			// Now append the path to the selected_listener_route variable, so that we have in selected_listener_route the full route name (listener + route) to look for in the route maps
+			// in the final routing maps.
+			// txn.selected_listener_route may be comma-separated when multiple HTTPRoutes match
+			// the same listener+host. find_route loops over each candidate, appends txn.path,
+			// and resolves the first match against the three path maps.
 			{
-				// Set var base_listener_route by appending path
-				// http-request set-var(txn.base_listener_route)      var(txn.selected_listener_route),concat("",txn.path)
-				Type:     "set-var",
-				VarName:  "base_listener_route,ifnotexists",
-				VarScope: "txn",
-				VarExpr:  "var(txn.selected_listener_route),concat(\"\",txn.path)",
-			},
-			{
-				// lookup in route_exact_match.map
-				// exact path
-				// http-request set-var(txn.base_listener_route) var(txn.base_listener_route),map(route_exact_match.map)
-				Type:     "set-var",
-				VarName:  "route",
-				VarScope: "txn",
-				VarExpr:  "var(txn.base_listener_route),map(" + pathExactMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "exact domain + exact path"},
-			},
-			{
-				// lookup in route_prefix_match.map
-				// path prefix
-				// http-request set-var(txn.base_listener_route,ifnotexists) base,map_beg(route_prefix_match.map)
-				Type:     "set-var",
-				VarName:  "route,ifnotexists",
-				VarScope: "txn",
-				VarExpr:  "var(txn.base_listener_route),map_beg(" + pathPrefixMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "exact domain + path prefix"},
-			},
-			{
-				// lookup in route_regex_match.map
-				// # domain wildcard + path prefix. Example: ^[^.]+\.domain\.com/v1/foo/.*   # or map_sub
-				// # domain wildcard + path regex   Example: ^[^.]+\.domain\.com/v[1-3]/foo
-				// # exact domain + path regex      Example: ^www\.domain\.com/v[1-3]/foo
-				// http-request set-var(txn.base_listener_route,ifnotexists) base,map_reg(route_regex.map)
-				Type:     "set-var",
-				VarName:  "route,ifnotexists",
-				VarScope: "txn",
-				VarExpr:  "var(txn.base_listener_route),map_reg(" + pathRegexMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "domain wildcard + path prefix or regex, exact domain + path regex"},
+				// http-request lua.find_route <maps_dir>
+				Type:      "lua",
+				LuaAction: "find_route",
+				LuaParams: pathExactMap.Path.Dir,
+				Metadata:  map[string]any{"hug": "lua find_route: BLR computation + path map lookup"},
 			},
 			{
 				// http-request lua.route if route_is_json

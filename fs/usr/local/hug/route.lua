@@ -203,6 +203,122 @@ end
 -- Register the function to be called from HAProxy
 core.register_action("route", { "http-req" }, route)
 
+-- Per-thread cache for parsed map file contents (keyed by filepath).
+-- Each entry: { time=<os.time>, entries={{key,val},...} }
+-- Map.new cannot be used at runtime (only during config loading), so we read files directly.
+local file_map_cache = {}
+local MAP_CACHE_TTL  = 5  -- seconds
+
+local function load_map_file(filepath)
+    local entries = {}
+    local f = io.open(filepath, "r")
+    if not f then return entries end
+    for line in f:lines() do
+        local k, v = line:match("^([^#%s][^%s]*)%s+(.+)$")
+        if k and v then
+            table.insert(entries, { k, v:match("^(.-)%s*$") })
+        end
+    end
+    f:close()
+    return entries
+end
+
+local function get_map_entries(filepath)
+    local now    = os.time()
+    local cached = file_map_cache[filepath]
+    if cached and (now - cached.time) < MAP_CACHE_TTL then
+        return cached.entries
+    end
+    local entries = load_map_file(filepath)
+    file_map_cache[filepath] = { time = now, entries = entries }
+    return entries
+end
+
+local function exact_lookup(filepath, key)
+    for _, e in ipairs(get_map_entries(filepath)) do
+        if e[1] == key then return e[2] end
+    end
+    return nil
+end
+
+-- Returns value and match length (0 if no match).
+local function prefix_lookup(filepath, key)
+    local best_v, best_len = nil, 0
+    for _, e in ipairs(get_map_entries(filepath)) do
+        local k = e[1]
+        if #k > best_len and key:sub(1, #k) == k then
+            best_v, best_len = e[2], #k
+        end
+    end
+    return best_v, best_len
+end
+
+local function regex_lookup(filepath, key)
+    for _, e in ipairs(get_map_entries(filepath)) do
+        local ok, m = pcall(string.match, key, e[1])
+        if ok and m then return e[2] end
+    end
+    return nil
+end
+
+-- Scoring constants: exact > any prefix length > regex > nothing.
+local SCORE_EXACT = 1e9
+local SCORE_REGEX = -1
+
+-- find_route handles comma-separated txn.selected_listener_route by iterating
+-- over ALL candidates and picking the most specific match across all of them.
+-- Specificity: exact > longest prefix > first regex.
+-- maps_dir: maps directory for this frontend (e.g. /usr/local/hug/maps/hug_http_80)
+local function find_route(txn, maps_dir)
+    local lr_str = txn.f:var("txn.selected_listener_route") or ""
+    local path   = txn.f:var("txn.path") or ""
+
+    if lr_str == "" then return end
+
+    local exact_file  = maps_dir .. "/path_exact.map"
+    local prefix_file = maps_dir .. "/path_prefix.map"
+    local regex_file  = maps_dir .. "/path_regex.map"
+
+    local candidates  = core.tokenize(lr_str, ",", true)
+    local blr_parts   = {}
+    local best_val    = nil
+    local best_score  = -1e9
+
+    for _, lr in ipairs(candidates) do
+        local blr = lr .. path
+        table.insert(blr_parts, blr)
+
+        local m, score
+
+        m = exact_lookup(exact_file, blr)
+        if m then
+            score = SCORE_EXACT
+        else
+            local pv, plen = prefix_lookup(prefix_file, blr)
+            if pv then
+                -- Score is the path-specific part of the match only.
+                -- plen includes the lr prefix, which is irrelevant to path specificity.
+                m, score = pv, plen - #lr
+            else
+                local rv = regex_lookup(regex_file, blr)
+                if rv then m, score = rv, SCORE_REGEX end
+            end
+        end
+
+        if m and score > best_score then
+            best_val   = m
+            best_score = score
+        end
+    end
+
+    txn:set_var("txn.base_listener_route", table.concat(blr_parts, ","))
+    if best_val ~= nil then
+        txn:set_var("txn.route", best_val)
+    end
+end
+
+core.register_action("find_route", { "http-req" }, find_route, 1)
+
 -- Register a converter to reverse the host string (e.g. "www.example.com" becomes ".com.example.www")
 core.register_converters("reverse_host", function(val)
     if val == nil or val == "" then
