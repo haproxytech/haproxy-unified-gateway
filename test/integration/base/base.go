@@ -648,6 +648,19 @@ var StandardMaps = []string{
 	"sni.map",
 }
 
+// RuntimeMaps is the subset of StandardMaps that HAProxy loads via map() directives
+// and are therefore accessible through the runtime socket.
+// path_prefix.map and path_regex.map are consumed directly from disk by lua.find_route
+// and are not registered with HAProxy, so they are excluded here.
+var RuntimeMaps = []string{
+	"domain_wildcard_sni.map",
+	"listener_exact_match.map",
+	"listener_route_exact_match.map",
+	"listener_route_wildcard_match.map",
+	"listener_wildcard_match.map",
+	"sni.map",
+}
+
 func (b *BaseSuite) ExpectMapContents(mapFilePath, expectedMapPath string) {
 	b.Require().Eventually(func() bool {
 		// Standard maps (maps in expectedMapPath/mapFilePath)
@@ -905,7 +918,7 @@ func (b *BaseSuite) ConsistentlyNoReload(oldPid string, duration time.Duration) 
 func (b *BaseSuite) checkRuntimeMapContents(mapFileRelativePath, expectedMapPath string) bool {
 	b.T().Logf("Checking map [runtime] for %s/%s ", expectedMapPath, mapFileRelativePath)
 
-	for _, mapName := range StandardMaps {
+	for _, mapName := range RuntimeMaps {
 		b.T().Logf(" Checking map [runtime] %s", mapName)
 
 		chek := b.check1RuntimeMapContent(mapFileRelativePath, expectedMapPath, mapName)
