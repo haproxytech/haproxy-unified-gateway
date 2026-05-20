@@ -77,15 +77,9 @@ conformance-MR-GW-API-1_5_0:
       HTTPRouteRedirectHostAndStatus,\
       HTTPRouteRedirectPortAndScheme,\
       HTTPRouteServiceTypes,\
-      GatewaySecretInvalidReferenceGrant,\
-      GatewaySecretMissingReferenceGrant,\
-      GatewaySecretReferenceGrantAllInNamespace,\
-      GatewaySecretReferenceGrantSpecific,\
       HTTPRouteInvalidReferenceGrant,\
       HTTPRoutePartiallyInvalidViaInvalidReferenceGrant,\
-      HTTPRouteReferenceGrant,\
-      ListenerSetReferenceGrant,\
-      TLSRouteInvalidReferenceGrant"
+      HTTPRouteReferenceGrant"
   before_script:
     - export PATH=$PATH:/root/go/bin
     - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
