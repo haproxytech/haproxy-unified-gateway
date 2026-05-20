@@ -59,6 +59,7 @@ allowed:
   - mutex
   - namespace
   - namespaces
+  - okmultiple
   - parallelize
   - passthrough
   - pid
