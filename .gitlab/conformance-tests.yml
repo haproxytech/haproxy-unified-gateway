@@ -77,7 +77,6 @@ conformance-MR-GW-API-1_5_0:
       HTTPRouteRedirectHostAndStatus,\
       HTTPRouteRedirectPortAndScheme,\
       HTTPRouteServiceTypes,\
-      HTTPRouteSimpleSameNamespace,\
       GatewaySecretInvalidReferenceGrant,\
       GatewaySecretMissingReferenceGrant,\
       GatewaySecretReferenceGrantAllInNamespace,\
