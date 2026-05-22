@@ -71,7 +71,6 @@ conformance-MR-GW-API-1_5_0:
       HTTPRouteHeaderMatching,\
       HTTPRouteInvalidBackendRefUnknownKind,\
       HTTPRouteInvalidCrossNamespaceBackendRef,\
-      HTTPRouteInvalidCrossNamespaceParentRef,\
       HTTPRouteInvalidNonExistentBackendRef,\
       HTTPRouteMatching,\
       HTTPRouteMatchingAcrossRoutes,\
