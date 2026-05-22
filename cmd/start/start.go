@@ -42,7 +42,8 @@ func SetupGateConfig(hugConfig hugconfig.HUGConfig) gateconfig.GateConfigOptions
 	haproxyConfCh := make(chan diffs.HaproxyConfDiffs, 100)
 
 	// Read the haproy.cfg file at startup, and initializes the library with the initial haproxy configuration
-	initialStructured, err := startup.StructuredFromFile(hugConfig)
+	linkID := "hug"
+	initialStructured, err := startup.StructuredFromFile(hugConfig, linkID)
 	if err != nil {
 		panic(err)
 	}
@@ -64,7 +65,7 @@ func SetupGateConfig(hugConfig hugconfig.HUGConfig) gateconfig.GateConfigOptions
 		opt.IPV4BindAddr(hugConfig.IPV4BindAddr),
 		opt.IPV6BindAddr(hugConfig.IPV6BindAddr),
 		opt.HaproxyDirs(hugConfig.HaproxyDirs),
-		opt.LinkID("hug"),
+		opt.LinkID(linkID),
 		opt.InitialStructured(initialStructured),
 		opt.CacheReSyncPeriod(hugConfig.CacheResyncPeriod),
 		opt.DefaultsSectionName(constants.DefaultsSectionName),

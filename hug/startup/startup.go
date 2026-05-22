@@ -36,7 +36,7 @@ type ownerMetaData interface {
 // Frontends/Backends
 // that have the unified gateway metadata
 // (the objects that the gateway manages)
-func StructuredFromFile(hugConfig hugconfig.HUGConfig) (structured.Structured, error) {
+func StructuredFromFile(hugConfig hugconfig.HUGConfig, linkID string) (structured.Structured, error) {
 	confClient, err := configuration.New(context.Background(),
 		cfgoptions.ConfigurationFile(hugConfig.HaproxyDirs.MainCfgFile),
 		cfgoptions.TransactionsDir(hugConfig.HaproxyDirs.CfgDir),
@@ -58,12 +58,12 @@ func StructuredFromFile(hugConfig hugconfig.HUGConfig) (structured.Structured, e
 
 	structuredCfg := structured.NewStructuredConf()
 	for _, backend := range backends {
-		if isUnifiedGatewayManaged(backend) {
+		if isUnifiedGatewayManaged(backend, linkID) {
 			structuredCfg.Backends[backend.Name] = backend
 		}
 	}
 	for _, frontend := range frontends {
-		if isUnifiedGatewayManaged(frontend) {
+		if isUnifiedGatewayManaged(frontend, linkID) {
 			structuredCfg.Frontends[frontend.Name] = frontend
 		}
 	}
@@ -224,9 +224,8 @@ func addBindPortToStatsFrontend(confClient configuration.Configuration,
 }
 
 // isUnifiedGatewayManaged returns true if the object is managed by the Unified Gateway
-// false otherwise
-// based on the MetaData
-func isUnifiedGatewayManaged[T ownerMetaData](obj T) bool {
+// with the given linkID, false otherwise, based on the MetaData.
+func isUnifiedGatewayManaged[T ownerMetaData](obj T, linkID string) bool {
 	var metadata map[string]any
 	switch o := any(obj).(type) {
 	case *models.Frontend:
@@ -236,8 +235,28 @@ func isUnifiedGatewayManaged[T ownerMetaData](obj T) bool {
 	default:
 		return false
 	}
-	if _, ok := metadata[md.UnifiedGatewayMetaDataKey]; ok {
-		return true
+	hugVal, ok := metadata[md.UnifiedGatewayMetaDataKey]
+	if !ok {
+		return false
+	}
+	kindMap, ok := hugVal.(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, objsAny := range kindMap {
+		objMap, ok := objsAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, infoAny := range objMap {
+			infoMap, ok := infoAny.(map[string]any)
+			if !ok {
+				continue
+			}
+			if id, ok := infoMap[md.LinkIDMetaDataKey].(string); ok && id == linkID {
+				return true
+			}
+		}
 	}
 	return false
 }

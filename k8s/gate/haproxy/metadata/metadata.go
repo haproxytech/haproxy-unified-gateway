@@ -20,6 +20,7 @@ import (
 
 const (
 	UnifiedGatewayMetaDataKey string = "hug"
+	LinkIDMetaDataKey         string = "LinkID"
 )
 
 type (
