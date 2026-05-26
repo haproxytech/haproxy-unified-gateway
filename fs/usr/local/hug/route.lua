@@ -203,60 +203,56 @@ end
 -- Register the function to be called from HAProxy
 core.register_action("route", { "http-req" }, route)
 
--- Per-thread cache for parsed map file contents (keyed by filepath).
--- Each entry: { time=<os.time>, entries={{key,val},...} }
--- Map.new cannot be used at runtime (only during config loading), so we read files directly.
-local file_map_cache = {}
-local MAP_CACHE_TTL  = 5  -- seconds
+-- Path maps are pre-loaded by HAProxy via dummy ACLs in haproxy.cfg, so
+-- core.get_patref returns a handle to the live in-memory pat_ref. Iterating
+-- with pairs() sees runtime-socket updates (set/add/del map) immediately.
+local patref_cache = {}
 
-local function load_map_file(filepath)
-    local entries = {}
-    local f = io.open(filepath, "r")
-    if not f then return entries end
-    for line in f:lines() do
-        local k, v = line:match("^([^#%s][^%s]*)%s+(.+)$")
-        if k and v then
-            table.insert(entries, { k, v:match("^(.-)%s*$") })
-        end
+local function get_ref(filepath)
+    local r = patref_cache[filepath]
+    if r ~= nil then
+        if r == false then return nil end
+        return r
     end
-    f:close()
-    return entries
-end
-
-local function get_map_entries(filepath)
-    local now    = os.time()
-    local cached = file_map_cache[filepath]
-    if cached and (now - cached.time) < MAP_CACHE_TTL then
-        return cached.entries
+    local ok, ref = pcall(core.get_patref, filepath)
+    if ok and ref then
+        patref_cache[filepath] = ref
+        return ref
     end
-    local entries = load_map_file(filepath)
-    file_map_cache[filepath] = { time = now, entries = entries }
-    return entries
+    -- Sentinel so we alert once per filepath, not per request.
+    patref_cache[filepath] = false
+    core.Alert("find_route: map not registered with HAProxy: " .. filepath)
+    return nil
 end
 
 local function exact_lookup(filepath, key)
-    for _, e in ipairs(get_map_entries(filepath)) do
-        if e[1] == key then return e[2] end
+    local r = get_ref(filepath)
+    if not r then return nil end
+    for k, v in pairs(r) do
+        if k == key then return v end
     end
     return nil
 end
 
 -- Returns value and match length (0 if no match).
 local function prefix_lookup(filepath, key)
+    local r = get_ref(filepath)
+    if not r then return nil, 0 end
     local best_v, best_len = nil, 0
-    for _, e in ipairs(get_map_entries(filepath)) do
-        local k = e[1]
+    for k, v in pairs(r) do
         if #k > best_len and key:sub(1, #k) == k then
-            best_v, best_len = e[2], #k
+            best_v, best_len = v, #k
         end
     end
     return best_v, best_len
 end
 
 local function regex_lookup(filepath, key)
-    for _, e in ipairs(get_map_entries(filepath)) do
-        local ok, m = pcall(string.match, key, e[1])
-        if ok and m then return e[2] end
+    local r = get_ref(filepath)
+    if not r then return nil end
+    for k, v in pairs(r) do
+        local ok, m = pcall(string.match, key, k)
+        if ok and m then return v end
     end
     return nil
 end

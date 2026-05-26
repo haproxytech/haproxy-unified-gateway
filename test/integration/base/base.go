@@ -654,14 +654,17 @@ var StandardMaps = []string{
 
 // RuntimeMaps is the subset of StandardMaps that HAProxy loads via map() directives
 // and are therefore accessible through the runtime socket.
-// path_prefix.map and path_regex.map are consumed directly from disk by lua.find_route
-// and are not registered with HAProxy, so they are excluded here.
+// The three path maps are pre-loaded by no-op ACLs in haproxy.cfg so lua.find_route
+// can reach them via core.get_patref.
 var RuntimeMaps = []string{
 	"domain_wildcard_sni.map",
 	"listener_exact_match.map",
 	"listener_route_exact_match.map",
 	"listener_route_wildcard_match.map",
 	"listener_wildcard_match.map",
+	"path_exact.map",
+	"path_prefix.map",
+	"path_regex.map",
 	"sni.map",
 }
 
