@@ -194,6 +194,8 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	md := b.metadataManager.FrontendMetaData(vListener)
 
 	pathExactMap := b.params.mapsStorage.GetPathExactMapFile(frontendName)
+	pathPrefixMap := b.params.mapsStorage.GetPathPrefixMapFile(frontendName)
+	pathRegexMap := b.params.mapsStorage.GetPathRegexMapFile(frontendName)
 	sniMap := b.params.mapsStorage.GetSniMapFile(frontendName)
 
 	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile(frontendName)
@@ -341,6 +343,26 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 				Metadata: map[string]any{
 					"hug": "for lua routing",
 				},
+			},
+			// Preload path maps at config-parse time so lua.find_route can
+			// reach them via core.get_patref. These ACLs are never evaluated.
+			{
+				ACLName:   "_preload_path_exact",
+				Criterion: "str(_),map(" + pathExactMap.Path.FullPath() + ")",
+				Value:     "-m found",
+				Metadata:  map[string]any{"hug": "preload path_exact.map for lua.find_route"},
+			},
+			{
+				ACLName:   "_preload_path_prefix",
+				Criterion: "str(_),map_beg(" + pathPrefixMap.Path.FullPath() + ")",
+				Value:     "-m found",
+				Metadata:  map[string]any{"hug": "preload path_prefix.map for lua.find_route"},
+			},
+			{
+				ACLName:   "_preload_path_regex",
+				Criterion: "str(_),map_reg(" + pathRegexMap.Path.FullPath() + ")",
+				Value:     "-m found",
+				Metadata:  map[string]any{"hug": "preload path_regex.map for lua.find_route"},
 			},
 		}
 	}
