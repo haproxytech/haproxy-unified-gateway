@@ -508,32 +508,15 @@ func (m *MapFileState) WriteOnDiskIfChanged() error {
 		if entryKey.Path != "" {
 			key += entryKey.Path
 		}
-		if m.PlainValues {
-			names := make([]string, 0, len(entryValue.DesiredValue))
-			for name := range entryValue.DesiredValue {
-				names = append(names, name)
-			}
-			if len(names) == 0 {
-				continue
-			}
-			slices.Sort(names)
-			for _, name := range names {
-				m.logger.LogAttrs(context.Background(), slog.LevelDebug, "Map file entry",
-					slog.String("key", key), slog.String("value", name))
-				if _, err := fmt.Fprintf(f, "%s %s\n", key, name); err != nil {
-					return err
-				}
-			}
-		} else {
-			value := BuildRouteValue(entryValue.DesiredValue)
-			if value == "" {
-				continue
-			}
-			m.logger.LogAttrs(context.Background(), slog.LevelDebug, "Map file entry",
-				slog.String("key", key), slog.String("value", value))
-			if _, err := fmt.Fprintf(f, "%s %s\n", key, value); err != nil {
-				return err
-			}
+
+		value := m.BuildValue(entryValue.DesiredValue)
+		if value == "" {
+			continue
+		}
+		m.logger.LogAttrs(context.Background(), slog.LevelDebug, "Map file entry",
+			slog.String("key", key), slog.String("value", value))
+		if _, err := fmt.Fprintf(f, "%s %s\n", key, value); err != nil {
+			return err
 		}
 	}
 	return nil
