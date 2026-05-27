@@ -280,15 +280,15 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 			},
 			{
 				Type:     "set-var",
-				VarName:  "selected_listener_route,ifnotexists",
+				VarName:  "selected_listener_route",
 				VarScope: "txn",
 				VarExpr:  "var(txn.tmp_exact),map(" + listenerRouteExactMatchMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "listener-route exact match selection"},
 			},
 			{
 				//  listener-route-name wildcard match
-				// http-request set-var(txn.tmp_wild)                    var(txn.selected_listener_name),concat("/",txn.hostreversed)
-				// http-request set-var(txn.selected_listener_route)    var(txn.tmp_wild),map_beg(listener_route_wildcard_match)
+				// http-request set-var(txn.tmp_wild)                            var(txn.selected_listener_name),concat("/",txn.hostreversed)
+				// http-request set-var(txn.selected_listener_route_wildcard)   var(txn.tmp_wild),map_beg(listener_route_wildcard_match)
 				Type:     "set-var",
 				VarName:  "tmp_wild",
 				VarScope: "txn",
@@ -296,17 +296,19 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 			},
 			{
 				Type:     "set-var",
-				VarName:  "selected_listener_route,ifnotexists",
+				VarName:  "selected_listener_route_wildcard",
 				VarScope: "txn",
 				VarExpr:  "var(txn.tmp_wild),map_beg(" + listenerRouteWildcardMatchMap.Path.FullPath() + ")",
 				Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
 			},
 			// -------------------
-			// Lookups based on the selected listener route (selected_listener_route)
-			// in the final routing maps.
-			// txn.selected_listener_route may be comma-separated when multiple HTTPRoutes match
-			// the same listener+host. find_route loops over each candidate, appends txn.path,
-			// and resolves the first match against the three path maps.
+			// Lookups based on the selected listener routes (selected_listener_route
+			// and selected_listener_route_wildcard) in the final routing maps.
+			// Both may be comma-separated when multiple HTTPRoutes match the same
+			// listener+host. find_route loops over every candidate from both vars,
+			// appends txn.path, and picks the best match: path specificity is the
+			// primary score (exact > longest prefix > regex); exact-host beats
+			// wildcard-host as the tiebreaker.
 			{
 				// http-request lua.find_route <maps_dir>
 				Type:      "lua",
