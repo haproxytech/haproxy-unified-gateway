@@ -261,51 +261,63 @@ end
 local SCORE_EXACT = 1e9
 local SCORE_REGEX = -1
 
--- find_route handles comma-separated txn.selected_listener_route by iterating
--- over ALL candidates and picking the most specific match across all of them.
--- Specificity: exact > longest prefix > first regex.
+-- find_route picks the most specific route across two candidate sources:
+--   txn.selected_listener_route          → routes attached via exact hostname
+--   txn.selected_listener_route_wildcard → routes attached via wildcard hostname
+-- Each may be comma-separated. We score every candidate against the path maps;
+-- path specificity is primary (exact > longest prefix > regex), exact-host
+-- breaks ties over wildcard-host (Gateway API: same path, more specific host wins).
 -- maps_dir: maps directory for this frontend (e.g. /usr/local/hug/maps/hug_http_80)
-local function find_route(txn, maps_dir)
-    local lr_str = txn.f:var("txn.selected_listener_route") or ""
-    local path   = txn.f:var("txn.path") or ""
+local HOST_EXACT, HOST_WILD = 2, 1
 
-    if lr_str == "" then return end
+local function find_route(txn, maps_dir)
+    local lr_exact = txn.f:var("txn.selected_listener_route") or ""
+    local lr_wild  = txn.f:var("txn.selected_listener_route_wildcard") or ""
+    local path     = txn.f:var("txn.path") or ""
+
+    if lr_exact == "" and lr_wild == "" then return end
 
     local exact_file  = maps_dir .. "/path_exact.map"
     local prefix_file = maps_dir .. "/path_prefix.map"
     local regex_file  = maps_dir .. "/path_regex.map"
 
-    local candidates  = core.tokenize(lr_str, ",", true)
-    local blr_parts   = {}
-    local best_val    = nil
-    local best_score  = -1e9
+    local blr_parts  = {}
+    local best_val   = nil
+    local best_score = -1e9
+    local best_host  = 0
 
-    for _, lr in ipairs(candidates) do
-        local blr = lr .. path
-        table.insert(blr_parts, blr)
+    local function consider(lr_str, host_rank)
+        if lr_str == "" then return end
+        for _, lr in ipairs(core.tokenize(lr_str, ",", true)) do
+            local blr = lr .. path
+            table.insert(blr_parts, blr)
 
-        local m, score
-
-        m = exact_lookup(exact_file, blr)
-        if m then
-            score = SCORE_EXACT
-        else
-            local pv, plen = prefix_lookup(prefix_file, blr)
-            if pv then
-                -- Score is the path-specific part of the match only.
-                -- plen includes the lr prefix, which is irrelevant to path specificity.
-                m, score = pv, plen - #lr
+            local m, score
+            m = exact_lookup(exact_file, blr)
+            if m then
+                score = SCORE_EXACT
             else
-                local rv = regex_lookup(regex_file, blr)
-                if rv then m, score = rv, SCORE_REGEX end
+                local pv, plen = prefix_lookup(prefix_file, blr)
+                if pv then
+                    -- plen includes lr; subtract to get path-only specificity.
+                    m, score = pv, plen - #lr
+                else
+                    local rv = regex_lookup(regex_file, blr)
+                    if rv then m, score = rv, SCORE_REGEX end
+                end
+            end
+
+            if m and (score > best_score or
+                     (score == best_score and host_rank > best_host)) then
+                best_val   = m
+                best_score = score
+                best_host  = host_rank
             end
         end
-
-        if m and score > best_score then
-            best_val   = m
-            best_score = score
-        end
     end
+
+    consider(lr_exact, HOST_EXACT)
+    consider(lr_wild,  HOST_WILD)
 
     txn:set_var("txn.base_listener_route", table.concat(blr_parts, ","))
     if best_val ~= nil then

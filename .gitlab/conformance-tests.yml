@@ -67,7 +67,7 @@ conformance-MR-GW-API-1_5_0:
     CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-1.5.0.html"
     CONFORMANCE_RUN_TEST: ""
     HUG_SERVICE_TYPE: "ClusterIP"
-    CONFORMANCE_SKIP_TESTS: "HTTPRouteHostnameIntersection,\
+    CONFORMANCE_SKIP_TESTS: "\
       HTTPRouteHeaderMatching,\
       HTTPRouteInvalidBackendRefUnknownKind,\
       HTTPRouteInvalidCrossNamespaceBackendRef,\
