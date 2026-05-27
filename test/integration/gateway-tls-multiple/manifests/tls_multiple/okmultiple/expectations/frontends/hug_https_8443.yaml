@@ -1,12 +1,29 @@
-metadata:
-  hug:
-    Gateway:
-      e2e-tests-gateway-tls-multiple/gateway:
-        Generation: 1
-        LinkID: hug
-mode: http
-name: hug_https_8443
-from: haproxytech
+acl_list:
+- acl_name: route_is_json
+  criterion: var(txn.route),bytes(0,1)
+  metadata:
+    hug: for lua routing
+  value: -m str {
+- acl_name: _preload_path_exact
+  criterion: str(_),map(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_exact.map)
+  metadata:
+    hug: preload path_exact.map for lua.find_route
+  value: -m found
+- acl_name: _preload_path_prefix
+  criterion: str(_),map_beg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_prefix.map)
+  metadata:
+    hug: preload path_prefix.map for lua.find_route
+  value: -m found
+- acl_name: _preload_path_regex
+  criterion: str(_),map_reg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443/path_regex.map)
+  metadata:
+    hug: preload path_regex.map for lua.find_route
+  value: -m found
+backend_switching_rule_list:
+- cond: if
+  cond_test: route_is_json
+  name: '%[var(txn.backend)]'
+- name: '%[var(txn.route)]'
 binds:
   v4:
     address: 0.0.0.0
@@ -20,17 +37,8 @@ binds:
     name: v6
     port: 8443
     ssl: true
-acl_list:
-- acl_name: route_is_json
-  criterion: var(txn.route),bytes(0,1)
-  metadata:
-    hug: for lua routing
-  value: -m str {
-backend_switching_rule_list:
-- cond: if
-  cond_test: route_is_json
-  name: '%[var(txn.backend)]'
-- name: '%[var(txn.route)]'
+default_backend: backend_not_found
+from: haproxytech
 http_request_rule_list:
 - type: set-var
   var_expr: path
@@ -91,4 +99,11 @@ http_request_rule_list:
   metadata:
     hug: lua routing
   type: lua
-default_backend: backend_not_found
+metadata:
+  hug:
+    Gateway:
+      e2e-tests-gateway-tls-multiple/gateway:
+        Generation: 1
+        LinkID: hug
+mode: http
+name: hug_https_8443

@@ -522,6 +522,8 @@ func (b *BaseSuite) ExpectFrontends(ctx context.Context, expectationPath string,
 			if gotFrontend, ok = gotFrontends[actualFeName]; !ok {
 				return false
 			}
+			// b.exportPortMap()
+			// b.exportFrontend(gotFrontend)
 
 			// Read expectation from the template-named file; FrontendFromManifest
 			// substitutes port numbers in the YAML content before unmarshalling.
@@ -1040,3 +1042,25 @@ func normalizeMapContent(content string) string {
 
 	return strings.Join(cleaned, "\n")
 }
+
+// func (b *BaseSuite) exportPortMap() {
+// 	yamlData, err := yaml.Marshal(b.test.PortMap)
+// 	if err != nil {
+// 		log.Fatalf("Error marshaling port map to YAML: %v", err)
+// 	}
+// 	if err := os.WriteFile("portmap.yaml", yamlData, 0o644); err != nil {
+// 		log.Fatalf("Error writing portmap file: %v", err)
+// 	}
+// }
+
+// func (b *BaseSuite) exportFrontend(fe *models.Frontend) {
+// 	yamlData, err := yaml.Marshal(fe)
+// 	if err != nil {
+// 		log.Fatalf("Error marshaling to YAML: %v", err)
+// 	}
+// 	filePath := fe.Name + ".yaml"
+// 	err = os.WriteFile(filePath, yamlData, 0o644)
+// 	if err != nil {
+// 		log.Fatalf("Error writing file: %v", err)
+// 	}
+// }
