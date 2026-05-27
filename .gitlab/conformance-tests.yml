@@ -67,6 +67,14 @@ conformance-MR-GW-API-1_5_0:
     CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-1.5.0.html"
     CONFORMANCE_RUN_TEST: ""
     HUG_SERVICE_TYPE: "ClusterIP"
+    # Pod label selector for conformance-collect-debug-mr.
+    # When set, that task collects logs, haproxy.cfg and map files from the
+    # matching HUG pod after the conformance run. The deployer intentionally
+    # does NOT delete the pod when its gateway is removed, keeping it alive
+    # so artifacts can be retrieved here before the cluster is torn down.
+    # Leave empty (default) to skip collection entirely.
+    # Example: "run=hug-4ff08ccae6d535c8"  (sha derived from gateway ns/name)
+    HUG_LABEL_COLLECT_LOGS: ""
     CONFORMANCE_SKIP_TESTS: "\
       HTTPRouteHeaderMatching,\
       HTTPRouteInvalidBackendRefUnknownKind,\
@@ -95,6 +103,7 @@ conformance-MR-GW-API-1_5_0:
     - task conformance-build-test-image
     - task conformance-run-job
   after_script:
+    - task conformance-collect-debug-mr || true
     - task kind-delete
   artifacts:
     when: always
@@ -102,5 +111,6 @@ conformance-MR-GW-API-1_5_0:
       - conformance-report-1.5.0.yaml
       - conformance-junit-1.5.0.xml
       - conformance-junit-1.5.0.html
+      - debug-hug/
     reports:
       junit: conformance-junit-1.5.0.xml
