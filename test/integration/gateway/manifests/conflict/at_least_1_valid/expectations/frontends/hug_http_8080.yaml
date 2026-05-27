@@ -4,6 +4,21 @@ acl_list:
   metadata:
     hug: for lua routing
   value: -m str {
+- acl_name: _preload_path_exact
+  criterion: str(_),map(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_exact.map)
+  metadata:
+    hug: preload path_exact.map for lua.find_route
+  value: -m found
+- acl_name: _preload_path_prefix
+  criterion: str(_),map_beg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_prefix.map)
+  metadata:
+    hug: preload path_prefix.map for lua.find_route
+  value: -m found
+- acl_name: _preload_path_regex
+  criterion: str(_),map_reg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_regex.map)
+  metadata:
+    hug: preload path_regex.map for lua.find_route
+  value: -m found
 backend_switching_rule_list:
 - cond: if
   cond_test: route_is_json
