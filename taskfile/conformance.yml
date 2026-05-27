@@ -185,6 +185,53 @@ tasks:
 
         exit ${JOB_STATUS}
 
+  conformance-collect-debug-mr:
+    desc: "collect HUG pod logs and HAProxy config/maps for post-mortem debugging (MR CI job)"
+    deps:
+      - task: check-kubectl
+    vars:
+      kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
+      DEBUG_DIR: '{{default "debug-hug" .DEBUG_DIR}}'
+      HUG_NS: "haproxy-unified-gateway"
+      # HUG_LABEL_COLLECT_LOGS: pod label selector for debug artifact collection.
+      # When set, collects logs, haproxy.cfg and map files from the matching HUG pod.
+      # The deployer intentionally does NOT delete the pod when its gateway is removed,
+      # keeping it alive so artifacts can be retrieved here before cluster teardown.
+      # Leave empty (default) to skip collection entirely.
+      # Example: "run=hug-4ff08ccae6d535c8"  (sha derived from gateway ns/name)
+      HUG_LABEL_COLLECT_LOGS: '{{default "" .HUG_LABEL_COLLECT_LOGS}}'
+    cmds:
+      - |
+        if [ -z "{{.HUG_LABEL_COLLECT_LOGS}}" ]; then
+          echo "HUG_LABEL_COLLECT_LOGS is not set — skipping debug collection"
+          exit 0
+        fi
+      - mkdir -p "{{.DEBUG_DIR}}"
+      - |
+        POD=$(/{{.kubectl}} get pod -n {{.HUG_NS}} -l {{.HUG_LABEL_COLLECT_LOGS}} \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        if [ -z "$POD" ]; then
+          echo "No pod with label {{.HUG_LABEL_COLLECT_LOGS}} found — skipping debug collection"
+          exit 0
+        fi
+        echo "Collecting debug artifacts from pod: $POD (label: {{.HUG_LABEL_COLLECT_LOGS}})"
+        /{{.kubectl}} logs -n {{.HUG_NS}} "$POD" > "{{.DEBUG_DIR}}/hug-pod.log" 2>&1 || true
+        /{{.kubectl}} exec -n {{.HUG_NS}} "$POD" -- cat /usr/local/hug/haproxy.cfg \
+          > "{{.DEBUG_DIR}}/haproxy.cfg" 2>/dev/null || true
+        MAP_DIR=/usr/local/hug/maps/hug_https_443
+        for MAP in \
+          listener_exact_match.map \
+          listener_wildcard_match.map \
+          listener_route_exact_match.map \
+          listener_route_wildcard_match.map \
+          path_exact.map \
+          path_prefix.map \
+          path_regex.map; do
+          /{{.kubectl}} exec -n {{.HUG_NS}} "$POD" -- cat "${MAP_DIR}/${MAP}" \
+            > "{{.DEBUG_DIR}}/${MAP}" 2>/dev/null || true
+        done
+        echo "Debug artifacts written to {{.DEBUG_DIR}}"
+
   ### -----------------
   ### Tasks used for local tests
   ### Conformance tester runs outside the cluster

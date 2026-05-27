@@ -50,6 +50,12 @@ const (
 
 	defaultControllerNS    = "haproxy-unified-gateway"
 	defaultControllerLabel = "haproxy-unified-gateway"
+
+	// debugPreservedResource is the resource name of the HUG pod kept alive after
+	// its gateway is deleted so that the CI debug-collection task can retrieve
+	// haproxy.cfg and map files from it before the cluster is torn down.
+	// Corresponds to gateway-conformance-infra/same-namespace-with-https-listener.
+	debugPreservedResource = "hug-4ff08ccae6d535c8"
 )
 
 // Config holds the parameters for the Gateway deployer.
@@ -243,6 +249,10 @@ func (r *GatewayReconciler) reconcileService(ctx context.Context, gw *gatewayv1.
 // deleteResources removes the Deployment and Service created for a Gateway.
 func (r *GatewayReconciler) deleteResources(ctx context.Context, gwNS, gwName string) error {
 	name := resourceName(gwNS, gwName)
+	if name == debugPreservedResource {
+		_, _ = fmt.Fprintf(os.Stderr, "deployer: preserving %s/%s for post-mortem debug collection\n", r.Config.DeployerNs, name)
+		return nil
+	}
 	ns := r.Config.DeployerNs
 
 	deploy := &appsv1.Deployment{}
@@ -451,6 +461,8 @@ func WaitForCleanup(ctx context.Context, restCfg *rest.Config, deployerNs, gatew
 		); err != nil {
 			return err
 		}
+		deploys.Items = slices.DeleteFunc(deploys.Items, func(d appsv1.Deployment) bool { return d.Name == debugPreservedResource })
+		svcs.Items = slices.DeleteFunc(svcs.Items, func(s corev1.Service) bool { return s.Name == debugPreservedResource })
 		if len(deploys.Items) == 0 && len(svcs.Items) == 0 {
 			return nil
 		}
