@@ -1,0 +1,6 @@
+lr1/api/      be_r1_api
+lr1/api/v2/   be_r1_apiv2
+lr1/tie       be_r1_tie
+lr2/special/  be_r2_special
+lr2/tie       be_r2_tie
+lr2/          be_r2_default
