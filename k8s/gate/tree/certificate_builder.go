@@ -243,6 +243,9 @@ func (b *CertificateBuilderImpl) secretsPerVirtualListener(mapSecret2Listeners m
 				continue
 			}
 			virtualListenerName := listener.VirtualListenerName
+			if virtualListenerName == "" {
+				continue
+			}
 			if _, ok := secretsPerVirtualListener[virtualListenerName]; !ok {
 				secretsPerVirtualListener[virtualListenerName] = make(map[client.ObjectKey]struct{})
 			}
