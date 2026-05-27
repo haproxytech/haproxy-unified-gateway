@@ -72,7 +72,7 @@ http_request_rule_list:
     hug: listener-route exact match selection
   type: set-var
   var_expr: var(txn.tmp_exact),map(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_http_8080/listener_route_exact_match.map)
-  var_name: selected_listener_route,ifnotexists
+  var_name: selected_listener_route
   var_scope: txn
 - type: set-var
   var_expr: var(txn.selected_listener_name),concat("/",txn.hostreversed)
@@ -82,7 +82,7 @@ http_request_rule_list:
     hug: listener-route wildcard match selection
   type: set-var
   var_expr: var(txn.tmp_wild),map_beg(/tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_http_8080/listener_route_wildcard_match.map)
-  var_name: selected_listener_route,ifnotexists
+  var_name: selected_listener_route_wildcard
   var_scope: txn
 - lua_action: find_route
   lua_params: /tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_http_8080
