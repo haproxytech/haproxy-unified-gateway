@@ -1,0 +1,10 @@
+# name  host  path  want_route
+# l-wild is selected via listener_wildcard_match.map (.org.wild. prefix).
+# The route has a wildcard hostname *.wild.org, stored in
+# listener_route_wildcard_match.map with key "l-wild/.org.wild.".
+# HAProxy resolves: tmp_wild = "l-wild/.org.wild.foo" → map_beg → l-wild/r-wild.
+
+wildcard_default    foo.wild.org   /         be_default
+wildcard_api        foo.wild.org   /api/x    be_api
+other_subdomain     bar.wild.org   /         be_default
+non_matching_host   foo.other.org  /         -

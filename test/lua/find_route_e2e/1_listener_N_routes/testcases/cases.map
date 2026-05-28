@@ -1,0 +1,8 @@
+# name  host  path  want_route
+# listener_route_exact_match.map has "l1/example.org → l1/r1,l1/r2".
+# r1 has the default "/" prefix; r2 has the more specific "/api/" prefix.
+# Path specificity determines the winner.
+
+r1_default      example.org   /         be_r1
+r2_api_wins     example.org   /api/x    be_api
+r1_fallback     example.org   /other    be_r1

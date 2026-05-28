@@ -1,0 +1,9 @@
+# Test cases for the reverse_host converter.
+# Key: Host header value sent by the test.
+# Value: expected response body (the reversed hostname).
+
+www.example.com          .com.example.www
+a.b                      .b.a
+foo                      .foo
+host.example.com:8080    .com.example.host
+a.b.c.                   .c.b.a

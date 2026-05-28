@@ -1,0 +1,6 @@
+# name  host  path  want_route
+# Two exact listeners; no wildcard fallback. Unknown hosts get no route.
+
+host_a         host-a.org   /    be_a
+host_b         host-b.org   /    be_b
+unknown_host   unknown.org  /    -

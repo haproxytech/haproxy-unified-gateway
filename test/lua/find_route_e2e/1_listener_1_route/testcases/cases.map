@@ -1,0 +1,8 @@
+# name  host  path  want_route
+# "-" = no route expected.
+# One no-hostname listener (l1) → route l1/r1 for example.org.
+
+exact_path     example.org   /ping     be_ping
+api_prefix     example.org   /api/x    be_api
+root_prefix    example.org   /         be_default
+no_route       other.org     /         -

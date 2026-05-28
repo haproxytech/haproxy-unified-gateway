@@ -1,0 +1,9 @@
+# Test cases for TestFindRoute_MultiCandidate.
+# Fields: path  lr_exact_csv  want_route  want_blr
+# lr_exact_csv is a comma-separated list of listener routes (no spaces).
+# want_blr is the full expected value of txn.base_listener_route.
+
+# path matches only 2nd candidate's prefix → must iterate past the 1st
+/special/foo  lr1,lr2  be_r2_special  lr1/special/foo,lr2/special/foo
+# 1st candidate is honoured when ITS prefix matches
+/api/x        lr1,lr2  be_r1_api      lr1/api/x,lr2/api/x

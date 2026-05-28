@@ -27,8 +27,7 @@ import (
 func TestCLI_RouteCache(t *testing.T) {
 	h := harness.New(t, "haproxy.cfg")
 
-	spec := `{"a":"wr","l":"be_one:1"}`
-	if _, body := h.Get(t, "/", "X-Route", spec); !strings.Contains(body, "backend=be_one") {
+	if _, body := h.Get(t, "/", "X-Route-Name", "wr_be_one"); !strings.Contains(body, "backend=be_one") {
 		t.Fatalf("priming request failed: body=%s", body)
 	}
 

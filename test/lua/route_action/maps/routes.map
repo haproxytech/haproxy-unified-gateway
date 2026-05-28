@@ -1,0 +1,10 @@
+# Route specs used by route_action tests.
+# Key: short name passed as X-Route-Name header.
+# Value: JSON route spec consumed by lua.route.
+
+wr_only_100      {"a":"wr","l":"be_only:100,be_never:0"}
+wr_50_50         {"a":"wr","l":"be_a:50,be_b:50"}
+fo_empty_first   {"a":"fo","l":"be_empty:1,be_with_server:1"}
+fo_both_ok       {"a":"fo","l":"be_first:1,be_second:1"}
+fo_all_empty     {"a":"fo","l":"be_a:1,be_b:1"}
+wr_default_only  {"l":"be_default:1"}
