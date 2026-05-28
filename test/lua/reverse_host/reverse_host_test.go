@@ -15,6 +15,8 @@
 package reverse_host_test
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/haproxytech/haproxy-unified-gateway/test/lua/internal/harness"
@@ -23,26 +25,31 @@ import (
 // TestReverseHost exercises the reverse_host converter registered in route.lua:
 // it reverses a dot-separated hostname and prefixes a leading dot, which lets
 // HAProxy use prefix matching against wildcard host patterns.
+// Test cases are loaded from maps/cases.map (host → expected reversed hostname).
 func TestReverseHost(t *testing.T) {
 	h := harness.New(t, "haproxy.cfg")
 
-	cases := []struct {
-		name, host, want string
-	}{
-		{"three_labels", "www.example.com", ".com.example.www"},
-		{"two_labels", "a.b", ".b.a"},
-		{"single_label", "foo", ".foo"},
-		{"with_port_stripped", "host.example.com:8080", ".com.example.host"},
-		{"trailing_dot", "a.b.c.", ".c.b.a"},
+	raw, err := os.ReadFile("maps/cases.map")
+	if err != nil {
+		t.Fatalf("read cases.map: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			status, body := h.Get(t, "/", "Host", tc.host)
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			t.Fatalf("malformed cases.map line: %q", line)
+		}
+		host, want := fields[0], fields[1]
+		t.Run(host, func(t *testing.T) {
+			status, body := h.Get(t, "/", "Host", host)
 			if status != 200 {
 				t.Fatalf("status=%d body=%q", status, body)
 			}
-			if body != tc.want {
-				t.Errorf("Host=%q got %q want %q", tc.host, body, tc.want)
+			if body != want {
+				t.Errorf("Host=%q got %q want %q", host, body, want)
 			}
 		})
 	}

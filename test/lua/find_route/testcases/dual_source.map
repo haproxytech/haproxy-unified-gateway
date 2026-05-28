@@ -1,0 +1,14 @@
+# Test cases for TestFindRoute_DualSource.
+# Fields: name  path  lr_exact  lr_wild  want
+# Both lr_exact and lr_wild are always set; exact-host beats wildcard-host on ties.
+
+# both maps have /exact at SCORE_EXACT; exact-host tiebreaker → r1
+exact_path_tie_exact_host_wins    /exact        lr1  lr2  be_exact_r1
+# r1 has no matching prefix; r2 has /special/ → wins on path score even though wildcard
+path_specificity_beats_host_rank  /special/foo  lr1  lr2  be_r2_special
+# both have /tie at equal length → host-specificity tiebreaker
+prefix_tie_exact_host_wins        /tie          lr1  lr2  be_r1_tie
+# r1's /api/v2/ beats r2's / on length
+wildcard_with_longer_prefix_wins  /api/v2/foo   lr1  lr2  be_r1_apiv2
+# r1 has no matching prefix; only r2/ matches
+fallback_to_wildcard_default      /foo          lr1  lr2  be_r2_default

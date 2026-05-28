@@ -15,6 +15,7 @@
 package find_route_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -32,25 +33,46 @@ func parseRoute(body string) string {
 	return ""
 }
 
+// loadCases reads a 5-column space-separated testcase file.
+// Columns: name  path  lr_exact  lr_wild  want
+// "-" in any column means empty string.
+func loadCases(t *testing.T, filename string) []struct{ name, path, exact, wild, want string } {
+	t.Helper()
+	raw, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatalf("read %s: %v", filename, err)
+	}
+	var cases []struct{ name, path, exact, wild, want string }
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		f := strings.Fields(line)
+		if len(f) != 5 {
+			t.Fatalf("malformed line in %s (want 5 fields): %q", filename, line)
+		}
+		denil := func(s string) string {
+			if s == "-" {
+				return ""
+			}
+			return s
+		}
+		cases = append(cases, struct{ name, path, exact, wild, want string }{
+			f[0], f[1], denil(f[2]), denil(f[3]), denil(f[4]),
+		})
+	}
+	return cases
+}
+
 func TestFindRoute_SingleSource(t *testing.T) {
 	h := harness.New(t, "haproxy.cfg")
-
-	cases := []struct {
-		name, path, exact, wild, want string
-	}{
-		{"exact_path_wins", "/exact", "lr1", "", "be_exact_r1"},
-		{"longest_prefix", "/api/v2/foo", "lr1", "", "be_r1_apiv2"},
-		{"shorter_prefix", "/api/foo", "lr1", "", "be_r1_api"},
-		{"regex_when_nothing_else_matches", "/123", "lr1", "", "be_r1_digits"},
-		{"no_match_returns_no_route", "/nowhere", "lr1", "", ""},
-		{"wildcard_source_only", "/special/x", "", "lr2", "be_r2_special"},
-		{"wildcard_default_prefix", "/anything", "", "lr2", "be_r2_default"},
-	}
-	for _, tc := range cases {
+	for _, tc := range loadCases(t, "testcases/single_source.map") {
 		t.Run(tc.name, func(t *testing.T) {
 			_, body := h.Get(t, tc.path, "X-LR-Exact", tc.exact, "X-LR-Wild", tc.wild)
 			if got := parseRoute(body); got != tc.want {
-				t.Errorf("path=%s exact=%q wild=%q\n got route=%q\nwant route=%q\nbody: %s", tc.path, tc.exact, tc.wild, got, tc.want, body)
+				t.Errorf("path=%s exact=%q wild=%q\n got route=%q\nwant route=%q\nbody: %s",
+					tc.path, tc.exact, tc.wild, got, tc.want, body)
 			}
 		})
 	}
@@ -58,42 +80,12 @@ func TestFindRoute_SingleSource(t *testing.T) {
 
 func TestFindRoute_DualSource(t *testing.T) {
 	h := harness.New(t, "haproxy.cfg")
-
-	cases := []struct {
-		name, path, exact, wild, want, why string
-	}{
-		{
-			name: "exact_path_tie_exact_host_wins", path: "/exact",
-			exact: "lr1", wild: "lr2", want: "be_exact_r1",
-			why: "both maps have /exact at SCORE_EXACT; exact-host tiebreaker → r1",
-		},
-		{
-			name: "path_specificity_beats_host_rank", path: "/special/foo",
-			exact: "lr1", wild: "lr2", want: "be_r2_special",
-			why: "r1 has no matching prefix; r2 has /special/ → wins on path score even though wildcard",
-		},
-		{
-			name: "prefix_tie_exact_host_wins", path: "/tie",
-			exact: "lr1", wild: "lr2", want: "be_r1_tie",
-			why: "both have /tie at equal length → host-specificity tiebreaker",
-		},
-		{
-			name: "wildcard_with_longer_prefix_wins", path: "/api/v2/foo",
-			exact: "lr1", wild: "lr2", want: "be_r1_apiv2",
-			why: "r1's /api/v2/ beats r2's / on length",
-		},
-		{
-			name: "fallback_to_wildcard_default", path: "/foo",
-			exact: "lr1", wild: "lr2", want: "be_r2_default",
-			why: "r1 has no matching prefix; only r2/ matches",
-		},
-	}
-	for _, tc := range cases {
+	for _, tc := range loadCases(t, "testcases/dual_source.map") {
 		t.Run(tc.name, func(t *testing.T) {
 			_, body := h.Get(t, tc.path, "X-LR-Exact", tc.exact, "X-LR-Wild", tc.wild)
 			if got := parseRoute(body); got != tc.want {
-				t.Errorf("%s\n  path=%s exact=%q wild=%q\n  got route=%q\n  want route=%q (%s)\n  body: %s",
-					tc.name, tc.path, tc.exact, tc.wild, got, tc.want, tc.why, body)
+				t.Errorf("%s\n  path=%s exact=%q wild=%q\n  got route=%q\n  want route=%q\n  body: %s",
+					tc.name, tc.path, tc.exact, tc.wild, got, tc.want, body)
 			}
 		})
 	}
@@ -154,21 +146,32 @@ func TestFindRoute_RuntimeSocketUpdate(t *testing.T) {
 func TestFindRoute_MultiCandidate(t *testing.T) {
 	// A single listener-route variable can carry a comma-separated list when
 	// multiple HTTPRoutes attach to the same listener+host.
+	// Cases are loaded from testcases/multi_candidate.map:
+	//   path  lr_exact_csv  want_route  want_blr
 	h := harness.New(t, "haproxy.cfg")
 
-	// Path matches only the 2nd candidate's prefix → we must iterate past the
-	// 1st (no early-exit).
-	_, body := h.Get(t, "/special/foo", "X-LR-Exact", "lr1,lr2")
-	if got := parseRoute(body); got != "be_r2_special" {
-		t.Errorf("expected be_r2_special (only 2nd candidate matches); got %q body=%s", got, body)
+	raw, err := os.ReadFile("testcases/multi_candidate.map")
+	if err != nil {
+		t.Fatalf("read multi_candidate.map: %v", err)
 	}
-	if !strings.Contains(body, "blr=lr1/special/foo,lr2/special/foo") {
-		t.Errorf("expected blr to list both candidates; got: %s", body)
-	}
-
-	// And the 1st candidate is honoured when ITS prefix matches.
-	_, body = h.Get(t, "/api/x", "X-LR-Exact", "lr1,lr2")
-	if got := parseRoute(body); got != "be_r1_api" {
-		t.Errorf("expected be_r1_api (1st candidate hit); got %q body=%s", got, body)
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		f := strings.Fields(line)
+		if len(f) != 4 {
+			t.Fatalf("malformed multi_candidate.map line (want 4 fields): %q", line)
+		}
+		path, lrCsv, wantRoute, wantBLR := f[0], f[1], f[2], f[3]
+		t.Run(path, func(t *testing.T) {
+			_, body := h.Get(t, path, "X-LR-Exact", lrCsv)
+			if got := parseRoute(body); got != wantRoute {
+				t.Errorf("lr=%q: got route=%q want %q; body: %s", lrCsv, got, wantRoute, body)
+			}
+			if !strings.Contains(body, "blr="+wantBLR) {
+				t.Errorf("lr=%q: expected blr=%s; body: %s", lrCsv, wantBLR, body)
+			}
+		})
 	}
 }

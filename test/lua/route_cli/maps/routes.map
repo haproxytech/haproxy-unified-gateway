@@ -1,0 +1,5 @@
+# Route specs used by route_cli tests.
+# Key: short name passed as X-Route-Name header.
+# Value: JSON route spec consumed by lua.route.
+
+wr_be_one  {"a":"wr","l":"be_one:1"}

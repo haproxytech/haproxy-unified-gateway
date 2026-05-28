@@ -1,0 +1,11 @@
+# Test cases for TestFindRoute_SingleSource.
+# Fields: name  path  lr_exact  lr_wild  want
+# Use "-" for empty lr_exact or lr_wild; "-" in want means no route expected.
+
+exact_path_wins                  /exact         lr1  -    be_exact_r1
+longest_prefix                   /api/v2/foo    lr1  -    be_r1_apiv2
+shorter_prefix                   /api/foo       lr1  -    be_r1_api
+regex_when_nothing_else_matches  /123           lr1  -    be_r1_digits
+no_match_returns_no_route        /nowhere       lr1  -    -
+wildcard_source_only             /special/x     -    lr2  be_r2_special
+wildcard_default_prefix          /anything      -    lr2  be_r2_default

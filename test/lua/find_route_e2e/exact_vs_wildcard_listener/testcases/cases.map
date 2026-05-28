@@ -1,0 +1,8 @@
+# name  host  path  want_route
+# exact.org is in listener_exact_match.map → l-exact is selected and the
+# wildcard lookup is skipped (ifnotexists). other.org is not in the exact map
+# so it falls through to the wildcard "." → l-wild.
+
+exact_host_uses_exact_listener   exact.org   /    be_exact
+other_host_uses_wildcard         other.org   /    be_other
+unknown_host_no_route            third.org   /    -
