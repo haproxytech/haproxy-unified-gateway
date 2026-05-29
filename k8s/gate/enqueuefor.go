@@ -507,22 +507,27 @@ func enqueueHTTPRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.Extr
 // that have a cross-namespace backendRef pointing to the changed ReferenceGrant's namespace.
 // A ReferenceGrant lives in the *target* namespace (the namespace of the referenced resource),
 // so only routes whose backendRef.Namespace matches the grant's namespace are affected.
-func enqueueGatewayForReferenceGrant(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
-	return func(ctx context.Context, o client.Object) []reconcile.Request {
-		gatewayList := &gatewayv1.GatewayList{}
-		if err := ctrlclient.List(ctx, gatewayList); err != nil {
-			return nil
-		}
-		var requests []reconcile.Request
-		for _, gateway := range gatewayList.Items {
-			if gatewayHasCrossNamespaceRefTo(gateway, o.GetNamespace()) {
-				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-					Namespace: gateway.Namespace,
-					Name:      gateway.Name,
-				}})
+func enqueueGatewayForReferenceGrant(dg utils.DedicatedGateway) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			gatewayList := &gatewayv1.GatewayList{}
+			if err := ctrlclient.List(ctx, gatewayList); err != nil {
+				return nil
 			}
+			var requests []reconcile.Request
+			for _, gateway := range gatewayList.Items {
+				if !dg.Check(types.NamespacedName{Namespace: gateway.Namespace, Name: gateway.Name}) {
+					continue
+				}
+				if gatewayHasCrossNamespaceRefTo(gateway, o.GetNamespace()) {
+					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+						Namespace: gateway.Namespace,
+						Name:      gateway.Name,
+					}})
+				}
+			}
+			return requests
 		}
-		return requests
 	}
 }
 

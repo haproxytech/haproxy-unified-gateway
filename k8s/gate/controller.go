@@ -342,7 +342,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					// Watch ReferenceGrants — cross-namespace certificateRefs access may change
 					{
 						watchSource: objtypes.ObjectTypeRefGrant,
-						enqueueFunc: enqueueGatewayForReferenceGrant,
+						enqueueFunc: enqueueGatewayForReferenceGrant(utils.NewDedicatedGateway(cfg.GatewayNsName)),
 						predicate: k8spredicate.And(
 							k8spredicate.ResourceVersionChangedPredicate{},
 							predicate.NewNamespacePredicate(cfg.Namespaces),
