@@ -193,7 +193,8 @@ func (b *HaproxyConfMgrImpl) cleanupAfterFirstSync() {
 	for feName := range b.configuration.structured.Frontends {
 		_, toKeep := b.firstSync.frontends[feName]
 		if !toKeep {
-			b.logger.LogAttrs(context.Background(), slog.LevelDebug, "Frontend [DELETE STARTUP]",
+			b.logger.LogAttrs(
+				context.Background(), slog.LevelDebug, "Frontend [DELETE STARTUP]",
 				logging.LogAttrFrontendName(feName),
 			)
 			if err := b.configuration.deleteFrontend(b.logger, feName); err != nil {
@@ -208,7 +209,8 @@ func (b *HaproxyConfMgrImpl) cleanupAfterFirstSync() {
 	for beName := range b.configuration.structured.Backends {
 		_, toKeep := b.firstSync.backends[beName]
 		if !toKeep {
-			b.logger.LogAttrs(context.Background(), slog.LevelDebug, "Backend [DELETE STARTUP]",
+			b.logger.LogAttrs(
+				context.Background(), slog.LevelDebug, "Backend [DELETE STARTUP]",
 				logging.LogAttrBackendName(beName),
 			)
 			if err := b.configuration.deleteBackend(b.logger, beName); err != nil {

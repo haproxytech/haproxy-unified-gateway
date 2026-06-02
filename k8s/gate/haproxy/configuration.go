@@ -57,7 +57,8 @@ func (c *Configuration) upsertFrontend(logger *slog.Logger, fe *models.Frontend,
 	if previousFe, ok := c.structured.Frontends[fe.Name]; ok {
 		// Check if they are the same
 		if previousFe.Equal(*fe) && !reprogramm {
-			logger.LogAttrs(context.Background(), slog.LevelDebug, "Frontend [same]",
+			logger.LogAttrs(
+				context.Background(), slog.LevelDebug, "Frontend [same]",
 				logging.LogAttrFrontendName(fe.Name),
 			)
 			return nil
@@ -65,7 +66,8 @@ func (c *Configuration) upsertFrontend(logger *slog.Logger, fe *models.Frontend,
 
 		// Update existing frontend
 		msg := fmt.Sprintf("Frontend [UPDATE] (%t)", reprogramm)
-		logger.LogAttrs(context.Background(), slog.LevelInfo, msg,
+		logger.LogAttrs(
+			context.Background(), slog.LevelInfo, msg,
 			logging.LogAttrFrontendName(fe.Name),
 		)
 
@@ -80,7 +82,8 @@ func (c *Configuration) upsertFrontend(logger *slog.Logger, fe *models.Frontend,
 		c.structured.Frontends[fe.Name] = fe
 	} else {
 		// Create new frontend
-		logger.LogAttrs(context.Background(), slog.LevelInfo, "Frontend [CREATE]",
+		logger.LogAttrs(
+			context.Background(), slog.LevelInfo, "Frontend [CREATE]",
 			logging.LogAttrFrontendName(fe.Name),
 		)
 
@@ -108,7 +111,8 @@ func (c *Configuration) deleteFrontend(logger *slog.Logger, feName string) error
 		return nil
 	}
 	// delete the frontend from the store
-	logger.LogAttrs(context.Background(), slog.LevelInfo, "Frontend [DELETE]",
+	logger.LogAttrs(
+		context.Background(), slog.LevelInfo, "Frontend [DELETE]",
 		logging.LogAttrFrontendName(feName),
 	)
 	// We need to deep copy the frontend to avoid modifying the original
@@ -130,7 +134,8 @@ func (c *Configuration) upsertBackend(logger *slog.Logger, be *models.Backend) e
 		// Here, the input parameter be has no Servers, it's only the Backend without Servers that we want to compare
 		// Even though Servers are part of the structured Backend, they are managed differently from Backend fields.
 		if cmp.Equal(*previousBe, *be, cmpopts.IgnoreFields(models.Backend{}, "Servers")) {
-			logger.LogAttrs(context.Background(), slog.LevelDebug, "Backend [same]",
+			logger.LogAttrs(
+				context.Background(), slog.LevelDebug, "Backend [same]",
 				logging.LogAttrBackendName(be.Name),
 			)
 			return nil
@@ -138,7 +143,8 @@ func (c *Configuration) upsertBackend(logger *slog.Logger, be *models.Backend) e
 		be.Servers = previousBe.Servers
 
 		// Update existing backend
-		logger.LogAttrs(context.Background(), slog.LevelInfo, "Backend [UPDATE]",
+		logger.LogAttrs(
+			context.Background(), slog.LevelInfo, "Backend [UPDATE]",
 			logging.LogAttrBackendName(be.Name),
 		)
 
@@ -153,7 +159,8 @@ func (c *Configuration) upsertBackend(logger *slog.Logger, be *models.Backend) e
 		c.structured.Backends[be.Name] = be
 	} else {
 		// Create new backend
-		logger.LogAttrs(context.Background(), slog.LevelInfo, "Backend [CREATE]",
+		logger.LogAttrs(
+			context.Background(), slog.LevelInfo, "Backend [CREATE]",
 			logging.LogAttrBackendName(be.Name),
 		)
 
@@ -190,7 +197,8 @@ func (c *Configuration) upsertBackendWithServers(logger *slog.Logger, beName str
 	// TODO : use models.EqualMapStringServer
 	if cmp.Equal(beBackup.Servers, be.Servers) {
 		// if beBackup.Equal(*be) {
-		logger.LogAttrs(context.Background(), slog.LevelDebug, "Backend [servers][same]",
+		logger.LogAttrs(
+			context.Background(), slog.LevelDebug, "Backend [servers][same]",
 			logging.LogAttrBackendName(be.Name),
 		)
 		return ServerDiff{}, nil
@@ -198,7 +206,8 @@ func (c *Configuration) upsertBackendWithServers(logger *slog.Logger, beName str
 
 	// 2- Servers differ
 	// Update existing backend
-	logger.LogAttrs(context.Background(), slog.LevelInfo, "Backend [servers][UPDATE]",
+	logger.LogAttrs(
+		context.Background(), slog.LevelInfo, "Backend [servers][UPDATE]",
 		logging.LogAttrBackendName(be.Name),
 	)
 
@@ -219,7 +228,8 @@ func (c *Configuration) upsertBackendWithServers(logger *slog.Logger, beName str
 func (c *Configuration) upsertBackendMetadata(logger *slog.Logger, beName string, md metadata.MetaData) error {
 	if previousBe, ok := c.structured.Backends[beName]; ok {
 		// Update existing backend
-		logger.LogAttrs(context.Background(), slog.LevelInfo, "Backend [UPDATE_METADATA]",
+		logger.LogAttrs(
+			context.Background(), slog.LevelInfo, "Backend [UPDATE_METADATA]",
 			logging.LogAttrBackendName(beName),
 		)
 
@@ -354,7 +364,8 @@ func (c *Configuration) deleteBackend(logger *slog.Logger, beName string) error 
 		return nil
 	}
 	// delete the backend from the store
-	logger.LogAttrs(context.Background(), slog.LevelInfo, "Backend [DELETE]",
+	logger.LogAttrs(
+		context.Background(), slog.LevelInfo, "Backend [DELETE]",
 		logging.LogAttrBackendName(beName),
 	)
 	// We need to deep copy the backend to avoid modifying the original

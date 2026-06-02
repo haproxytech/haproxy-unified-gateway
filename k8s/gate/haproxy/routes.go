@@ -95,7 +95,8 @@ func (b *RouteMgrImpl) onValidTLSRouteUpserted(routeOrigin maps.ResourceOrigin, 
 		for _, backend := range tlsRouteRule.K8sResource.BackendRefs {
 			checkResult, ok := tlsRouteRule.CheckBackendRef.Get(backend.BackendObjectReference)
 			if !ok || !checkResult.Valid {
-				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "Processing TLSRoute [map update] - backend not valid",
+				b.topManager.logger.LogAttrs(
+					context.Background(), slog.LevelDebug, "Processing TLSRoute [map update] - backend not valid",
 					logging.LogAttrBackendName(string(backend.Name)),
 				)
 				continue
@@ -116,7 +117,8 @@ func (b *RouteMgrImpl) onValidTLSRouteUpserted(routeOrigin maps.ResourceOrigin, 
 
 			backendName, err := b.topManager.getBackendName(svckey, int32(svcPort), "")
 			if err != nil {
-				b.topManager.logger.LogAttrs(context.Background(), slog.LevelError, "Processing TLSRoute [map update]",
+				b.topManager.logger.LogAttrs(
+					context.Background(), slog.LevelError, "Processing TLSRoute [map update]",
 					logging.LogAttrError(err),
 				)
 				continue
@@ -180,7 +182,8 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(origin maps.ResourceOrigin, rout
 		for _, backend := range rule.K8sResource.BackendRefs {
 			checkResult, ok := rule.CheckBackendRef.Get(backend.BackendObjectReference)
 			if !ok || !checkResult.Valid {
-				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "Processing HTTPRoute [map update] - backend not valid",
+				b.topManager.logger.LogAttrs(
+					context.Background(), slog.LevelDebug, "Processing HTTPRoute [map update] - backend not valid",
 					logging.LogAttrBackendName(string(backend.Name)),
 				)
 				continue
@@ -201,7 +204,8 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(origin maps.ResourceOrigin, rout
 			filterHash := getFilterHash(rule.K8sResource.Filters, backend.Filters)
 			backendName, err := b.topManager.getBackendName(svckey, int32(svcPort), filterHash)
 			if err != nil {
-				b.topManager.logger.LogAttrs(context.Background(), slog.LevelError, "Processing HTTPRoute [map update]",
+				b.topManager.logger.LogAttrs(
+					context.Background(), slog.LevelError, "Processing HTTPRoute [map update]",
 					logging.LogAttrError(err),
 				)
 				continue

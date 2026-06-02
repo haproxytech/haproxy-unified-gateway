@@ -72,7 +72,8 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 
 			// Skip invalid listeners
 			if !listener.Valid {
-				b.Logger.LogAttrs(context.Background(), slog.LevelInfo, "Skipping invalid listener",
+				b.Logger.LogAttrs(
+					context.Background(), slog.LevelInfo, "Skipping invalid listener",
 					logging.LogAttrKey(listener.Owner),
 					slog.String("listener", string(listener.K8sResource.Name)),
 				)
@@ -83,7 +84,8 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 			// Only add a VirtualListener if the Gateway it belongs to is valid
 			gateway := b.ControllerStore.GetGatewayForListener(listener)
 			if gateway == nil || !gateway.Valid {
-				b.Logger.LogAttrs(context.Background(), slog.LevelInfo, "Skipping invalid listener as invalid Gateway",
+				b.Logger.LogAttrs(
+					context.Background(), slog.LevelInfo, "Skipping invalid listener as invalid Gateway",
 					logging.LogAttrKey(listener.Owner),
 					slog.String("listener", string(listener.K8sResource.Name)),
 				)

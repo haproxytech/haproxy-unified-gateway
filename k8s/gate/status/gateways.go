@@ -50,7 +50,8 @@ func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(result diffs.HaproxyConf
 			Logger:        s.config.logger,
 			extractGVK:    s.config.extractGVK,
 		}
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+		s.config.logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Preparing feedback Programmed status update",
 			logging.LogAttrKeyGVK(gwKey, s.config.extractGVK(objtypes.ObjectTypeGateway)),
 		)
@@ -67,7 +68,8 @@ func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(result diffs.HaproxyConf
 				TryPatchStatusFunc(params),
 			)
 			if err != nil && !errors.Is(err, context.Canceled) {
-				s.config.logger.LogAttrs(context.Background(), slog.LevelError,
+				s.config.logger.LogAttrs(
+					context.Background(), slog.LevelError,
 					"Failed to patch gateway listener Programmed conditions",
 					logging.LogAttrKeyGVK(gwKey, s.config.extractGVK(params.Object)),
 					logging.LogAttrError(err),
@@ -91,7 +93,8 @@ func (s *StatusUpdaterImpl) writeGatewayStatus(ctx context.Context, params Statu
 		TryUpdateStatusFunc(params),
 	)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug, // Debug is ok as we will retry with the latest k8s resource
+		s.config.logger.LogAttrs(
+			context.Background(), slog.LevelDebug, // Debug is ok as we will retry with the latest k8s resource
 			"Failed to update status",
 			logging.LogAttrKeyGVK(params.NsName, params.extractGVK(params.Object)),
 			logging.LogAttrError(err),

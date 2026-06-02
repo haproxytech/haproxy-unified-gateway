@@ -31,7 +31,8 @@ func (c *clientNative) FrontendCreate(frontend models.Frontend) error {
 	if errCreate != nil {
 		// ... maybe it's already existing, so just edit it.
 		if err := configuration.EditStructuredFrontend(frontend.Name, &frontend, c.activeTransaction, 0); err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit frontend",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to edit frontend",
 				logging.LogAttrError(err),
 				slog.String("frontend", frontend.Name),
 			)
@@ -82,7 +83,8 @@ func (c *clientNative) FrontendEdit(frontend models.Frontend) error {
 		return err
 	}
 	if err := configuration.EditFrontend(frontend.Name, &frontend, c.activeTransaction, 0); err != nil {
-		c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit frontend",
+		c.logger.LogAttrs(
+			context.Background(), slog.LevelError, "failed to edit frontend",
 			logging.LogAttrError(err),
 			slog.String("frontend", frontend.Name),
 		)

@@ -41,7 +41,8 @@ func (s *TLSRouteSuite) expectConditionsRouteUpdated(ctx context.Context, namesp
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		if err := s.Test().Client.Get(
 			s.Test().Ctx,
-			types.NamespacedName{Name: name, Namespace: namespace}, route); err != nil {
+			types.NamespacedName{Name: name, Namespace: namespace}, route,
+		); err != nil {
 			return false
 		}
 
@@ -103,7 +104,8 @@ func (s *TLSRouteSuite) expectAttachedRoute(ctx context.Context, namespace, gwNa
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		if err := s.Test().Client.Get(
 			s.Test().Ctx,
-			types.NamespacedName{Name: gwName, Namespace: namespace}, gw); err != nil {
+			types.NamespacedName{Name: gwName, Namespace: namespace}, gw,
+		); err != nil {
 			return false
 		}
 

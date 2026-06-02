@@ -53,7 +53,8 @@ func (m *MapFileState) ProcessMapFiles() {
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "Processing map file",
-		logging.LogAttrMapFilePath(m.Path.FileName))
+		logging.LogAttrMapFilePath(m.Path.FileName),
+	)
 	// Iteration over each entry/intent for the filename
 	for _, entryValue := range m.Entries {
 		// We collect the operations for each backend, backend name -> weights + operations (create, update, delete, empty)
@@ -163,7 +164,8 @@ func (m *MapFileState) Reset() {
 	m.logger.LogAttrs(
 		context.Background(),
 		slog.LevelDebug, "Resetting map file",
-		logging.LogAttrMapFilePath(m.Path.FileName))
+		logging.LogAttrMapFilePath(m.Path.FileName),
+	)
 	for entryKey, entryValue := range m.Entries {
 		if entryValue == nil {
 			delete(m.Entries, entryKey)

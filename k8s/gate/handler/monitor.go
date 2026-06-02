@@ -201,7 +201,8 @@ func (el *EventLoop) logEvent(e any) {
 		o = obj.Type
 		eventType = "DeleteEvent"
 	}
-	el.logger.LogAttrs(context.Background(), slog.LevelDebug,
+	el.logger.LogAttrs(
+		context.Background(), slog.LevelDebug,
 		fmt.Sprintf("added an event to the batch %s", eventType),
 		logging.LogAttrBatch(el.nextBatch.BatchID, len(el.nextBatch.Events)),
 		logging.LogAttrResource(o, el.extractGVK(o)),

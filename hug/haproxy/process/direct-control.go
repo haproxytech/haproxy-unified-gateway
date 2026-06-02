@@ -138,7 +138,7 @@ func (d *directControl) waitUntilReady() error {
 						slog.String("error", info.Error))
 					return false, nil
 				}
-				pid := (int64)(0)
+				pid := int64(0)
 				if info.Info != nil && info.Info.Pid != nil {
 					pid = *info.Info.Pid
 				}

@@ -37,7 +37,8 @@ type ownerMetaData interface {
 // that have the unified gateway metadata
 // (the objects that the gateway manages)
 func StructuredFromFile(hugConfig hugconfig.HUGConfig, linkID string) (structured.Structured, error) {
-	confClient, err := configuration.New(context.Background(),
+	confClient, err := configuration.New(
+		context.Background(),
 		cfgoptions.ConfigurationFile(hugConfig.HaproxyDirs.MainCfgFile),
 		cfgoptions.TransactionsDir(hugConfig.HaproxyDirs.CfgDir),
 		cfgoptions.UseMd5Hash,

@@ -78,7 +78,8 @@ func (c *CertificateStorageDefault) WriteCrtListOnDisk(crtList certificate.CrtLi
 	file, err := os.Create(crtListFullPath)
 	if err != nil {
 		metrics.CrtListStorageOperations.WithLabelValues("write", "error").Inc()
-		c.logger.LogAttrs(context.Background(), slog.LevelError, "crt-list [not written]",
+		c.logger.LogAttrs(
+			context.Background(), slog.LevelError, "crt-list [not written]",
 			slog.String("crt-list", crtListFullPath),
 		)
 		return err
@@ -90,14 +91,16 @@ func (c *CertificateStorageDefault) WriteCrtListOnDisk(crtList certificate.CrtLi
 	_, err = file.WriteString(builder.String())
 	if err != nil {
 		metrics.CrtListStorageOperations.WithLabelValues("write", "error").Inc()
-		c.logger.LogAttrs(context.Background(), slog.LevelError, "crt-list [not written]",
+		c.logger.LogAttrs(
+			context.Background(), slog.LevelError, "crt-list [not written]",
 			slog.String("crt-list", crtListFullPath),
 		)
 		return err
 	}
 
 	metrics.CrtListStorageOperations.WithLabelValues("write", "ok").Inc()
-	c.logger.LogAttrs(context.Background(), slog.LevelInfo, "crt-list [written]",
+	c.logger.LogAttrs(
+		context.Background(), slog.LevelInfo, "crt-list [written]",
 		slog.String("crt-list", crtListFullPath),
 	)
 	return nil

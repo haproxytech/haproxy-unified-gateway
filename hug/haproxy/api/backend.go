@@ -35,7 +35,8 @@ func (c *clientNative) BackendCreate(backend models.Backend) error {
 	if errCreate != nil {
 		// ... maybe it's already existing, so just edit it.
 		if err := configuration.EditStructuredBackend(backend.Name, &backend, c.activeTransaction, 0); err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit backend",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to edit backend",
 				logging.LogAttrError(err),
 				slog.String("backend", backend.Name),
 			)
@@ -92,14 +93,16 @@ func (c *clientNative) BackendEdit(backend models.Backend) error {
 	// Check if only Servers were updated
 	onlyServersUpdated := false
 	if cmp.Equal(previousBackend, backend, cmpopts.IgnoreFields(models.Backend{}, "Servers")) {
-		c.logger.LogAttrs(context.Background(), slog.LevelInfo, "Only Servers are updated",
+		c.logger.LogAttrs(
+			context.Background(), slog.LevelInfo, "Only Servers are updated",
 			slog.String("backend", backend.Name),
 		)
 		onlyServersUpdated = true
 	}
 
 	if err := configuration.EditStructuredBackend(backend.Name, &backend, c.activeTransaction, 0); err != nil {
-		c.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to edit backend",
+		c.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to edit backend",
 			logging.LogAttrError(err),
 			slog.String("backend", backend.Name),
 		)
@@ -115,7 +118,8 @@ func (c *clientNative) BackendEdit(backend models.Backend) error {
 				// If failed, we need to reload
 				reload.Instance().SetReload("[onlyServersUpdated] [runtime] servers state update failure - backend %s", backend.Name)
 			} else {
-				c.logger.LogAttrs(context.Background(), slog.LevelDebug, "[onlyServersUpdated] [runtime] success",
+				c.logger.LogAttrs(
+					context.Background(), slog.LevelDebug, "[onlyServersUpdated] [runtime] success",
 					slog.String("backend", backend.Name),
 				)
 			}

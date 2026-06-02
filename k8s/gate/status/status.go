@@ -159,7 +159,8 @@ func (s *StatusUpdaterImpl) prepareGatewayClassUpdates(gatewayClasses map[types.
 		if !gwc.Managed {
 			continue
 		}
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+		s.config.logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Preparing status update",
 			logging.LogAttrResource(gwc.K8sResource, s.config.extractGVK(gwc.K8sResource)),
 		)
@@ -186,7 +187,8 @@ func (s *StatusUpdaterImpl) prepareGatewayUpdates(ctx context.Context, gateways 
 		if gw.TreeStatus.Status == store.StatusDeleted || gw.TreeStatus.Status == "" {
 			continue
 		}
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+		s.config.logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Preparing status update",
 			logging.LogAttrResource(gw.K8sResource, s.config.extractGVK(gw.K8sResource)),
 		)
@@ -226,7 +228,8 @@ func (s *StatusUpdaterImpl) prepareHTTPRouteUpdates(httpRoutes map[types.Namespa
 		if route.TreeStatus.Status == store.StatusDeleted || route.TreeStatus.Status == "" {
 			continue
 		}
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+		s.config.logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Preparing status update",
 			logging.LogAttrResource(route.K8sResource, s.config.extractGVK(route.K8sResource)),
 		)
@@ -252,7 +255,8 @@ func (s *StatusUpdaterImpl) prepareTLSRouteUpdates(tlsRoutes map[types.Namespace
 		if tlsRoute.TreeStatus.Status == store.StatusDeleted || tlsRoute.TreeStatus.Status == "" {
 			continue
 		}
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug,
+		s.config.logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Preparing status update",
 			logging.LogAttrResource(tlsRoute.K8sResource, s.config.extractGVK(tlsRoute.K8sResource)),
 		)
@@ -284,7 +288,8 @@ func (s *StatusUpdaterImpl) UpdateStatus(ctx context.Context, updates PreparedSt
 	case s.updates <- updates:
 	case <-ctx.Done():
 	default:
-		s.config.logger.LogAttrs(ctx, slog.LevelWarn,
+		s.config.logger.LogAttrs(
+			ctx, slog.LevelWarn,
 			"Status update channel full, discarding update batch",
 		)
 	}
@@ -299,14 +304,16 @@ func (s *StatusUpdaterImpl) fetchControllerAddresses(ctx context.Context) []gate
 	if err := s.config.client.List(ctx, svcList, client.MatchingLabels{
 		s.config.hugServiceLabelKey: s.config.hugServiceLabelVal,
 	}); err != nil {
-		s.config.logger.LogAttrs(ctx, slog.LevelError,
+		s.config.logger.LogAttrs(
+			ctx, slog.LevelError,
 			"Failed to list controller service",
 			logging.LogAttrError(err),
 		)
 		return nil
 	}
 	if len(svcList.Items) == 0 {
-		s.config.logger.LogAttrs(ctx, slog.LevelWarn,
+		s.config.logger.LogAttrs(
+			ctx, slog.LevelWarn,
 			"No controller service found",
 			slog.String("label", s.config.hugServiceLabelKey+"="+s.config.hugServiceLabelVal),
 		)
@@ -365,7 +372,8 @@ func (s *StatusUpdaterImpl) addressesFromLoadBalancer(_ context.Context, svc *co
 func (s *StatusUpdaterImpl) addressesFromNodePort(ctx context.Context) []gatewayv1.GatewayStatusAddress {
 	nodeList := &corev1.NodeList{}
 	if err := s.config.client.List(ctx, nodeList); err != nil {
-		s.config.logger.LogAttrs(ctx, slog.LevelError,
+		s.config.logger.LogAttrs(
+			ctx, slog.LevelError,
 			"Failed to list nodes for NodePort service address",
 			logging.LogAttrError(err),
 		)
@@ -497,7 +505,8 @@ func TryUpdateStatusFunc[T client.Object](param StatusUpdateParams[T]) func(ctx 
 			return false, nil
 		}
 
-		param.Logger.LogAttrs(context.Background(), slog.LevelDebug,
+		param.Logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Successfully updated status",
 			objAttr,
 		)
@@ -547,7 +556,8 @@ func TryPatchStatusFunc[T client.Object](param StatusUpdateParams[T]) func(ctx c
 		client.MergeFrom(clusterObj)
 		patch := client.MergeFrom(originalObj)
 		if data, err := patch.Data(clusterObj); err == nil {
-			param.Logger.LogAttrs(context.Background(), slog.LevelDebug,
+			param.Logger.LogAttrs(
+				context.Background(), slog.LevelDebug,
 				fmt.Sprintf("Status patch for %s: %s", objAttr, string(data)),
 			)
 		}
@@ -559,7 +569,8 @@ func TryPatchStatusFunc[T client.Object](param StatusUpdateParams[T]) func(ctx c
 			return false, nil
 		}
 
-		param.Logger.LogAttrs(context.Background(), slog.LevelDebug,
+		param.Logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Successfully updating status [patch]",
 			objAttr,
 		)

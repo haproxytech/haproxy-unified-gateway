@@ -116,7 +116,8 @@ func (r *HTTPRouteRule) checkFilters() {
 			r.CheckFilters = CheckResult{
 				Valid: false,
 				Conditions: rc.ConditionKOAcceptedIncompatibleFilters(
-					"rule URLRewrite and backendRef RequestRedirect cannot be used together"),
+					"rule URLRewrite and backendRef RequestRedirect cannot be used together",
+				),
 			}
 			r.Valid = false
 			return
@@ -142,7 +143,8 @@ func validateFilterList(filters []gatewayv1.HTTPRouteFilter, scope string) (gene
 	}
 	if hasURLRewrite && hasRedirect {
 		return rc.ConditionKOAcceptedIncompatibleFilters(
-			scope + " URLRewrite and RequestRedirect filters cannot be used together"), false
+			scope + " URLRewrite and RequestRedirect filters cannot be used together",
+		), false
 	}
 	return nil, true
 }

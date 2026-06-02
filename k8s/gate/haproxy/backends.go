@@ -122,7 +122,8 @@ func (b *HaproxyConfMgrImpl) processHTTPRoutes() error {
 
 	// Cleanup Backends that are not referenced anymore
 	if err := b.cleanupUnreferencedBackends(); err != nil {
-		b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to cleanup unreferenced backends",
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to cleanup unreferenced backends",
 			logging.LogAttrError(err),
 		)
 		errs.Add(err)
@@ -130,7 +131,8 @@ func (b *HaproxyConfMgrImpl) processHTTPRoutes() error {
 
 	// Now we have the list of upserted + delete BE with the correct list of routes pointing to them
 	if err := b.processBackendsModifiedInCycle(); err != nil {
-		b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to process backends modified in cycle",
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to process backends modified in cycle",
 			logging.LogAttrError(err),
 		)
 		errs.Add(err)
@@ -183,13 +185,15 @@ func (b *HaproxyConfMgrImpl) onDeletedTLSRoute(routeKey k8stypes.NamespacedName,
 }
 
 func (b *HaproxyConfMgrImpl) logHTTPRouteUpdate(action string, key k8stypes.NamespacedName) {
-	b.logger.LogAttrs(context.Background(), slog.LevelDebug, "Processing HTTPRoute ["+action+"]",
+	b.logger.LogAttrs(
+		context.Background(), slog.LevelDebug, "Processing HTTPRoute ["+action+"]",
 		logging.LogAttrKey(key),
 	)
 }
 
 func (b *HaproxyConfMgrImpl) logTLSRouteUpdate(action string, key k8stypes.NamespacedName) {
-	b.logger.LogAttrs(context.Background(), slog.LevelDebug, "Processing TLSRoute ["+action+"]",
+	b.logger.LogAttrs(
+		context.Background(), slog.LevelDebug, "Processing TLSRoute ["+action+"]",
 		logging.LogAttrKey(key),
 	)
 }
@@ -362,7 +366,8 @@ func (b *HaproxyConfMgrImpl) processTLSRoutes() error {
 
 	// Cleanup Backends that are not referenced anymore
 	if err := b.cleanupUnreferencedBackends(); err != nil {
-		b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to cleanup unreferenced backends",
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to cleanup unreferenced backends",
 			logging.LogAttrError(err),
 		)
 		errs.Add(err)
@@ -370,7 +375,8 @@ func (b *HaproxyConfMgrImpl) processTLSRoutes() error {
 
 	// Now we have the list of upserted + delete BE with the correct list of routes pointing to them
 	if err := b.processBackendsModifiedInCycle(); err != nil {
-		b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to process backends modified in cycle",
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to process backends modified in cycle",
 			logging.LogAttrError(err),
 		)
 		errs.Add(err)

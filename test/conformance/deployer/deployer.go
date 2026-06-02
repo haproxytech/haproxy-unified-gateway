@@ -387,7 +387,8 @@ func serviceLabelValue(gwNS, gwName string) string {
 // apiReader bypasses the manager cache so the unwatch namespace can be accessed.
 func ScaleDefaultControllerToZero(ctx context.Context, apiReader client.Reader, c client.Client) (func(context.Context, client.Client), error) {
 	list := &appsv1.DeploymentList{}
-	if err := apiReader.List(ctx, list,
+	if err := apiReader.List(
+		ctx, list,
 		client.InNamespace(defaultControllerNS),
 		client.MatchingLabels{"run": defaultControllerLabel},
 	); err != nil {
@@ -435,14 +436,16 @@ func WaitForCleanup(ctx context.Context, restCfg *rest.Config, deployerNs, gatew
 
 	for {
 		deploys := &appsv1.DeploymentList{}
-		if err := c.List(ctx, deploys,
+		if err := c.List(
+			ctx, deploys,
 			client.InNamespace(deployerNs),
 			client.MatchingLabels{labelGatewayNSKey: gatewayNS},
 		); err != nil {
 			return err
 		}
 		svcs := &corev1.ServiceList{}
-		if err := c.List(ctx, svcs,
+		if err := c.List(
+			ctx, svcs,
 			client.InNamespace(deployerNs),
 			client.MatchingLabels{labelGatewayNSKey: gatewayNS},
 		); err != nil {

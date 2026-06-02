@@ -349,7 +349,8 @@ func (r *TLSRoute) mergeBackendConditions() {
 					koBackendRefConds.MergeOverrideConditions(checkResult.Conditions)
 				}
 				return true
-			})
+			},
+		)
 	}
 
 	// There is 1 failing condition ResolvedRefs
@@ -369,5 +370,6 @@ func (r *TLSRoute) mergeBackendConditions() {
 			}
 			r.Conditions.MergeOverrideConditionsForParentRef(parentRefKey, resolvedRefConds)
 			return true
-		})
+		},
+	)
 }

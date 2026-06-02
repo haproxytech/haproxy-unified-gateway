@@ -73,7 +73,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "No conflicts - single gateway, different ports",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, nil),
 					mkListener("l2", 443, gatewayv1.HTTPSProtocolType, nil),
 				),
@@ -86,7 +87,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Conflict - same port, different protocol categories",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("http", 80, gatewayv1.HTTPProtocolType, nil),
 					mkListener("https", 80, gatewayv1.HTTPSProtocolType, nil), // 80 is already HTTP/Insecure
 				),
@@ -99,7 +101,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "No Conflict - same port, same protocol category (Insecure), non-overlapping hostnames",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("h1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 					mkListener("h2", 80, gatewayv1.HTTPProtocolType, ptr("bar.com")),
 				),
@@ -112,7 +115,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Conflict - same port, same protocol category, overlapping hostnames (Exact)",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("h1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 					mkListener("h2", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
@@ -125,7 +129,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "No Conflict - wildcard and matching specific hostname coexist (specific beats wildcard)",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("wild", 80, gatewayv1.HTTPProtocolType, ptr("*.example.com")),
 					mkListener("exact", 80, gatewayv1.HTTPProtocolType, ptr("foo.example.com")),
 				),
@@ -138,7 +143,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Conflict - same port, identical wildcard hostnames",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("wild1", 80, gatewayv1.HTTPProtocolType, ptr("*.example.com")),
 					mkListener("wild2", 80, gatewayv1.HTTPProtocolType, ptr("*.example.com")),
 				),
@@ -151,7 +157,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Conflict - same port, two empty hostnames conflict with each other",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("empty", 80, gatewayv1.HTTPProtocolType, nil),
 					mkListener("same", 80, gatewayv1.HTTPProtocolType, nil),
 				),
@@ -164,7 +171,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "No Conflict - empty hostname coexists with specific hostname (catch-all + specific)",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("catch-all", 80, gatewayv1.HTTPProtocolType, nil),
 					mkListener("specific", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
@@ -179,7 +187,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 			// all four listeners must be accepted with no hostname conflict.
 			name: "No Conflict - empty, wildcard, specific, and specific-under-wildcard all coexist",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("catch-all", 443, gatewayv1.HTTPSProtocolType, nil),
 					mkListener("wildcard", 443, gatewayv1.HTTPSProtocolType, ptr("*.wildcard.org")),
 					mkListener("specific", 443, gatewayv1.HTTPSProtocolType, ptr("second-example.org")),
@@ -196,10 +205,12 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Multiple Gateways - identical listeners on different gateways are merged (no conflict)",
 			gateways: []*Gateway{
-				mkGateway("old", t1,
+				mkGateway(
+					"old", t1,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
-				mkGateway("new", t2,
+				mkGateway(
+					"new", t2,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
@@ -211,10 +222,12 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Multiple Gateways - identical listeners on different gateways are merged (no conflict, reverse order in input)",
 			gateways: []*Gateway{
-				mkGateway("new", t2,
+				mkGateway(
+					"new", t2,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
-				mkGateway("old", t1,
+				mkGateway(
+					"old", t1,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
@@ -226,10 +239,12 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Protocol conflict across gateways",
 			gateways: []*Gateway{
-				mkGateway("old", t1,
+				mkGateway(
+					"old", t1,
 					mkListener("http", 80, gatewayv1.HTTPProtocolType, nil),
 				),
-				mkGateway("new", t2,
+				mkGateway(
+					"new", t2,
 					mkListener("https", 80, gatewayv1.HTTPSProtocolType, nil),
 				),
 			},
@@ -241,11 +256,13 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Complex scenario",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("http", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 					mkListener("http2", 80, gatewayv1.HTTPProtocolType, ptr("bar.com")),
 				),
-				mkGateway("gw2", t2,
+				mkGateway(
+					"gw2", t2,
 					mkListener("ok-foo", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 					mkListener("catch-all", 80, gatewayv1.HTTPProtocolType, nil), // nil = empty hostname, does NOT conflict with ok-foo (catch-all coexists with specific hostnames)
 				),
@@ -260,7 +277,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Mix of ProtocolTypes and Hostnames on same port",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("http-foo", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),   // Winner (Insecure)
 					mkListener("https-bar", 80, gatewayv1.HTTPSProtocolType, ptr("bar.com")), // Conflict (Secure != Insecure), distinct host irrelevant
 					mkListener("tls-foo", 80, gatewayv1.TLSProtocolType, ptr("foo.com")),     // Conflict (TLS != Insecure), host irrelevant
@@ -268,7 +286,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("http-bar", 80, gatewayv1.HTTPProtocolType, ptr("bar.com")),   // Same category. Different hostname string → no conflict.
 					mkListener("tcp", 80, gatewayv1.TCPProtocolType, nil),                    // Conflict (Unknown != Insecure)
 				),
-				mkGateway("gw2", t1,
+				mkGateway(
+					"gw2", t1,
 					mkListener("tls-foo", 443, gatewayv1.TLSProtocolType, ptr("foo.com")),     // Winner (TLS)
 					mkListener("https-bar", 443, gatewayv1.HTTPSProtocolType, ptr("bar.com")), // Conflict (Secure != TLS)
 					mkListener("tls-wild", 443, gatewayv1.TLSProtocolType, ptr("*.com")),      // Same category. Different hostname string → no conflict.
@@ -291,11 +310,13 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Same Gateway - overlapping hostname is still a conflict",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 					mkListener("l2", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
-				mkGateway("gw2", t2,
+				mkGateway(
+					"gw2", t2,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
@@ -309,11 +330,13 @@ func TestComputeListenerConflicts(t *testing.T) {
 		{
 			name: "Nil gateways (DELETED status) should be ignored",
 			gateways: []*Gateway{
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 				nil, // Deleted gateway should be ignored
-				mkGateway("gw2", t2,
+				mkGateway(
+					"gw2", t2,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("bar.com")),
 				),
 				nil, // Another deleted gateway
@@ -327,10 +350,12 @@ func TestComputeListenerConflicts(t *testing.T) {
 			name: "Nil gateway with conflict - only non-nil gateways participate",
 			gateways: []*Gateway{
 				nil, // Deleted gateway should not claim the port
-				mkGateway("gw1", t1,
+				mkGateway(
+					"gw1", t1,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
-				mkGateway("gw2", t2,
+				mkGateway(
+					"gw2", t2,
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
@@ -501,7 +526,8 @@ func TestListenersPerPort(t *testing.T) {
 	})
 
 	t.Run("different ports, no conflicts", func(t *testing.T) {
-		gw := mkGateway("gw1", t1,
+		gw := mkGateway(
+			"gw1", t1,
 			mkListener("http", 80, gatewayv1.HTTPProtocolType),
 			mkListener("https", 443, gatewayv1.HTTPSProtocolType),
 		)
@@ -514,7 +540,8 @@ func TestListenersPerPort(t *testing.T) {
 	})
 
 	t.Run("same port, same protocol category -> both in portListeners, no conflict", func(t *testing.T) {
-		gw := mkGateway("gw1", t1,
+		gw := mkGateway(
+			"gw1", t1,
 			mkListener("l1", 80, gatewayv1.HTTPProtocolType),
 			mkListener("l2", 80, gatewayv1.HTTPProtocolType),
 		)
@@ -525,7 +552,8 @@ func TestListenersPerPort(t *testing.T) {
 	})
 
 	t.Run("same port, different protocol categories -> first in portListeners, second is ProtocolConflict", func(t *testing.T) {
-		gw := mkGateway("gw1", t1,
+		gw := mkGateway(
+			"gw1", t1,
 			mkListener("http", 80, gatewayv1.HTTPProtocolType),
 			mkListener("https", 80, gatewayv1.HTTPSProtocolType),
 		)

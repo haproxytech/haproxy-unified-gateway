@@ -25,13 +25,15 @@ import (
 // settings when the HugConf resource is deleted. It resets the category filter
 // handler and logs the resulting log settings.
 func (b *HugConfBuilderImpl) onDeletedSubSystemLogConf() {
-	b.Logger.LogAttrs(context.Background(), slog.LevelInfo,
+	b.Logger.LogAttrs(
+		context.Background(), slog.LevelInfo,
 		"Resetting controller log configuration to defaults",
 	)
 	// Reset the log category filter handler to defaults
 	b.logCategoryFilterHandler.ResetToDefaults()
 	l, m := logging.GetLogSettings()
-	b.Logger.LogAttrs(context.Background(), slog.LevelInfo,
+	b.Logger.LogAttrs(
+		context.Background(), slog.LevelInfo,
 		"Reconciled controller log configuration",
 		logging.LogAttrLogSettings(l, m),
 	)
@@ -44,7 +46,8 @@ func (b *HugConfBuilderImpl) onDeletedSubSystemLogConf() {
 func (b *HugConfBuilderImpl) onUpsertedSubsystemLogConf() {
 	newConf := b.ClusterStore.HugConfs[b.hugConfNsName]
 	if newConf == nil {
-		b.Logger.LogAttrs(context.Background(), slog.LevelError,
+		b.Logger.LogAttrs(
+			context.Background(), slog.LevelError,
 			"Controller configuration not found",
 			logging.LogAttrNsName(b.hugConfNsName),
 		)
@@ -60,7 +63,8 @@ func (b *HugConfBuilderImpl) onUpsertedSubsystemLogConf() {
 	changed := b.logCategoryFilterHandler.ReconcileLogSettings(expectedLevel, expectedLogCategoryPerLevel)
 	if changed {
 		l, m := logging.GetLogSettings()
-		b.Logger.LogAttrs(context.Background(), slog.LevelInfo,
+		b.Logger.LogAttrs(
+			context.Background(), slog.LevelInfo,
 			"Reconciled controller log configuration",
 			logging.LogAttrLogSettings(l, m),
 		)

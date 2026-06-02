@@ -268,7 +268,8 @@ func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
 	}
 
 	if len(errs) > 0 {
-		b.topManager.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to fill maps for TLS routes",
+		b.topManager.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to fill maps for TLS routes",
 			logging.LogAttrError(errs.Result()),
 		)
 	}
@@ -452,7 +453,8 @@ func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
 		}
 	}
 	if len(errs) > 0 {
-		b.topManager.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to fill maps for HTTP routes",
+		b.topManager.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to fill maps for HTTP routes",
 			logging.LogAttrError(errs.Result()),
 		)
 	}
@@ -479,7 +481,8 @@ func (b *RouteMgrImpl) writeMaps() error {
 		}
 	}
 	if len(errs) > 0 {
-		b.topManager.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to fill maps for HTTP routes",
+		b.topManager.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to fill maps for HTTP routes",
 			logging.LogAttrError(errs.Result()),
 		)
 	}
@@ -498,7 +501,8 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 			}
 			mapID, err := b.getMapID(mapData.Path.FullPath())
 			if err != nil {
-				b.topManager.logger.LogAttrs(context.Background(), slog.LevelError,
+				b.topManager.logger.LogAttrs(
+					context.Background(), slog.LevelError,
 					"map [runtime] show maps error",
 					logging.LogAttrMapFilePath(mapData.Path.FileName),
 					logging.LogAttrError(err),
@@ -521,7 +525,8 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 					err := runtimeClient.DeleteMapEntry(mapID, key)
 					if err != nil {
 						metrics.MapStorageOperations.WithLabelValues("runtime_delete", "error").Inc()
-						b.topManager.logger.LogAttrs(context.Background(), slog.LevelError,
+						b.topManager.logger.LogAttrs(
+							context.Background(), slog.LevelError,
 							"[failure] Deleting map [runtime] entry",
 							logging.LogAttrMapFilePath(mapData.Path.FileName),
 							slog.String("key", key),
@@ -530,7 +535,8 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 						return err
 					}
 					metrics.MapStorageOperations.WithLabelValues("runtime_delete", "ok").Inc()
-					b.topManager.logger.LogAttrs(context.Background(), slog.LevelInfo,
+					b.topManager.logger.LogAttrs(
+						context.Background(), slog.LevelInfo,
 						"[success] Deleting map [runtime] entry",
 						logging.LogAttrMapFilePath(mapData.Path.FileName),
 						slog.String("key", key),
@@ -547,7 +553,8 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 					}
 					if err != nil {
 						metrics.MapStorageOperations.WithLabelValues("runtime_set", "error").Inc()
-						b.topManager.logger.LogAttrs(context.Background(), slog.LevelError,
+						b.topManager.logger.LogAttrs(
+							context.Background(), slog.LevelError,
 							"[failure] Set map [runtime] entry",
 							slog.String("map", mapData.Path.FileName),
 							slog.String("key", key),
@@ -557,7 +564,8 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 					}
 				}
 				metrics.MapStorageOperations.WithLabelValues("runtime_set", "ok").Inc()
-				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug,
+				b.topManager.logger.LogAttrs(
+					context.Background(), slog.LevelDebug,
 					"[success] Set map [runtime] entry",
 					slog.String("map", mapData.Path.FileName),
 					slog.String("key", key),

@@ -38,7 +38,8 @@ func (s *StatusUpdaterImpl) writeGatewayClassStatus(ctx context.Context, params 
 		TryUpdateStatusFunc(params),
 	)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		s.config.logger.LogAttrs(context.Background(), slog.LevelDebug, // Debug is ok as we will retry with the latest k8s resource
+		s.config.logger.LogAttrs(
+			context.Background(), slog.LevelDebug, // Debug is ok as we will retry with the latest k8s resource
 			"Failed to update status",
 			logging.LogAttrKeyGVK(params.NsName, params.extractGVK(params.Object)),
 			logging.LogAttrError(err),

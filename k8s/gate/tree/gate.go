@@ -51,7 +51,8 @@ func (c *HugGateParamsRefChecker) CheckGatewayClass() (CheckResult, *v3.HugGate)
 			kindPath := paramPath.Child("kind")
 			unsupportedKind := field.NotSupported(
 				kindPath,
-				c.ParamRef.Kind, []string{string(SupportedParametersRefKind)})
+				c.ParamRef.Kind, []string{string(SupportedParametersRefKind)},
+			)
 			conds.MergeOverrideConditions(
 				conditions.NewGatewayClassAcceptedInvalidParameters(unsupportedKind),
 			)
@@ -64,7 +65,8 @@ func (c *HugGateParamsRefChecker) CheckGatewayClass() (CheckResult, *v3.HugGate)
 			groupPath := paramPath.Child("group")
 			unsupportedGroup := field.NotSupported(
 				groupPath,
-				c.ParamRef.Group, []string{string(SupportedParametersRefGroup)})
+				c.ParamRef.Group, []string{string(SupportedParametersRefGroup)},
+			)
 			conds.MergeOverrideConditions(
 				conditions.NewGatewayClassAcceptedInvalidParameters(unsupportedGroup),
 			)
@@ -118,7 +120,8 @@ func (c *HugGateParamsRefChecker) CheckGateway() (CheckResult, *v3.HugGate) {
 			kindPath := paramPath.Child("kind")
 			unsupportedKind := field.NotSupported(
 				kindPath,
-				c.ParamRef.Kind, []string{string(SupportedParametersRefKind)})
+				c.ParamRef.Kind, []string{string(SupportedParametersRefKind)},
+			)
 			conds.MergeOverrideConditions(
 				conditions.NewGatewayAcceptedInvalidParameters(unsupportedKind),
 			)
@@ -131,7 +134,8 @@ func (c *HugGateParamsRefChecker) CheckGateway() (CheckResult, *v3.HugGate) {
 			groupPath := paramPath.Child("group")
 			unsupportedGroup := field.NotSupported(
 				groupPath,
-				c.ParamRef.Group, []string{string(SupportedParametersRefGroup)})
+				c.ParamRef.Group, []string{string(SupportedParametersRefGroup)},
+			)
 			conds.MergeOverrideConditions(
 				conditions.NewGatewayAcceptedInvalidParameters(unsupportedGroup),
 			)

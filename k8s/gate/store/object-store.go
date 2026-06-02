@@ -58,7 +58,8 @@ func (m *objectStoreImpl[T]) upsert(obj client.Object) {
 	defer m.mu.Unlock()
 	t, ok := obj.(T)
 	if !ok {
-		m.logger.LogAttrs(context.Background(), slog.LevelError,
+		m.logger.LogAttrs(
+			context.Background(), slog.LevelError,
 			fmt.Sprintf("obj type mismatch. got %T, expected %T", obj, t),
 		)
 		return

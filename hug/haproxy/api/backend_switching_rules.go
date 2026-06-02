@@ -56,7 +56,8 @@ func (c *clientNative) UseBackendReplaceAll(name string, rules models.BackendSwi
 	for index, rule := range rules {
 		err := c.UseBackendCreate(index, name, rule)
 		if err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create use-backend rule",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create use-backend rule",
 				logging.LogAttrError(err),
 				slog.Int("rule index", index),
 				slog.String("frontend", name),
