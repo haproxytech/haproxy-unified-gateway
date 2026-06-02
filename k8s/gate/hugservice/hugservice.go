@@ -65,7 +65,8 @@ func (r *ServiceReconciler) ReconcilePorts(ctx context.Context, virtualListeners
 	if err := r.client.List(ctx, svcList, client.MatchingLabels{
 		r.labelKey: r.labelVal,
 	}); err != nil {
-		r.logger.LogAttrs(ctx, slog.LevelError,
+		r.logger.LogAttrs(
+			ctx, slog.LevelError,
 			"Failed to list HUG services for port reconciliation",
 			logging.LogAttrError(err),
 		)
@@ -114,14 +115,16 @@ func (r *ServiceReconciler) reconcileServicePorts(ctx context.Context, svc *core
 	patch := client.MergeFrom(svc.DeepCopy())
 	svc.Spec.Ports = desiredPorts
 	if err := r.client.Patch(ctx, svc, patch); err != nil {
-		r.logger.LogAttrs(ctx, slog.LevelError,
+		r.logger.LogAttrs(
+			ctx, slog.LevelError,
 			"Failed to patch HUG service ports",
 			slog.String("service", svc.Namespace+"/"+svc.Name),
 			logging.LogAttrError(err),
 		)
 		return
 	}
-	r.logger.LogAttrs(ctx, slog.LevelInfo,
+	r.logger.LogAttrs(
+		ctx, slog.LevelInfo,
 		"Reconciled HUG service ports",
 		slog.String("service", svc.Namespace+"/"+svc.Name),
 		slog.Int("ports", len(desiredPorts)),
@@ -141,7 +144,8 @@ func (r *ServiceReconciler) logDroppedPorts(ctx context.Context, svc *corev1.Ser
 		if keep[p.Name] {
 			continue
 		}
-		r.logger.LogAttrs(ctx, slog.LevelWarn,
+		r.logger.LogAttrs(
+			ctx, slog.LevelWarn,
 			"Dropping Service port not backed by any Gateway listener",
 			slog.String("service", svc.Namespace+"/"+svc.Name),
 			slog.String("name", p.Name),

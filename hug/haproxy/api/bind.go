@@ -81,7 +81,8 @@ func (c *clientNative) BindReplaceAll(parentType parser.Section, name string, bi
 
 	for _, bind := range binds {
 		if err := c.BindCreate(parentType, name, bind); err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create bind",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create bind",
 				logging.LogAttrError(err),
 				slog.String("bind", bind.Name),
 				slog.String("parent", name),

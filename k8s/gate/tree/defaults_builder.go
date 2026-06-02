@@ -42,7 +42,8 @@ func (b *DefaultsCRBuilder) ComputeTreeUpdates() {
 			specName = update.OldObject.Spec.Name
 		}
 		if specName != constants.DefaultsSectionName {
-			b.Logger.LogAttrs(context.Background(), slog.LevelWarn,
+			b.Logger.LogAttrs(
+				context.Background(), slog.LevelWarn,
 				"Defaults CR ignored: only the Defaults CR with spec.name 'haproxytech' is managed",
 				slog.String("name", nsName.Name),
 				slog.String("namespace", nsName.Namespace),

@@ -61,6 +61,7 @@ const LABEL_COLOR = "#8fbc8f"
 // reruns won't re-add labels the user has since removed manually.
 const autoBackportMarker = `<!-- MR AUTO BACKPORT -->`
 
+//revive:disable-next-line:function-length
 func main() {
 	fmt.Print(hello) //nolint:forbidigo
 

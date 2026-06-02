@@ -57,7 +57,8 @@ func (c *clientNative) ACLReplaceAll(parentType parser.Section, name string, rul
 	for index, rule := range rules {
 		err := c.ACLsCreate(index, parentType, name, rule)
 		if err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create ACL rule",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create ACL rule",
 				logging.LogAttrError(err),
 				slog.Int("rule index", index),
 				slog.String("frontend", name),
@@ -79,7 +80,8 @@ func (c *clientNative) ACLsReplaceAll(parentType parser.Section, name string, ru
 	for index, rule := range rules {
 		err := c.ACLsCreate(index, parentType, name, rule)
 		if err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create ACL rule",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create ACL rule",
 				logging.LogAttrError(err),
 				slog.Int("rule index", index),
 				slog.String("frontend", name),

@@ -169,7 +169,8 @@ func CreateRuntimeObject(ctx context.Context, client ctrlruntimeclient.Client, o
 		errW := WaitFor(ctx, interval, timeout, func() bool {
 			err := client.Get(
 				ctx,
-				ctrlruntimeclient.ObjectKeyFromObject(obj), gotObj)
+				ctrlruntimeclient.ObjectKeyFromObject(obj), gotObj,
+			)
 			return !apierrors.IsNotFound(err)
 		})
 		if !errW {
@@ -198,7 +199,8 @@ func DeleteRuntimeObject(ctx context.Context, client ctrlruntimeclient.Client, o
 		errW := WaitFor(ctx, interval, timeout, func() bool {
 			err := client.Get(
 				ctx,
-				ctrlruntimeclient.ObjectKeyFromObject(obj), gotObj)
+				ctrlruntimeclient.ObjectKeyFromObject(obj), gotObj,
+			)
 			return apierrors.IsNotFound(err) || gotObj.GetDeletionTimestamp() != nil
 		})
 		if !errW {

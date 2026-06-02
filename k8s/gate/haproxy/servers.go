@@ -250,7 +250,8 @@ func (b *HaproxyConfMgrImpl) getSvcEndpoints(ctx context.Context, svcKey client.
 		client.InNamespace(svcKey.Namespace),
 	)
 	if err != nil {
-		b.logger.LogAttrs(context.Background(), slog.LevelError, "could not retrieve endpoints",
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError, "could not retrieve endpoints",
 			logging.LogAttrKey(svcKey),
 			logging.LogAttrError(err),
 		)

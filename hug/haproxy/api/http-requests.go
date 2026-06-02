@@ -57,7 +57,8 @@ func (c *clientNative) HTTPRequestReplaceAll(parentType parser.Section, name str
 	for index, rule := range rules {
 		err := c.HTTPRequestCreate(index, parentType, name, rule)
 		if err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create http-request rule",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create http-request rule",
 				logging.LogAttrError(err),
 				slog.Int("rule index", index),
 				slog.String("frontend", name),

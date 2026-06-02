@@ -81,7 +81,8 @@ func (c *clientNative) ServerReplaceAll(parentType parser.Section, name string, 
 
 	for _, server := range servers {
 		if err := c.ServerCreate(parentType, name, server); err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create server",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create server",
 				logging.LogAttrError(err),
 				slog.String("server", server.Name),
 				slog.String("parent", name),

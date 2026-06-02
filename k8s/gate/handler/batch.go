@@ -166,7 +166,8 @@ func NewEventHandlerImpl(
 func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.EventBatch) {
 	start := time.Now()
 
-	h.logger.LogAttrs(context.Background(), slog.LevelInfo,
+	h.logger.LogAttrs(
+		context.Background(), slog.LevelInfo,
 		"Started processing event batch",
 		logging.LogAttrBatch(batch.BatchID, len(batch.Events)),
 	)
@@ -176,7 +177,8 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 		metrics.EventBatchDuration.Observe(duration.Seconds())
 		metrics.EventBatchSize.Observe(float64(len(batch.Events)))
 		metrics.EventBatchTotal.Inc()
-		h.logger.LogAttrs(context.Background(), slog.LevelInfo,
+		h.logger.LogAttrs(
+			context.Background(), slog.LevelInfo,
 			"Finished processing event batch",
 			logging.LogAttrBatch(batch.BatchID, len(batch.Events)),
 			logging.LogAttrDuration(duration),
@@ -196,7 +198,8 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 	metrics.ConfigGenerationDuration.Observe(time.Since(configStart).Seconds())
 	if err != nil {
 		metrics.EventBatchErrors.Inc()
-		h.logger.LogAttrs(context.Background(), slog.LevelError,
+		h.logger.LogAttrs(
+			context.Background(), slog.LevelError,
 			"error building HAProxy configuration",
 			logging.LogAttrError(err),
 		)
@@ -249,7 +252,8 @@ func (h *eventHandlerImpl) updateClusterStore(event any) {
 	switch obj := event.(type) {
 	case *events.UpsertEvent:
 		gvk := h.config.ExtractGVK(obj.Resource)
-		h.logger.LogAttrs(context.Background(), slog.LevelDebug,
+		h.logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Processing event in batch",
 			logging.LogAttrEventType("upsert"),
 			logging.LogAttrResource(obj.Resource, gvk),
@@ -260,7 +264,8 @@ func (h *eventHandlerImpl) updateClusterStore(event any) {
 	case *events.DeleteEvent:
 		gvk := h.config.ExtractGVK(obj.Type)
 
-		h.logger.LogAttrs(context.Background(), slog.LevelDebug,
+		h.logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Processing event in batch",
 			logging.LogAttrEventType("delete"),
 			logging.LogAttrResource(obj.Type, gvk),
@@ -280,7 +285,8 @@ func (h *eventHandlerImpl) waitDone(done <-chan struct{}) {
 	select {
 	case <-done:
 	case <-time.After(waitDoneTimeout):
-		h.logger.LogAttrs(context.Background(), slog.LevelWarn,
+		h.logger.LogAttrs(
+			context.Background(), slog.LevelWarn,
 			"timed out waiting for Done signal from HUG",
 		)
 	}
@@ -308,7 +314,8 @@ func (h *eventHandlerImpl) forwardFeedback(ctx context.Context, resultCh chan di
 		h.statusUpdater.UpdateStatus(ctx, updates)
 	case <-time.After(forwardFeedbackTimeout):
 		// TODO: check with the team
-		h.logger.LogAttrs(context.Background(), slog.LevelWarn,
+		h.logger.LogAttrs(
+			context.Background(), slog.LevelWarn,
 			"timed out waiting for result from HUG on ResultCh",
 		)
 	}

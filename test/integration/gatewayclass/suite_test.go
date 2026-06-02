@@ -42,7 +42,8 @@ func (s *GatewayClassSuite) expectConditionsUpdated(ctx context.Context, namespa
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		if err := s.Test().Client.Get(
 			s.Test().Ctx,
-			types.NamespacedName{Name: name, Namespace: namespace}, gwc); err != nil {
+			types.NamespacedName{Name: name, Namespace: namespace}, gwc,
+		); err != nil {
 			return false
 		}
 

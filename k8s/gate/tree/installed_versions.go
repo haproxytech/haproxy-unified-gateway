@@ -65,7 +65,8 @@ func (b *InstalledVersionsBuilderImpl) Build() {
 		case store.StatusDeleted:
 			b.buildDeleted(update.OldObject)
 		}
-		b.Logger.LogAttrs(context.Background(), slog.LevelDebug,
+		b.Logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
 			"Installed versions",
 			logging.LogAttrInstalledVersions(b.InstalledGwAPIVersions.Versions),
 		)
@@ -111,7 +112,8 @@ func (b *InstalledVersionsBuilderImpl) buildDeleted(previous *metav1.PartialObje
 
 // onUpdateInstalledVersion callback function to be called when the installed versions are updated.
 func (b *InstalledVersionsBuilderImpl) onUpdateInstalledVersion() {
-	b.Logger.LogAttrs(context.Background(), slog.LevelDebug,
+	b.Logger.LogAttrs(
+		context.Background(), slog.LevelDebug,
 		"OnUpdateInstalledVersion",
 		logging.LogAttrInstalledVersions(b.InstalledGwAPIVersions.Versions),
 	)
@@ -160,7 +162,8 @@ func (b *InstalledVersionsBuilderImpl) validateOneInstalledGwAPIVersion(params v
 	for _, v := range params.supportedVersions {
 		constraint, err := semver.NewConstraint("~" + v)
 		if err != nil {
-			b.Logger.LogAttrs(context.Background(), slog.LevelError,
+			b.Logger.LogAttrs(
+				context.Background(), slog.LevelError,
 				"cannot build semver constraint",
 				logging.LogAttrError(err),
 			)
@@ -172,7 +175,8 @@ func (b *InstalledVersionsBuilderImpl) validateOneInstalledGwAPIVersion(params v
 	sv, err := semver.NewVersion(params.installedVersion)
 	if err != nil {
 		// If a version string is invalid, we should not consider it as a supported version.
-		b.Logger.LogAttrs(context.Background(), slog.LevelError,
+		b.Logger.LogAttrs(
+			context.Background(), slog.LevelError,
 			"cannot parse version string",
 			logging.LogAttrError(err),
 		)

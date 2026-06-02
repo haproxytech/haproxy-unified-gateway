@@ -263,7 +263,8 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 				WithOnlyMetadata(),
 				WithK8sPredicate(
 					k8spredicate.And(
-						predicate.AnnotationPredicate{Annotation: constant.BundleVersionAnnotation}),
+						predicate.AnnotationPredicate{Annotation: constant.BundleVersionAnnotation},
+					),
 				),
 			},
 		},
@@ -278,16 +279,17 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					),
 				),
 				// Watch HugGate
-				WithEnqueueFor([]enqueueForParams{
-					{
-						watchSource: objtypes.ObjectTypeHugGate,
-						enqueueFunc: enqueueGatewayClassForHugGate,
-						predicate: k8spredicate.And(
-							k8spredicate.ResourceVersionChangedPredicate{},
-							predicate.NewNamespacePredicate(cfg.Namespaces),
-						),
+				WithEnqueueFor(
+					[]enqueueForParams{
+						{
+							watchSource: objtypes.ObjectTypeHugGate,
+							enqueueFunc: enqueueGatewayClassForHugGate,
+							predicate: k8spredicate.And(
+								k8spredicate.ResourceVersionChangedPredicate{},
+								predicate.NewNamespacePredicate(cfg.Namespaces),
+							),
+						},
 					},
-				},
 				),
 			},
 		},
@@ -302,53 +304,54 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 						predicate.NewGatewayPredicate(cfg.GatewayNsName),
 					),
 				),
-				WithEnqueueFor([]enqueueForParams{
-					// Watch HugGate
-					{
-						watchSource: objtypes.ObjectTypeHugGate,
-						enqueueFunc: enqueueGatewayForHugGate(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
-						predicate:   predicate.NewNamespacePredicate(cfg.Namespaces),
+				WithEnqueueFor(
+					[]enqueueForParams{
+						// Watch HugGate
+						{
+							watchSource: objtypes.ObjectTypeHugGate,
+							enqueueFunc: enqueueGatewayForHugGate(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
+							predicate:   predicate.NewNamespacePredicate(cfg.Namespaces),
+						},
+						// Watch GatewayClass
+						{
+							watchSource: objtypes.ObjectTypeGatewayClass,
+							enqueueFunc: enqueueGatewayForGatewayClass(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
+							predicate: k8spredicate.And(
+								k8spredicate.GenerationChangedPredicate{},
+								predicate.GatewayClassPredicate{ControllerName: cfg.ControllerName},
+							),
+						},
+						// Watch Secrets
+						{
+							watchSource: objtypes.ObjectTypeSecret,
+							enqueueFunc: enqueueGatewayForSecret(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
+							predicate: k8spredicate.And(
+								k8spredicate.ResourceVersionChangedPredicate{},
+								predicate.NewNamespacePredicate(cfg.Namespaces),
+							),
+						},
+						// Watch HUG service â refresh Gateway.Status.Addresses when the
+						// controller service (LoadBalancer IP assignment, type change, â¦) changes.
+						{
+							watchSource: objtypes.ObjectTypeService,
+							enqueueFunc: enqueueGatewayForHugService(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
+							predicate: k8spredicate.And(
+								k8spredicate.ResourceVersionChangedPredicate{},
+								k8spredicate.NewPredicateFuncs(func(obj ctrlruntimeclient.Object) bool {
+									return obj.GetLabels()[cfg.HugServiceLabelKey] == cfg.HugServiceLabelVal
+								}),
+							),
+						},
+						// Watch ReferenceGrants — cross-namespace certificateRefs access may change
+						{
+							watchSource: objtypes.ObjectTypeRefGrant,
+							enqueueFunc: enqueueGatewayForReferenceGrant(utils.NewDedicatedGateway(cfg.GatewayNsName)),
+							predicate: k8spredicate.And(
+								k8spredicate.ResourceVersionChangedPredicate{},
+								predicate.NewNamespacePredicate(cfg.Namespaces),
+							),
+						},
 					},
-					// Watch GatewayClass
-					{
-						watchSource: objtypes.ObjectTypeGatewayClass,
-						enqueueFunc: enqueueGatewayForGatewayClass(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
-						predicate: k8spredicate.And(
-							k8spredicate.GenerationChangedPredicate{},
-							predicate.GatewayClassPredicate{ControllerName: cfg.ControllerName},
-						),
-					},
-					// Watch Secrets
-					{
-						watchSource: objtypes.ObjectTypeSecret,
-						enqueueFunc: enqueueGatewayForSecret(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
-						predicate: k8spredicate.And(
-							k8spredicate.ResourceVersionChangedPredicate{},
-							predicate.NewNamespacePredicate(cfg.Namespaces),
-						),
-					},
-					// Watch HUG service â refresh Gateway.Status.Addresses when the
-					// controller service (LoadBalancer IP assignment, type change, â¦) changes.
-					{
-						watchSource: objtypes.ObjectTypeService,
-						enqueueFunc: enqueueGatewayForHugService(utils.NewDedicatedGateway(cfg.GatewayNsName), dedicatedNs),
-						predicate: k8spredicate.And(
-							k8spredicate.ResourceVersionChangedPredicate{},
-							k8spredicate.NewPredicateFuncs(func(obj ctrlruntimeclient.Object) bool {
-								return obj.GetLabels()[cfg.HugServiceLabelKey] == cfg.HugServiceLabelVal
-							}),
-						),
-					},
-					// Watch ReferenceGrants — cross-namespace certificateRefs access may change
-					{
-						watchSource: objtypes.ObjectTypeRefGrant,
-						enqueueFunc: enqueueGatewayForReferenceGrant(utils.NewDedicatedGateway(cfg.GatewayNsName)),
-						predicate: k8spredicate.And(
-							k8spredicate.ResourceVersionChangedPredicate{},
-							predicate.NewNamespacePredicate(cfg.Namespaces),
-						),
-					},
-				},
 				),
 			},
 		},
@@ -364,43 +367,44 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					),
 				),
 				// Watch Gateway
-				WithEnqueueFor([]enqueueForParams{
-					{
-						watchSource: objtypes.ObjectTypeGateway,
-						enqueueFunc: enqueueHTTPRouteForGateway(dedicatedNs),
-						predicate: k8spredicate.And(
-							k8spredicate.ResourceVersionChangedPredicate{},
-							predicate.NewNamespacePredicate(cfg.Namespaces),
-						),
+				WithEnqueueFor(
+					[]enqueueForParams{
+						{
+							watchSource: objtypes.ObjectTypeGateway,
+							enqueueFunc: enqueueHTTPRouteForGateway(dedicatedNs),
+							predicate: k8spredicate.And(
+								k8spredicate.ResourceVersionChangedPredicate{},
+								predicate.NewNamespacePredicate(cfg.Namespaces),
+							),
+						},
+						// Watch Services
+						{
+							watchSource: objtypes.ObjectTypeService,
+							enqueueFunc: enqueueHTTPRouteForService(dedicatedNs),
+							predicate: k8spredicate.And(
+								k8spredicate.ResourceVersionChangedPredicate{},
+								predicate.NewNamespacePredicate(cfg.Namespaces),
+							),
+						},
+						// Watch Backend CRs
+						{
+							watchSource: objtypes.ObjectTypeBackend,
+							enqueueFunc: enqueueHTTPRouteForBackendCR(dedicatedNs),
+							predicate: k8spredicate.And(
+								k8spredicate.ResourceVersionChangedPredicate{},
+								predicate.NewNamespacePredicate(cfg.Namespaces),
+							),
+						},
+						// Watch ReferenceGrants — cross-namespace backendRef access may change
+						{
+							watchSource: objtypes.ObjectTypeRefGrant,
+							enqueueFunc: enqueueHTTPRouteForReferenceGrant,
+							predicate: k8spredicate.And(
+								k8spredicate.ResourceVersionChangedPredicate{},
+								predicate.NewNamespacePredicate(cfg.Namespaces),
+							),
+						},
 					},
-					// Watch Services
-					{
-						watchSource: objtypes.ObjectTypeService,
-						enqueueFunc: enqueueHTTPRouteForService(dedicatedNs),
-						predicate: k8spredicate.And(
-							k8spredicate.ResourceVersionChangedPredicate{},
-							predicate.NewNamespacePredicate(cfg.Namespaces),
-						),
-					},
-					// Watch Backend CRs
-					{
-						watchSource: objtypes.ObjectTypeBackend,
-						enqueueFunc: enqueueHTTPRouteForBackendCR(dedicatedNs),
-						predicate: k8spredicate.And(
-							k8spredicate.ResourceVersionChangedPredicate{},
-							predicate.NewNamespacePredicate(cfg.Namespaces),
-						),
-					},
-					// Watch ReferenceGrants — cross-namespace backendRef access may change
-					{
-						watchSource: objtypes.ObjectTypeRefGrant,
-						enqueueFunc: enqueueHTTPRouteForReferenceGrant,
-						predicate: k8spredicate.And(
-							k8spredicate.ResourceVersionChangedPredicate{},
-							predicate.NewNamespacePredicate(cfg.Namespaces),
-						),
-					},
-				},
 				),
 			},
 		},

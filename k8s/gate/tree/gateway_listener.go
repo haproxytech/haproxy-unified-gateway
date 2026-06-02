@@ -539,7 +539,8 @@ func NewListenerKey(gw *gatewayv1.Gateway, listener gatewayv1.Listener) client.O
 func ListenerKeyFromListenerName(gw *gatewayv1.Gateway, listenerName gatewayv1.SectionName) client.ObjectKey {
 	return client.ObjectKey{
 		Namespace: gw.Namespace,
-		Name: fmt.Sprintf("%s_%s",
+		Name: fmt.Sprintf(
+			"%s_%s",
 			gw.Name,
 			listenerName,
 		),
@@ -549,7 +550,8 @@ func ListenerKeyFromListenerName(gw *gatewayv1.Gateway, listenerName gatewayv1.S
 func (l Listener) Key() client.ObjectKey {
 	return client.ObjectKey{
 		Namespace: l.Owner.Namespace,
-		Name: fmt.Sprintf("%s_%s",
+		Name: fmt.Sprintf(
+			"%s_%s",
 			l.Owner.Name,
 			l.K8sResource.Name,
 		),

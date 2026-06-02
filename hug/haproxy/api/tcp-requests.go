@@ -57,7 +57,8 @@ func (c *clientNative) TCPRequestReplaceAll(parentType parser.Section, name stri
 	for index, rule := range rules {
 		err := c.TCPRequestCreate(index, parentType, name, rule)
 		if err != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create tcp-request rule",
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create tcp-request rule",
 				logging.LogAttrError(err),
 				slog.Int("rule index", index),
 				slog.String("frontend", name),

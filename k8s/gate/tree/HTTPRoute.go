@@ -499,7 +499,8 @@ func (r *HTTPRoute) mergeBackendConditions() {
 					koBackendRefConds.MergeOverrideConditions(checkResult.Conditions)
 				}
 				return true
-			})
+			},
+		)
 	}
 
 	// There is 1 failing condition ResolvedRefs
@@ -519,5 +520,6 @@ func (r *HTTPRoute) mergeBackendConditions() {
 			}
 			r.Conditions.MergeOverrideConditionsForParentRef(parentRefKey, resolvedRefConds)
 			return true
-		})
+		},
+	)
 }

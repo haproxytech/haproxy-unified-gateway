@@ -85,7 +85,8 @@ func SubstitutePortsInContent(content []byte, portMap map[int]int) []byte {
 	}
 	slices.SortFunc(tps, func(a, b int) int { return b - a })
 	for _, tp := range tps {
-		content = bytes.ReplaceAll(content,
+		content = bytes.ReplaceAll(
+			content,
 			[]byte(strconv.Itoa(tp)),
 			[]byte(strconv.Itoa(portMap[tp])),
 		)

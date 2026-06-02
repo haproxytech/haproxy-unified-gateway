@@ -89,7 +89,8 @@ func (rlm *reloadMgr) SetDynamicServerStateUpdateFailure(reason string, args ...
 
 func (rlm *reloadMgr) Reset() {
 	if rlm.reload && rlm.logger != nil {
-		rlm.logger.LogAttrs(context.WithValue(context.Background(), logging.CallerAdditionalSkipKey, 1), slog.LevelInfo,
+		rlm.logger.LogAttrs(
+			context.WithValue(context.Background(), logging.CallerAdditionalSkipKey, 1), slog.LevelInfo,
 			"reload reset",
 		)
 	}

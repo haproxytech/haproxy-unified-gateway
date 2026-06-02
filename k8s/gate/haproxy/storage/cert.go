@@ -121,7 +121,8 @@ func (c *CertificateStorageDefault) NewCertificateData(secret *v1.Secret) (certi
 	}
 	if !pemOk {
 		err := fmt.Errorf("certificate or private key missing in %s", secretNsName)
-		c.logger.LogAttrs(context.Background(), slog.LevelError, "Certificate [new]",
+		c.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Certificate [new]",
 			logging.LogAttrKey(secretNsName),
 			logging.LogAttrError(err),
 		)
@@ -145,7 +146,8 @@ func (c *CertificateStorageDefault) WriteOnDisk(certData certificate.Certificate
 	}
 
 	metrics.CertStorageOperations.WithLabelValues("write", "ok").Inc()
-	c.logger.LogAttrs(context.Background(), slog.LevelInfo, "Cert [written]",
+	c.logger.LogAttrs(
+		context.Background(), slog.LevelInfo, "Cert [written]",
 		slog.String("cert", certFullPath),
 	)
 	return nil
@@ -161,7 +163,8 @@ func (c *CertificateStorageDefault) DeleteFromDisk(certData certificate.Certific
 	err := certFilePath.DeleteFromDisk()
 	if err == nil {
 		metrics.CertStorageOperations.WithLabelValues("delete", "ok").Inc()
-		c.logger.LogAttrs(context.Background(), slog.LevelInfo, "Cert [deleted]",
+		c.logger.LogAttrs(
+			context.Background(), slog.LevelInfo, "Cert [deleted]",
 			slog.String("cert", fullPath),
 		)
 		return nil

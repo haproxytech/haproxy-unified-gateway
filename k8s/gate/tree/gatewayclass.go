@@ -146,10 +146,12 @@ func (g *GatewayClass) buildConditionsManaged(_ *slog.Logger, cs ControllerStore
 	switch cs.InstalledGwAPIVersions.Valid {
 	case true:
 		g.Conditions.MergeOverrideConditions(
-			conditions.NewGatewayClassSupportedVersionOK())
+			conditions.NewGatewayClassSupportedVersionOK(),
+		)
 	case false:
 		g.Conditions.MergeOverrideConditions(
-			conditions.NewGatewayClassSupportedVersionUnsupportedVersion(SupportedGatewayAPIBundleVersion.String()))
+			conditions.NewGatewayClassSupportedVersionUnsupportedVersion(SupportedGatewayAPIBundleVersion.String()),
+		)
 	}
 
 	// Checks on parametersRef

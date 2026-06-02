@@ -91,14 +91,16 @@ func (h *AppManagerImpl) Run() {
 		for {
 			select {
 			case <-h.ctx.Done():
-				h.logger.LogAttrs(context.Background(), slog.LevelInfo,
+				h.logger.LogAttrs(
+					context.Background(), slog.LevelInfo,
 					"shutting down AppManager Run() goroutine",
 				)
 				return
 			case haproxyCfg := <-h.haproxyCfgCh:
 				err := h.applyCfgUpdates(haproxyCfg)
 				if err != nil {
-					h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to update Haproxy config",
+					h.logger.LogAttrs(
+						context.Background(), slog.LevelError, "failed to update Haproxy config",
 						logging.LogAttrError(err),
 					)
 				}
@@ -129,7 +131,8 @@ func (h *AppManagerImpl) applyCfgUpdates(haproxyCfgDiffs diffs.HaproxyConfDiffs)
 
 	err = h.client.APIStartTransaction()
 	if err != nil {
-		h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to start transaction",
+		h.logger.LogAttrs(
+			context.Background(), slog.LevelError, "failed to start transaction",
 			logging.LogAttrError(err),
 		)
 		return err
@@ -150,7 +153,8 @@ func (h *AppManagerImpl) applyCfgUpdates(haproxyCfgDiffs diffs.HaproxyConfDiffs)
 
 	err = h.client.APIFinalCommitTransaction()
 	if err != nil {
-		h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to commit transaction",
+		h.logger.LogAttrs(
+			context.Background(), slog.LevelError, "failed to commit transaction",
 			logging.LogAttrError(err),
 		)
 		return err
@@ -163,7 +167,8 @@ func (h *AppManagerImpl) applyCfgUpdates(haproxyCfgDiffs diffs.HaproxyConfDiffs)
 			"Haproxy reload")
 		msg := ""
 		if msg, err = h.process.Service("reload"); err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to reload Haproxy",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to reload Haproxy",
 				slog.String("reason", msg),
 				logging.LogAttrError(err),
 			)
@@ -190,7 +195,8 @@ func (h *AppManagerImpl) processCreate(created structured.Structured, mergeState
 
 		err := h.client.FrontendCreate(*createdFE)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create frontend",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create frontend",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -208,7 +214,8 @@ func (h *AppManagerImpl) processCreate(created structured.Structured, mergeState
 
 		err := h.client.BackendCreate(*createdBE)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to create backend",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to create backend",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -220,7 +227,8 @@ func (h *AppManagerImpl) processCreate(created structured.Structured, mergeState
 	for _, global := range created.Globals {
 		err := h.client.GlobalEdit(global, mergeStategies.Global)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit global",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to edit global",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -231,7 +239,8 @@ func (h *AppManagerImpl) processCreate(created structured.Structured, mergeState
 	for _, defaults := range created.Defaults {
 		err := h.client.DefaultsSectionEdit(defaults, mergeStategies.Defaults)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit defaults section",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to edit defaults section",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -248,7 +257,8 @@ func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
 	for feName := range deleted.Frontends {
 		err := h.client.FrontendDelete(feName)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to delete frontend",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to delete frontend",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -261,7 +271,8 @@ func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
 	for beName := range deleted.Backends {
 		err := h.client.BackendDelete(beName)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to delete backend",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to delete backend",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -273,7 +284,8 @@ func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
 	for range deleted.Globals {
 		err := h.client.GlobalEdit(nil, "")
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to reset global to default value",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to reset global to default value",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -284,7 +296,8 @@ func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
 	for range deleted.Defaults {
 		err := h.client.DefaultsSectionEdit(nil, "")
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to reset defaults to default value",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to reset defaults to default value",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -309,7 +322,8 @@ func (h *AppManagerImpl) processUpdate(updated structured.Structured, mergeStrat
 
 		err := h.client.FrontendEdit(*updatedFE)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit frontend",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to edit frontend",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -329,7 +343,8 @@ func (h *AppManagerImpl) processUpdate(updated structured.Structured, mergeStrat
 
 		err := h.client.BackendEdit(*updatedBE)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit backend",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to edit backend",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -341,7 +356,8 @@ func (h *AppManagerImpl) processUpdate(updated structured.Structured, mergeStrat
 	for _, global := range updated.Globals {
 		err := h.client.GlobalEdit(global, mergeStrategies.Global)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit global",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to edit global",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -352,7 +368,8 @@ func (h *AppManagerImpl) processUpdate(updated structured.Structured, mergeStrat
 	for _, defaults := range updated.Defaults {
 		err := h.client.DefaultsSectionEdit(defaults, mergeStrategies.Defaults)
 		if err != nil {
-			h.logger.LogAttrs(context.Background(), slog.LevelError, "failed to edit defaults section",
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError, "failed to edit defaults section",
 				logging.LogAttrError(err),
 			)
 			errors.Add(err)
@@ -409,7 +426,8 @@ func (h *AppManagerImpl) confUpdateProcessed(haproxyCfgDiffs diffs.HaproxyConfDi
 		case haproxyCfgDiffs.ResultCh <- confResult:
 		default:
 			// TODO: check with the team
-			h.logger.LogAttrs(context.Background(), slog.LevelError,
+			h.logger.LogAttrs(
+				context.Background(), slog.LevelError,
 				"dropping haproxy conf result: ResultCh is full",
 			)
 		}

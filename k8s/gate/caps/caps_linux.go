@@ -43,7 +43,8 @@ func Detect(ctx context.Context, logger *slog.Logger) PortBinder {
 	if errMin != nil {
 		minPort = 1024
 		if logger != nil {
-			logger.LogAttrs(ctx, slog.LevelWarn,
+			logger.LogAttrs(
+				ctx, slog.LevelWarn,
 				"caps: could not read ip_unprivileged_port_start, defaulting to 1024",
 				slog.String("error", errMin.Error()),
 			)
@@ -53,7 +54,8 @@ func Detect(ctx context.Context, logger *slog.Logger) PortBinder {
 	hasCap, errCap := readNetBindService(procStatus)
 	if errCap != nil {
 		if logger != nil {
-			logger.LogAttrs(ctx, slog.LevelWarn,
+			logger.LogAttrs(
+				ctx, slog.LevelWarn,
 				"caps: could not read CapEff, assuming no NET_BIND_SERVICE",
 				slog.String("error", errCap.Error()),
 			)
@@ -61,7 +63,8 @@ func Detect(ctx context.Context, logger *slog.Logger) PortBinder {
 	}
 
 	if logger != nil {
-		logger.LogAttrs(ctx, slog.LevelInfo,
+		logger.LogAttrs(
+			ctx, slog.LevelInfo,
 			"caps: detected port binding capabilities",
 			slog.Int("min_unprivileged_port", int(minPort)),
 			slog.Bool("net_bind_service", hasCap),

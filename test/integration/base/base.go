@@ -732,7 +732,8 @@ func (b *BaseSuite) ExpectRouteConditionsUpdated(ctx context.Context, namespace,
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		if err := b.Test().Client.Get(
 			b.Test().Ctx,
-			types.NamespacedName{Name: name, Namespace: namespace}, route); err != nil {
+			types.NamespacedName{Name: name, Namespace: namespace}, route,
+		); err != nil {
 			return false
 		}
 
@@ -751,7 +752,8 @@ func (b *BaseSuite) ExpectAttachedRoute(ctx context.Context, namespace, gwName, 
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		if err := b.Test().Client.Get(
 			b.Test().Ctx,
-			types.NamespacedName{Name: gwName, Namespace: namespace}, gw); err != nil {
+			types.NamespacedName{Name: gwName, Namespace: namespace}, gw,
+		); err != nil {
 			return false
 		}
 

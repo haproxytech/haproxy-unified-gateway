@@ -49,7 +49,8 @@ func (s *HTTPRouteIsolationSuite) expectConditionsUpdated(ctx context.Context, n
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		if err := s.Test().Client.Get(
 			s.Test().Ctx,
-			types.NamespacedName{Name: name, Namespace: namespace}, route); err != nil {
+			types.NamespacedName{Name: name, Namespace: namespace}, route,
+		); err != nil {
 			return false
 		}
 

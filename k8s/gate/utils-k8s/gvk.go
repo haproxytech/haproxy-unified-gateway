@@ -32,7 +32,8 @@ func NewExtractGKV(scheme *runtime.Scheme, logger *slog.Logger) ExtractGVK {
 		gvk, err := apiutil.GVKForObject(obj, scheme)
 		if err != nil {
 			// this should not happen
-			logger.LogAttrs(context.Background(), slog.LevelError,
+			logger.LogAttrs(
+				context.Background(), slog.LevelError,
 				fmt.Sprintf("could not extract GVK for object: %T", obj),
 			)
 		}

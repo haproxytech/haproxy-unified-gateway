@@ -293,7 +293,8 @@ func urlRewriteRules(f *gatewayv1.HTTPURLRewriteFilter, matchPrefix string) mode
 						// needed because a single replace-path with \1 produces an
 						// empty path when the request path is exactly the prefix
 						// (no suffix), whereas the expected result is "/".
-						rules = append(rules,
+						rules = append(
+							rules,
 							&models.HTTPRequestRule{
 								Type:      "replace-path",
 								PathMatch: fmt.Sprintf("^%s$", escapedPrefix),
@@ -433,7 +434,8 @@ func requestHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPReques
 		// Gateway API "add" semantics: append to the existing header value with a
 		// comma separator.  Two rules are needed: one that combines when the header
 		// is already present, and one that sets it when it is absent.
-		rules = append(rules,
+		rules = append(
+			rules,
 			&models.HTTPRequestRule{
 				Type:      "set-header",
 				HdrName:   name,
@@ -471,7 +473,8 @@ func responseHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPRespo
 	}
 	for _, h := range f.Add {
 		name := string(h.Name)
-		rules = append(rules,
+		rules = append(
+			rules,
 			&models.HTTPResponseRule{
 				Type:      "set-header",
 				HdrName:   name,

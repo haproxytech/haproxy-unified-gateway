@@ -108,7 +108,8 @@ func New(logger *slog.Logger, transactionDir, configFile, programPath, runtimeSo
 		return nil, err
 	}
 
-	confClient, err := configuration.New(context.Background(),
+	confClient, err := configuration.New(
+		context.Background(),
 		cfgoptions.ConfigurationFile(configFile),
 		cfgoptions.HAProxyBin(programPath),
 		cfgoptions.UseModelsValidation,
@@ -220,7 +221,8 @@ func (c *clientNative) APIFinalCommitTransaction() error {
 
 	if c.configurationHashAtTransactionStart == hash {
 		if errDel := config.DeleteTransaction(c.activeTransaction); errDel != nil {
-			c.logger.LogAttrs(context.Background(), slog.LevelError,
+			c.logger.LogAttrs(
+				context.Background(), slog.LevelError,
 				"failed to delete transaction",
 				logging.LogAttrError(errDel),
 				slog.String("transactionID", c.activeTransaction),
@@ -232,7 +234,8 @@ func (c *clientNative) APIFinalCommitTransaction() error {
 
 	_, err = config.CommitTransaction(c.activeTransaction)
 	if err != nil {
-		c.logger.LogAttrs(context.Background(), slog.LevelError,
+		c.logger.LogAttrs(
+			context.Background(), slog.LevelError,
 			"failed to commit transaction",
 			logging.LogAttrError(err),
 			slog.String("transactionID", c.activeTransaction),

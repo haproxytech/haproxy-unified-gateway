@@ -47,7 +47,8 @@ func ServiceNameIndexFunc(logger *slog.Logger) client.IndexerFunc {
 	return func(obj client.Object) []string {
 		slice, ok := obj.(*discoveryV1.EndpointSlice)
 		if !ok {
-			logger.LogAttrs(context.Background(), slog.LevelError,
+			logger.LogAttrs(
+				context.Background(), slog.LevelError,
 				fmt.Sprintf("expected an EndpointSlice; got %T", obj),
 				logging.LogAttrCategory(logging.LogCategoryK8s),
 			)

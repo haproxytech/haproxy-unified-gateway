@@ -81,7 +81,8 @@ func (b *HaproxyConfMgrImpl) upsertFrontends(vListenerName string, vListener *tr
 		progCond, exists := l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionProgrammed))
 		if !exists || progCond.Status == metav1.ConditionUnknown {
 			reprogram = true
-			b.logger.LogAttrs(context.Background(), slog.LevelDebug, "Reprogramming frontend due to unknown programmed condition on listener",
+			b.logger.LogAttrs(
+				context.Background(), slog.LevelDebug, "Reprogramming frontend due to unknown programmed condition on listener",
 				logging.LogAttrFrontendName(newFe.Name),
 				logging.LogAttrKey(l.Owner),
 			)
@@ -458,7 +459,8 @@ func (b *HaproxyConfMgrImpl) deleteFrontend(feName string) error {
 }
 
 func (b *HaproxyConfMgrImpl) logVirtualListenerUpdate(action string, virtualListenerName string) {
-	b.logger.LogAttrs(context.Background(), slog.LevelDebug, "Processing VirtualListener ["+action+"]",
+	b.logger.LogAttrs(
+		context.Background(), slog.LevelDebug, "Processing VirtualListener ["+action+"]",
 		logging.LogAttrVirtualListenerName(virtualListenerName),
 	)
 }

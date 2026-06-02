@@ -116,10 +116,11 @@ func enqueueGatewayForHugGate(dg utils.DedicatedGateway, dns utils.DedicatedName
 					if gcName == gwc.Name {
 						if paramsRef, ok := getGatewayClassParamsRefKey(gwc); ok {
 							if paramsRef.Name == o.GetName() && paramsRef.Namespace == o.GetNamespace() {
-								requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-									Namespace: gw.GetNamespace(),
-									Name:      gw.GetName(),
-								}},
+								requests = append(
+									requests, reconcile.Request{NamespacedName: types.NamespacedName{
+										Namespace: gw.GetNamespace(),
+										Name:      gw.GetName(),
+									}},
 								)
 							}
 						}

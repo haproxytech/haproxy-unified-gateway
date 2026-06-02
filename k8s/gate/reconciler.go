@@ -107,7 +107,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	gvk, err := apiutil.GVKForObject(obj, scheme)
 	if err != nil {
 		// this should not happen
-		r.cfg.Logger.LogAttrs(context.Background(), slog.LevelError,
+		r.cfg.Logger.LogAttrs(
+			context.Background(), slog.LevelError,
 			fmt.Sprintf("could not extract GVK for object: %T", obj),
 		)
 	}
@@ -155,7 +156,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	case r.cfg.EventCh <- e:
 	}
 
-	r.cfg.Logger.LogAttrs(context.Background(), slog.LevelDebug,
+	r.cfg.Logger.LogAttrs(
+		context.Background(), slog.LevelDebug,
 		fmt.Sprintf("%s the resource", op),
 		logging.LogAttrCategory(logging.LogCategoryK8s),
 		logging.LogAttrKeyGVK(req.NamespacedName, gvk),

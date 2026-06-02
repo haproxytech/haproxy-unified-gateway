@@ -91,7 +91,7 @@ func TestReferenceGrantManager_NamedTo(t *testing.T) {
 			To: []gatewayv1beta1.ReferenceGrantTo{{
 				Group: "",
 				Kind:  "Service",
-				Name:  new((gatewayv1.ObjectName)("my-svc")),
+				Name:  new(gatewayv1.ObjectName("my-svc")),
 			}},
 		},
 	}
@@ -122,7 +122,7 @@ func TestReferenceGrantManager_UpdateWipesPreviousFootprint(t *testing.T) {
 			To: []gatewayv1beta1.ReferenceGrantTo{{
 				Group: "",
 				Kind:  "Service",
-				Name:  new((gatewayv1.ObjectName)("svc")),
+				Name:  new(gatewayv1.ObjectName("svc")),
 			}},
 		},
 	}
@@ -143,7 +143,7 @@ func TestReferenceGrantManager_UpdateWipesPreviousFootprint(t *testing.T) {
 			To: []gatewayv1beta1.ReferenceGrantTo{{
 				Group: "",
 				Kind:  "Service",
-				Name:  new((gatewayv1.ObjectName)("svc")),
+				Name:  new(gatewayv1.ObjectName("svc")),
 			}},
 		},
 	}
@@ -172,8 +172,8 @@ func TestReferenceGrantManager_DeleteMultiToNoLeftovers(t *testing.T) {
 				Namespace: "route-ns",
 			}},
 			To: []gatewayv1beta1.ReferenceGrantTo{
-				{Group: "", Kind: "Service", Name: new((gatewayv1.ObjectName)("svc-a"))},
-				{Group: "", Kind: "Service", Name: new((gatewayv1.ObjectName)("svc-b"))},
+				{Group: "", Kind: "Service", Name: new(gatewayv1.ObjectName("svc-a"))},
+				{Group: "", Kind: "Service", Name: new(gatewayv1.ObjectName("svc-b"))},
 			},
 		},
 	}
@@ -212,7 +212,7 @@ func TestReferenceGrantManager_TwoGrantsSameTo_DeleteOneKeepsOther(t *testing.T)
 				Kind:      "HTTPRoute",
 				Namespace: "route-ns-a",
 			}},
-			To: []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Service", Name: new((gatewayv1.ObjectName)("shared-svc"))}},
+			To: []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Service", Name: new(gatewayv1.ObjectName("shared-svc"))}},
 		},
 	}
 	k8sB := &gatewayv1beta1.ReferenceGrant{
@@ -223,7 +223,7 @@ func TestReferenceGrantManager_TwoGrantsSameTo_DeleteOneKeepsOther(t *testing.T)
 				Kind:      "HTTPRoute",
 				Namespace: "route-ns-b",
 			}},
-			To: []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Service", Name: new((gatewayv1.ObjectName)("shared-svc"))}},
+			To: []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Service", Name: new(gatewayv1.ObjectName("shared-svc"))}},
 		},
 	}
 

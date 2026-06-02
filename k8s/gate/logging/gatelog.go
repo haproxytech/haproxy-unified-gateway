@@ -35,7 +35,8 @@ func LogAttrCategory(category v3.Category) slog.Attr {
 }
 
 func LogAttrResource(obj client.Object, gvk schema.GroupVersionKind) slog.Attr {
-	return slog.Group("resource",
+	return slog.Group(
+		"resource",
 		LogAttrGVK(gvk),
 		LogAttrObjectKey(obj),
 	)
@@ -57,7 +58,8 @@ func LogAttrKey(key client.ObjectKey) slog.Attr {
 }
 
 func LogAttrKeyGVK(key client.ObjectKey, gvk schema.GroupVersionKind) slog.Attr {
-	return slog.Group("resource",
+	return slog.Group(
+		"resource",
 		LogAttrGVK(gvk),
 		slog.String("objectKey", key.String()),
 	)
@@ -68,7 +70,8 @@ func LogAttrEventType(t string) slog.Attr {
 }
 
 func LogAttrBatch(id, length int) slog.Attr {
-	return slog.Group("batch",
+	return slog.Group(
+		"batch",
 		slog.Int("id", id),
 		slog.Int("length", length),
 	)
@@ -97,14 +100,16 @@ func LogAttrInstalledVersions(versions map[string]int) slog.Attr {
 }
 
 func LogAttrFileSource(file string, line int) slog.Attr {
-	return slog.Group("sourceFile",
+	return slog.Group(
+		"sourceFile",
 		slog.String("file", file),
 		slog.Int("line", line),
 	)
 }
 
 func LogAttrNsName(nsName types.NamespacedName) slog.Attr {
-	return slog.Group("nsname",
+	return slog.Group(
+		"nsname",
 		slog.String("name", nsName.Name),
 		slog.String("namespace", nsName.Namespace),
 	)
@@ -135,7 +140,8 @@ func LogAttrRouteGroupKinds(routesGK []gatewayv1.RouteGroupKind) slog.Attr {
 }
 
 func LogAttrReloadMgrAction(state bool, reason string, args ...any) slog.Attr {
-	return slog.Group("reload",
+	return slog.Group(
+		"reload",
 		slog.Bool("state", state),
 		slog.String("reason", fmt.Sprintf(reason, args...)),
 	)
