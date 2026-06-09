@@ -94,8 +94,8 @@ func main() {
 		fmt.Printf("Canceling pipeline ID %d on project ID %d\n", p.ID, p.ProjectID)
 		err = cancelPipeline(gitlabAPIURL, strconv.Itoa(p.ProjectID), p.ID, gitlabToken)
 		if err != nil {
-			// Log error but continue trying to cancel others
-			fmt.Printf("Failed to cancel pipeline %d: %v\n", p.ID, err)
+			// Non-fatal: best-effort cleanup, keep canceling the rest
+			fmt.Printf("Warning: could not cancel pipeline %d (continuing): %v\n", p.ID, err)
 		} else {
 			fmt.Printf("Successfully requested cancellation for pipeline %d\n", p.ID)
 		}
@@ -231,7 +231,7 @@ func cancelPipeline(apiURL, projectID string, pipelineID int, token string) erro
 			fmt.Println("Pipeline already finished, nothing to do.") //nolint:forbidigo
 			return nil
 		}
-		return fmt.Errorf("failed to cancel pipeline: status %d, body: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("cancel request returned status %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	return nil
