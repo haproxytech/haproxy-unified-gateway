@@ -16,6 +16,7 @@ package objtypes
 import (
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
 	v1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -33,6 +34,8 @@ var (
 	ObjectTypeDefaults     = &v3.Defaults{}
 	ObjectTypeTLSRoute     = &gatewayv1alpha2.TLSRoute{}
 	ObjectTypeRefGrant     = &gatewayv1beta1.ReferenceGrant{}
+	ObjectTypeIngress      = &networkingv1.Ingress{}
+	ObjectTypeIngressClass = &networkingv1.IngressClass{}
 )
 
 var (

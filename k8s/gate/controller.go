@@ -38,6 +38,7 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -175,6 +176,8 @@ func Add(
 		GlobalCRs:       make(map[types.NamespacedName]*v3.Global),
 		DefaultsCRs:     make(map[types.NamespacedName]*v3.Defaults),
 		Updates:         store.NewClusterUpdates(),
+		Ingresses:       map[types.NamespacedName]*networkingv1.Ingress{},
+		IngressClasses:  map[types.NamespacedName]*networkingv1.IngressClass{},
 	}
 
 	var certificateStorage storage.CertificateStorage
@@ -618,6 +621,32 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 				// No WithEnqueueFor: ReferenceGrant has no secondary dependencies.
 				// The inverse direction is correct, HTTPRoute and TLSRoute controllers
 				// watch ReferenceGrant to re-enqueue affected routes when a grant changes.
+			},
+		},
+		{
+			name:       "Ingress",
+			objectType: objtypes.ObjectTypeIngress,
+			options: []Option{
+				WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.GenerationChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				),
+				// TODO see if enqueue is necessary for service
+			},
+		},
+		{
+			name:       "IngressClass",
+			objectType: objtypes.ObjectTypeIngressClass,
+			options: []Option{
+				WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.GenerationChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				),
+				// TODO see if enqueue is necessary for service
 			},
 		},
 	}

@@ -18,6 +18,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -66,6 +67,8 @@ type ClusterUpdates struct {
 	HugConfs        map[types.NamespacedName]Update[*v3.HugConf]
 	EndpointSlices  map[types.NamespacedName]Update[*discoveryV1.EndpointSlice]
 	ReferenceGrants map[types.NamespacedName]Update[*gatewayv1beta1.ReferenceGrant]
+	Ingresses       map[types.NamespacedName]Update[*networkingv1.Ingress]
+	IngressClasses  map[types.NamespacedName]Update[*networkingv1.IngressClass]
 }
 
 func NewClusterUpdates() ClusterUpdates {
@@ -86,5 +89,7 @@ func NewClusterUpdates() ClusterUpdates {
 		HugConfs:        make(map[types.NamespacedName]Update[*v3.HugConf]),
 		EndpointSlices:  make(map[types.NamespacedName]Update[*discoveryV1.EndpointSlice]),
 		ReferenceGrants: make(map[types.NamespacedName]Update[*gatewayv1beta1.ReferenceGrant]),
+		Ingresses:       make(map[types.NamespacedName]Update[*networkingv1.Ingress]),
+		IngressClasses:  make(map[types.NamespacedName]Update[*networkingv1.IngressClass]),
 	}
 }

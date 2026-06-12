@@ -26,6 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -52,6 +53,7 @@ func init() {
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(haproxyapiv3.AddToScheme(scheme))
 	utilruntime.Must(v1alpha2.Install(scheme))
+	utilruntime.Must(networkingv1.AddToScheme(scheme))
 }
 
 func createManager(cfg config.Configuration) (manager.Manager, error) {
