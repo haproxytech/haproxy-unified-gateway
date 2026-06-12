@@ -93,11 +93,15 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 
 	referenceGrantBuilder := tree.NewReferenceGrantBuilder(controllerStore, referenceGrantManager)
 
+	// Ingress
+
+	ingressBuilder := tree.NewIngressBuilder(controllerStore)
 	treeBuilder := GateTreeBuilder{
 		cfg:              cfg,
 		referenceManager: referenceManager,
 		ControllerStore:  controllerStore,
 		builder: []tree.Builder{
+			ingressBuilder,
 			referenceGrantBuilder,
 			secretBuilder,
 			gatewayClassBuilder,

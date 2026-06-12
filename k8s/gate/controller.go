@@ -610,6 +610,32 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 				// watch ReferenceGrant to re-enqueue affected routes when a grant changes.
 			},
 		},
+		{
+			name:       "Ingress",
+			objectType: objtypes.ObjectTypeIngress,
+			options: []Option{
+				WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.GenerationChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				),
+				// TODO see if enqueue is necessary for service
+			},
+		},
+		{
+			name:       "IngressClass",
+			objectType: objtypes.ObjectTypeIngressClass,
+			options: []Option{
+				WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.GenerationChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				),
+				// TODO see if enqueue is necessary for service
+			},
+		},
 	}
 
 	for _, registerConfig := range controllerRegisterCfgs {

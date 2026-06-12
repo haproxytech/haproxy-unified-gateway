@@ -21,6 +21,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -49,6 +50,8 @@ type ClusterStore struct {
 	HugConfs        map[types.NamespacedName]*v3.HugConf
 	EndpointSlices  map[types.NamespacedName]*discoveryV1.EndpointSlice
 	ReferenceGrants map[types.NamespacedName]*gatewayv1beta1.ReferenceGrant
+	Ingresses       map[types.NamespacedName]*networkingv1.Ingress
+	IngressClasses  map[types.NamespacedName]*networkingv1.IngressClass
 	Updates         ClusterUpdates
 }
 
@@ -94,6 +97,8 @@ func NewClusterStoreUpdaterImpl(
 				extractGVK(&v3.HugConf{}):                      newObjectStoreImpl(clusterStore.HugConfs, clusterStore.Updates.HugConfs, logger),
 				extractGVK(&discoveryV1.EndpointSlice{}):       newObjectStoreImpl(clusterStore.EndpointSlices, clusterStore.Updates.EndpointSlices, logger),
 				extractGVK(&gatewayv1beta1.ReferenceGrant{}):   newObjectStoreImpl(clusterStore.ReferenceGrants, clusterStore.Updates.ReferenceGrants, logger),
+				extractGVK(&networkingv1.Ingress{}):            newObjectStoreImpl(clusterStore.Ingresses, clusterStore.Updates.Ingresses, logger),
+				extractGVK(&networkingv1.IngressClass{}):       newObjectStoreImpl(clusterStore.IngressClasses, clusterStore.Updates.IngressClasses, logger),
 			},
 		},
 		extractGVK: extractGVK,
