@@ -196,8 +196,8 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 }
 
 func (b *GatewayBuilderImpl) resetListenerConflicts() {
+	b.ControllerStore.previousMapPort2Listeners = b.ControllerStore.mapPort2Listeners
 	b.ControllerStore.mapPort2Listeners = make(map[gatewayv1.PortNumber]listenerConflict)
-	b.ControllerStore.previousMapPort2Listeners = make(map[gatewayv1.PortNumber]listenerConflict)
 }
 
 // checkListenerConflicts checks the conflicts between all Gateway listeners
