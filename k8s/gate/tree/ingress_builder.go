@@ -1,0 +1,308 @@
+// Copyright 2025 HAProxy Technologies LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package tree
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strconv"
+	"strings"
+
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
+)
+
+// syntheticRouteNamePrefix prefixes the name of every synthetic HTTPRoute.
+// It contains ':' on purpose: ':' is illegal in a Kubernetes object name
+// (RFC 1123 subdomain), so the prefix doubles as a tamper-proof origin marker.
+// A real HTTPRoute can never carry such a name (the API server rejects it), so
+// a synthetic route can neither collide with a real one in the
+// GateTree.HTTPRoutes map nor be impersonated by a user-controlled resource —
+// no annotation or label is needed, and none is set so that real Ingress
+// annotations can be carried through later without conflict.
+const syntheticRouteNamePrefix = "ing:"
+
+// ingressBackendCRAnnotation, when set on an Ingress, points every synthetic
+// backendRef at a Backend custom resource (api/gate/v3 Backend). Its value is
+// "name" or "namespace/name". It is translated into an ExtensionRef filter, the
+// same mechanism an HTTPRoute uses to reference a Backend CR.
+const ingressBackendCRAnnotation = "cr-backend"
+
+var _ Builder = &IngressBuilderImpl{}
+
+type IngressBuilderImpl struct {
+	*ControllerStore
+}
+
+func NewIngressBuilder(controllerStore *ControllerStore) Builder {
+	return &IngressBuilderImpl{
+		ControllerStore: controllerStore,
+	}
+}
+
+// ComputeTreeUpdates translates the Ingress updates of this cycle into synthetic
+// raw HTTPRoute updates and injects them into ClusterStore.Updates.HTTPRoutes.
+// The HTTPRouteBuilder, running afterwards, consumes them like any other
+// HTTPRoute update (raw -> tree conversion, checks, rules, backends, maps), so
+// the whole pipeline is reused without duplication.
+func (b *IngressBuilderImpl) ComputeTreeUpdates() {
+	for _, updatedIngress := range b.ClusterStore.Updates.Ingresses {
+		rawIngress := updatedIngress.NewObject
+		if updatedIngress.Status == store.StatusDeleted {
+			rawIngress = updatedIngress.OldObject
+		}
+		if rawIngress == nil {
+			continue
+		}
+
+		for key, route := range b.convertIngressToHTTPRoutes(rawIngress) {
+			b.ClusterStore.Updates.HTTPRoutes[key] = store.Update[*gatewayv1.HTTPRoute]{
+				NewObject: route,
+				Status:    updatedIngress.Status,
+			}
+		}
+	}
+}
+
+func (*IngressBuilderImpl) CleanTreeUpdates() {}
+
+// convertIngressToHTTPRoutes builds one synthetic raw HTTPRoute per Ingress rule,
+// keyed by its synthetic NamespacedName. One route per rule is required because
+// an HTTPRoute carries a single set of hostnames that applies to all its rules,
+// whereas each Ingress rule has its own host.
+func (b *IngressBuilderImpl) convertIngressToHTTPRoutes(
+	ingress *networkingv1.Ingress,
+) map[types.NamespacedName]*gatewayv1.HTTPRoute {
+	routes := make(map[types.NamespacedName]*gatewayv1.HTTPRoute)
+
+	// The Backend CR annotation is set once on the Ingress and applies to every
+	// synthetic backendRef.
+	backendCRFilters := b.ingressBackendCRFilters(ingress)
+
+	for i := range ingress.Spec.Rules {
+		rule := ingress.Spec.Rules[i]
+		if rule.HTTP == nil {
+			continue
+		}
+
+		rules := b.ingressPathsToRules(ingress, rule.HTTP.Paths, backendCRFilters)
+		if len(rules) == 0 {
+			continue
+		}
+
+		name := mangleIngressName(ingress, strconv.Itoa(i))
+		key := types.NamespacedName{Namespace: ingress.Namespace, Name: name}
+		routes[key] = newSyntheticHTTPRoute(ingress, name, rule.Host, rules)
+	}
+
+	return routes
+}
+
+func (b *IngressBuilderImpl) ingressPathsToRules(
+	ingress *networkingv1.Ingress, paths []networkingv1.HTTPIngressPath,
+	backendCRFilters []gatewayv1.HTTPRouteFilter,
+) []gatewayv1.HTTPRouteRule {
+	rules := make([]gatewayv1.HTTPRouteRule, 0, len(paths))
+	for i := range paths {
+		path := paths[i]
+		backendRef, ok := b.ingressBackendToRef(ingress, &path.Backend, backendCRFilters)
+		if !ok {
+			continue
+		}
+		rules = append(rules, gatewayv1.HTTPRouteRule{
+			Matches:     []gatewayv1.HTTPRouteMatch{ingressPathToMatch(path)},
+			BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
+		})
+	}
+	return rules
+}
+
+// ingressBackendToRef converts an Ingress backend to an HTTPBackendRef. Only
+// Service backends referenced by numeric port are supported for now; Resource
+// backends and named ports are skipped (reported false) with a log. backendCRFilters
+// (a Backend CR ExtensionRef, possibly nil) is attached to the produced backendRef.
+func (b *IngressBuilderImpl) ingressBackendToRef(
+	ingress *networkingv1.Ingress, backend *networkingv1.IngressBackend,
+	backendCRFilters []gatewayv1.HTTPRouteFilter,
+) (gatewayv1.HTTPBackendRef, bool) {
+	if backend == nil || backend.Service == nil {
+		b.logSkippedBackend(ingress, "only Service backends are supported")
+		return gatewayv1.HTTPBackendRef{}, false
+	}
+	if backend.Service.Port.Number == 0 {
+		b.logSkippedBackend(ingress, "named service ports are not supported yet")
+		return gatewayv1.HTTPBackendRef{}, false
+	}
+
+	port := gatewayv1.PortNumber(backend.Service.Port.Number)
+	return gatewayv1.HTTPBackendRef{
+		BackendRef: gatewayv1.BackendRef{
+			BackendObjectReference: gatewayv1.BackendObjectReference{
+				Name: gatewayv1.ObjectName(backend.Service.Name),
+				Port: &port,
+				// Namespace is intentionally nil: an Ingress can only reference a
+				// Service in its own namespace, so the backend stays same-namespace
+				// and never needs a ReferenceGrant.
+			},
+		},
+		Filters: backendCRFilters,
+	}, true
+}
+
+func (b *IngressBuilderImpl) logSkippedBackend(ingress *networkingv1.Ingress, reason string) {
+	b.Logger.LogAttrs(context.Background(), slog.LevelWarn,
+		"Skipping Ingress backend",
+		slog.String("ingress", client.ObjectKeyFromObject(ingress).String()),
+		slog.String("reason", reason),
+	)
+}
+
+// ingressBackendCRFilters reads the Backend CR annotation and, when present and
+// pointing at a same-namespace Backend CR, returns the matching ExtensionRef
+// filter. It returns nil when the annotation is absent or empty.
+//
+// The annotation value is "name" or "namespace/name". A namespace equal to the
+// Ingress namespace (or omitted) is honoured via ExtensionRef, which is
+// namespace-local. A different namespace cannot be expressed by ExtensionRef and
+// is not supported yet.
+//
+// TODO(ingress): support cross-namespace Backend CR references. ExtensionRef
+// carries no namespace and the resolver looks the CR up in the route's
+// namespace (k8s/gate/haproxy/backends.go), so an out-of-namespace CR needs a
+// dedicated mechanism.
+func (b *IngressBuilderImpl) ingressBackendCRFilters(ingress *networkingv1.Ingress) []gatewayv1.HTTPRouteFilter {
+	value, ok := ingress.Annotations[ingressBackendCRAnnotation]
+	if !ok || value == "" {
+		return nil
+	}
+
+	namespace, name, hasNamespace := strings.Cut(value, "/")
+	if !hasNamespace {
+		name = namespace
+		namespace = ingress.Namespace
+	}
+
+	if namespace != ingress.Namespace {
+		b.Logger.LogAttrs(context.Background(), slog.LevelWarn,
+			"Ignoring cross-namespace Backend CR annotation on Ingress (not supported yet)",
+			slog.String("ingress", client.ObjectKeyFromObject(ingress).String()),
+			slog.String(ingressBackendCRAnnotation, value),
+		)
+		return nil
+	}
+
+	return []gatewayv1.HTTPRouteFilter{{
+		Type: gatewayv1.HTTPRouteFilterExtensionRef,
+		ExtensionRef: &gatewayv1.LocalObjectReference{
+			Group: gatewayv1.Group(v3.GroupName),
+			Kind:  gatewayv1.Kind("Backend"),
+			Name:  gatewayv1.ObjectName(name),
+		},
+	}}
+}
+
+// newSyntheticHTTPRoute assembles the synthetic raw *gatewayv1.HTTPRoute. The
+// namespace is the real Ingress namespace (so same-namespace backend resolution
+// holds); only the name is mangled to guarantee a collision-free identity.
+//
+// TODO: ParentRefs are left empty here. Resolving the target Gateway (the
+// "ingress gateway" option discussed) is a separate part and will populate them.
+func newSyntheticHTTPRoute(
+	ingress *networkingv1.Ingress, name, host string, rules []gatewayv1.HTTPRouteRule,
+) *gatewayv1.HTTPRoute {
+	var hostnames []gatewayv1.Hostname
+	if host != "" {
+		hostnames = []gatewayv1.Hostname{gatewayv1.Hostname(host)}
+	}
+
+	return &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: ingress.Namespace,
+			Name:      name,
+		},
+		Spec: gatewayv1.HTTPRouteSpec{
+			Hostnames: hostnames,
+			Rules:     rules,
+		},
+	}
+}
+
+// ingressPathToMatch converts an Ingress path + pathType to an HTTPRouteMatch.
+// The Ingress path types are mapped to their Gateway API equivalents:
+//   - Exact  -> PathMatchExact
+//   - Prefix -> PathMatchPathPrefix (both match element-by-element)
+//
+// TODO(ingress): decide how to handle PathTypeImplementationSpecific. The spec
+// leaves its meaning "up to the IngressClass"; for now it falls back to the
+// PathPrefix default like a nil pathType, but HAProxy could also interpret it as
+// a regular expression (PathMatchRegularExpression). Revisit before GA.
+func ingressPathToMatch(path networkingv1.HTTPIngressPath) gatewayv1.HTTPRouteMatch {
+	matchType := gatewayv1.PathMatchPathPrefix
+	if path.PathType != nil {
+		switch *path.PathType {
+		case networkingv1.PathTypeExact:
+			matchType = gatewayv1.PathMatchExact
+		case networkingv1.PathTypePrefix:
+			matchType = gatewayv1.PathMatchPathPrefix
+		}
+	}
+
+	value := path.Path
+	if value == "" {
+		value = "/"
+	}
+
+	return gatewayv1.HTTPRouteMatch{
+		Path: &gatewayv1.HTTPPathMatch{Type: &matchType, Value: &value},
+	}
+}
+
+// mangleIngressName builds the collision-free name of a synthetic HTTPRoute,
+// e.g. "ing:my-app:0" for the first rule of Ingress "my-app".
+func mangleIngressName(ingress *networkingv1.Ingress, suffix string) string {
+	return fmt.Sprintf("%s%s:%s", syntheticRouteNamePrefix, ingress.Name, suffix)
+}
+
+// IsSyntheticRoute reports whether an HTTPRoute name was produced by
+// mangleIngressName. The ':' prefix is illegal in a Kubernetes object name, so a
+// real HTTPRoute can never carry it: this is a tamper-proof origin marker.
+func IsSyntheticRoute(name string) bool {
+	return strings.HasPrefix(name, syntheticRouteNamePrefix)
+}
+
+// ParseSyntheticRoute is the inverse of mangleIngressName. Given a synthetic
+// route namespace and name, it returns the source Ingress key and the rule
+// suffix. isSynthetic is false when name is not a synthetic route name.
+//
+// The prefix is stripped first, then the remaining "name:suffix" is cut at the
+// first ':'. The Ingress name is a valid Kubernetes name (so it never contains
+// ':'), making the cut unambiguous even if a suffix ever contained one.
+func ParseSyntheticRoute(routeNamespace, name string) (ingress types.NamespacedName, suffix string, isSynthetic bool) {
+	rest, ok := strings.CutPrefix(name, syntheticRouteNamePrefix)
+	if !ok {
+		return types.NamespacedName{}, "", false
+	}
+	ingressName, suffix, ok := strings.Cut(rest, ":")
+	if !ok {
+		return types.NamespacedName{}, "", false
+	}
+	return types.NamespacedName{Namespace: routeNamespace, Name: ingressName}, suffix, true
+}

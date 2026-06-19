@@ -49,6 +49,8 @@ type HTTPRoute struct {
 	CheckParentRefs CheckResultRoute
 	// Valid
 	Valid bool
+	// HTTPRoute from ingress Translation
+	IngressTranslated bool
 }
 
 // NewRoute creates a new Route for the GateTree.
