@@ -113,6 +113,9 @@ func (b *GatewayBuilderImpl) computeTreeGatewayUpdate(gwKey client.ObjectKey, gw
 		treeGw = alreadyUnmanagedTreeGw
 	}
 
+	if treeGw.K8sResource.Name == "ingress" && treeGw.K8sResource.Namespace == "ingress" {
+		treeGw.IngressFrontends = true
+	}
 	switch gwUpdate.Status {
 	case store.StatusUpserted:
 		if treeGw != nil {
