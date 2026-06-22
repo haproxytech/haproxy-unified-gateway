@@ -62,6 +62,10 @@ type GateTreeConfig struct {
 	ControllerConfNsName types.NamespacedName
 	// ControllerName
 	ControllerName string
+	// IngressClass is the value of --ingress.class used to select managed Ingresses.
+	IngressClass string
+	// EmptyIngressClass, when IngressClass is set, also selects classless Ingresses.
+	EmptyIngressClass bool
 	// HugServiceLabelKey is the label key used to identify the HUG Kubernetes service.
 	HugServiceLabelKey string
 	// HugServiceLabelVal is the label value used to identify the HUG Kubernetes service.
@@ -76,6 +80,12 @@ type GateTreeConfig struct {
 	DisableIPv4 bool
 	// DisableIPv6 indicates whether IPv6 is disabled.
 	DisableIPv6 bool
+	// HTTPIngressFrontendPort is the listening port of the HTTP listener of the
+	// synthetic Ingress gateway.
+	HTTPIngressFrontendPort int
+	// HTTPSIngressFrontendPort is the listening port of the HTTPS listener of the
+	// synthetic Ingress gateway.
+	HTTPSIngressFrontendPort int
 }
 
 // eventHandlerImpl implements EventHandler.
@@ -132,8 +142,12 @@ func NewEventHandlerImpl(
 			Updated: make(map[string]certificate.CrtListData),
 			Deleted: make(map[string]certificate.CrtListData),
 		},
-		PortBinder:     caps.Detect(context.Background(), capsLogger),
-		ControllerName: gateTreeConfig.ControllerName,
+		PortBinder:               caps.Detect(context.Background(), capsLogger),
+		ControllerName:           gateTreeConfig.ControllerName,
+		IngressClass:             gateTreeConfig.IngressClass,
+		EmptyIngressClass:        gateTreeConfig.EmptyIngressClass,
+		HTTPIngressFrontendPort:  gateTreeConfig.HTTPIngressFrontendPort,
+		HTTPSIngressFrontendPort: gateTreeConfig.HTTPSIngressFrontendPort,
 	}
 
 	treeBuilder := NewGateTreeBuilder(&controllerStore, gateTreeConfig)

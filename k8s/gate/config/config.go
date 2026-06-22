@@ -94,6 +94,19 @@ type Configuration struct {
 	CacheResyncPeriod time.Duration
 	// InitialStructuredHaproxyConfOK bool
 	InitialStructuredHaproxyConfOK bool
+	// HTTPIngressFrontendPort is the listening port of the HTTP listener of the
+	// synthetic Ingress gateway.
+	HTTPIngressFrontendPort int
+	// HTTPSIngressFrontendPort is the listening port of the HTTPS listener of the
+	// synthetic Ingress gateway.
+	HTTPSIngressFrontendPort int
+	// IngressClass is the value of --ingress.class: the IngressClass controller
+	// suffix this instance handles. Empty means it matches the bare controller
+	// name "haproxy.org/ingress-controller".
+	IngressClass string
+	// EmptyIngressClass, when IngressClass is set, also selects Ingresses that
+	// have no ingressClassName.
+	EmptyIngressClass bool
 }
 
 // ControllerPodConfig contains information about this Pod.

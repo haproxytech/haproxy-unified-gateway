@@ -38,3 +38,5 @@ func HaproxyDefaults() haproxy.HaproxyDirs {
 }
 
 var defaultControllerPort = 31060
+var defaultHTTPPortIngressFrontend = 8080
+var defaultHTTPSPortIngressFrontend = 8443

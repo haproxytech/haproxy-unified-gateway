@@ -55,17 +55,21 @@ type HUGConfig struct {
 	StartupSyncPeriod            time.Duration        `ff:"          long: startup-sync-period, default: 0, usage: 'sets the startup period at which the controller computes HAProxy configuration file (e.g. 5s, 1m)'"`
 	CacheResyncPeriod            time.Duration        `ff:"          long: cache-resync-period, default: 0, usage: 'sets the controller-runtime manager cache SyncPeriod. If not set, defaults to controller-runtime defaults (10 hours)'"`
 	DefaultLogLevel              slog.Level
-	AddStatsPortToFrontend       bool `ff:"          long: add-stats-port,default: true,    usage: 'add stats port bind to existing stats frontend'"`
-	ForceRestartHaproxyAtStartup bool `ff:"          long: force-restart-haproxy,           usage: 'forces HAProxy restart at controller startup'"`
-	Help                         bool `ff:"          long: help,                            usage: 'help'"`
-	Test                         bool `ff:"short:t,                                         usage: 'simulate running HAProxy'"`
-	LeaderElectionEnabled        bool `ff:"          long: leader-election-enabled,         usage: 'enable leader election'"`
-	UseWiths6Overlay             bool `ff:"          long: with-s6-overlay,                 usage: 'use s6 overlay to start/stop/restart HAProxy'"`
-	UseWithPebble                bool `ff:"          long: with-pebble,                     usage: 'use pebble start/stop/restart HAProxy'"`
-	DisableIPv4                  bool `ff:"          long: disable-ipv4,                    usage: 'disable IPv4 support'"`
-	DisableIPv6                  bool `ff:"          long: disable-ipv6,			          usage: 'disable IPv6 support'"`
-	Version                      bool `ff:"          long: version,                         usage: 'print version and exit'"`
-	JobCheckCRD                  bool `ff:"          long: job-check-crd,                   usage: 'run CRD refresh job and exit'"`
+	AddStatsPortToFrontend       bool   `ff:"          long: add-stats-port,default: true,    usage: 'add stats port bind to existing stats frontend'"`
+	ForceRestartHaproxyAtStartup bool   `ff:"          long: force-restart-haproxy,           usage: 'forces HAProxy restart at controller startup'"`
+	Help                         bool   `ff:"          long: help,                            usage: 'help'"`
+	Test                         bool   `ff:"short:t,                                         usage: 'simulate running HAProxy'"`
+	LeaderElectionEnabled        bool   `ff:"          long: leader-election-enabled,         usage: 'enable leader election'"`
+	UseWiths6Overlay             bool   `ff:"          long: with-s6-overlay,                 usage: 'use s6 overlay to start/stop/restart HAProxy'"`
+	UseWithPebble                bool   `ff:"          long: with-pebble,                     usage: 'use pebble start/stop/restart HAProxy'"`
+	DisableIPv4                  bool   `ff:"          long: disable-ipv4,                    usage: 'disable IPv4 support'"`
+	DisableIPv6                  bool   `ff:"          long: disable-ipv6,			          usage: 'disable IPv6 support'"`
+	Version                      bool   `ff:"          long: version,                         usage: 'print version and exit'"`
+	JobCheckCRD                  bool   `ff:"          long: job-check-crd,                   usage: 'run CRD refresh job and exit'"`
+	HTTPIngressFrontendPort      int    `ff:"          long: http-ingress-frontend-port,                 usage: 'port to listen on for HTTP Frontend dedicated to ingress'"`
+	HTTPSIngressFrontendPort     int    `ff:"          long: https-ingress-frontend-port,                 usage: 'port to listen on for HTTPS Frontend dedicated to ingress'"`
+	IngressClass                 string `ff:"          long: ingress-class,                              usage: 'value of --ingress.class: IngressClass controller suffix this instance handles (empty matches controller haproxy.org/ingress-controller)'"`
+	EmptyIngressClass            bool   `ff:"          long: empty-ingress-class,                        usage: 'when ingress-class is set, also handle Ingresses that have no ingressClassName'"`
 }
 
 //revive:enable:line-length-limit
@@ -224,6 +228,14 @@ func (c *HUGConfig) Init(external External) error {
 	}
 	if c.LogType == "" {
 		c.LogType = string(logging.LogHandlerTypeJSON)
+	}
+
+	if c.HTTPIngressFrontendPort == 0 {
+		c.HTTPIngressFrontendPort = defaultHTTPPortIngressFrontend
+	}
+
+	if c.HTTPSIngressFrontendPort == 0 {
+		c.HTTPSIngressFrontendPort = defaultHTTPSPortIngressFrontend
 	}
 
 	// values for external
