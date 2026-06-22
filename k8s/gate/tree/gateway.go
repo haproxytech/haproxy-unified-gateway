@@ -54,7 +54,7 @@ type Gateway struct {
 	// Valid shows whether the Gateway is valid.
 	Valid bool
 	// Ingress Frontend equivalent
-	IngressFrontends bool
+	GatewayForIngress bool
 }
 
 func NewGateway(k8sObject *gatewayv1.Gateway) *Gateway {

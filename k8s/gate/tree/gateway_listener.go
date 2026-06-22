@@ -196,27 +196,11 @@ func (l *Listener) checkRouteGroupKind(treeGw *Gateway, gateSupportedRouteKinds 
 
 func (l *Listener) checkProtocol(gateSupportedRouteKinds map[gatewayv1.ProtocolType][]gatewayv1.RouteGroupKind) {
 	listener := l.K8sResource
-	gateSupportedRouteKindsForProtocol := gateSupportedRouteKinds[listener.Protocol]
 	// UnsupportedProtocol
-	if len(gateSupportedRouteKindsForProtocol) == 0 {
-		supportedProtocols := make([]string, 0, len(gateSupportedRouteKinds))
-
-		for protocol := range gateSupportedRouteKinds {
-			supportedProtocols = append(supportedProtocols, string(protocol))
-		}
-		slices.Sort(supportedProtocols)
-
-		valErr := field.NotSupported(
-			field.NewPath("protocol"),
-			listener.Protocol,
-			supportedProtocols,
-		)
-		l.CheckProtocol = CheckResult{
-			Valid:      false,
-			Conditions: conditions.NewListenerAcceptedUnsupportedProtocol(valErr.Error()),
-		}
+	if !l.checkSupportedProtocol(gateSupportedRouteKinds) {
 		return
 	}
+
 	if listener.Protocol == gatewayv1.TLSProtocolType &&
 		listener.TLS != nil &&
 		listener.TLS.Mode != nil &&
@@ -236,6 +220,34 @@ func (l *Listener) checkProtocol(gateSupportedRouteKinds map[gatewayv1.ProtocolT
 	l.CheckProtocol = CheckResult{
 		Valid: true,
 	}
+}
+
+// checkSupportedProtocol reports whether the listener protocol is supported. When
+// it is not, it records the UnsupportedProtocol condition on CheckProtocol and
+// returns false so the caller stops and keeps that invalid verdict.
+func (l *Listener) checkSupportedProtocol(gateSupportedRouteKinds map[gatewayv1.ProtocolType][]gatewayv1.RouteGroupKind) bool {
+	listener := l.K8sResource
+	gateSupportedRouteKindsForProtocol := gateSupportedRouteKinds[listener.Protocol]
+	if len(gateSupportedRouteKindsForProtocol) == 0 {
+		supportedProtocols := make([]string, 0, len(gateSupportedRouteKinds))
+
+		for protocol := range gateSupportedRouteKinds {
+			supportedProtocols = append(supportedProtocols, string(protocol))
+		}
+		slices.Sort(supportedProtocols)
+
+		valErr := field.NotSupported(
+			field.NewPath("protocol"),
+			listener.Protocol,
+			supportedProtocols,
+		)
+		l.CheckProtocol = CheckResult{
+			Valid:      false,
+			Conditions: conditions.NewListenerAcceptedUnsupportedProtocol(valErr.Error()),
+		}
+		return false
+	}
+	return true
 }
 
 func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.NamespacedName]*Secret, referenceGrantManager *ReferenceGrantManager) {
@@ -281,7 +293,7 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 			}
 			continue
 		}
-		isAccessGranted := treeGw.IngressFrontends || referenceGrantManager.IsAccessGranted(
+		isAccessGranted := treeGw.GatewayForIngress || referenceGrantManager.IsAccessGranted(
 			GrantFrom{Group: gatewayv1.GroupName, Kind: "Gateway", Namespace: treeGw.K8sResource.GetNamespace()},
 			GrantTo{Group: "", Kind: "Secret", Namespace: treeSecret.K8sResource.GetNamespace(), Name: treeSecret.K8sResource.GetName()},
 		)
