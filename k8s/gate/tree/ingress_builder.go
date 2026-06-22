@@ -15,8 +15,8 @@ package tree
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"path"
 	"strconv"
 	"strings"
 
@@ -28,17 +28,8 @@ import (
 
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 )
-
-// syntheticRouteNamePrefix prefixes the name of every synthetic HTTPRoute.
-// It contains ':' on purpose: ':' is illegal in a Kubernetes object name
-// (RFC 1123 subdomain), so the prefix doubles as a tamper-proof origin marker.
-// A real HTTPRoute can never carry such a name (the API server rejects it), so
-// a synthetic route can neither collide with a real one in the
-// GateTree.HTTPRoutes map nor be impersonated by a user-controlled resource —
-// no annotation or label is needed, and none is set so that real Ingress
-// annotations can be carried through later without conflict.
-const syntheticRouteNamePrefix = "ing:"
 
 // ingressBackendCRAnnotation, when set on an Ingress, points every synthetic
 // backendRef at a Backend custom resource (api/gate/v3 Backend). Its value is
@@ -47,6 +38,10 @@ const syntheticRouteNamePrefix = "ing:"
 const ingressBackendCRAnnotation = "cr-backend"
 
 var _ Builder = &IngressBuilderImpl{}
+
+const (
+	CONTROLLER = "haproxy.org/ingress-controller"
+)
 
 type IngressBuilderImpl struct {
 	*ControllerStore
@@ -64,7 +59,7 @@ func NewIngressBuilder(controllerStore *ControllerStore) Builder {
 // HTTPRoute update (raw -> tree conversion, checks, rules, backends, maps), so
 // the whole pipeline is reused without duplication.
 func (b *IngressBuilderImpl) ComputeTreeUpdates() {
-	for _, updatedIngress := range b.ClusterStore.Updates.Ingresses {
+	for updatedIngressNamespacedName, updatedIngress := range b.ClusterStore.Updates.Ingresses {
 		rawIngress := updatedIngress.NewObject
 		if updatedIngress.Status == store.StatusDeleted {
 			rawIngress = updatedIngress.OldObject
@@ -72,7 +67,11 @@ func (b *IngressBuilderImpl) ComputeTreeUpdates() {
 		if rawIngress == nil {
 			continue
 		}
-
+		if !b.isIngressClassSupported(utils.PointerDefaultValueIfNil(rawIngress.Spec.IngressClassName),
+			b.IngressClass, b.EmptyIngressClass) {
+			b.deleteRoutesForIngress(updatedIngressNamespacedName)
+			continue
+		}
 		for key, route := range b.convertIngressToHTTPRoutes(rawIngress) {
 			b.ClusterStore.Updates.HTTPRoutes[key] = store.Update[*gatewayv1.HTTPRoute]{
 				NewObject: route,
@@ -108,7 +107,7 @@ func (b *IngressBuilderImpl) convertIngressToHTTPRoutes(
 			continue
 		}
 
-		name := mangleIngressName(ingress, strconv.Itoa(i))
+		name := utils.MangleIngressName(ingress, strconv.Itoa(i))
 		key := types.NamespacedName{Namespace: ingress.Namespace, Name: name}
 		routes[key] = newSyntheticHTTPRoute(ingress, name, rule.Host, rules)
 	}
@@ -275,34 +274,40 @@ func ingressPathToMatch(path networkingv1.HTTPIngressPath) gatewayv1.HTTPRouteMa
 	}
 }
 
-// mangleIngressName builds the collision-free name of a synthetic HTTPRoute,
-// e.g. "ing:my-app:0" for the first rule of Ingress "my-app".
-func mangleIngressName(ingress *networkingv1.Ingress, suffix string) string {
-	return fmt.Sprintf("%s%s:%s", syntheticRouteNamePrefix, ingress.Name, suffix)
+func (b *IngressBuilderImpl) isIngressClassSupported(ingressClass, controllerClass string, allowEmptyClass bool) bool {
+	var supported bool
+	var igClassControllerFromSpec string
+	if igClassResource := b.ClusterStore.IngressClasses[types.NamespacedName{Name: ingressClass}]; igClassResource != nil {
+		igClassControllerFromSpec = igClassResource.Spec.Controller
+	}
+	if ingressClass == "" {
+		for _, ingressClass := range b.ClusterStore.IngressClasses {
+			if ingressClass.Annotations["ingressclass.kubernetes.io/is-default-class"] == "true" {
+				igClassControllerFromSpec = ingressClass.Spec.Controller
+				break
+			}
+		}
+	}
+
+	switch controllerClass {
+	case "":
+		supported = (ingressClass == "" && igClassControllerFromSpec == "") ||
+			igClassControllerFromSpec == CONTROLLER
+	default:
+		supported = ingressClass == "" && allowEmptyClass ||
+			igClassControllerFromSpec == path.Join(CONTROLLER, controllerClass)
+	}
+
+	return supported
 }
 
-// IsSyntheticRoute reports whether an HTTPRoute name was produced by
-// mangleIngressName. The ':' prefix is illegal in a Kubernetes object name, so a
-// real HTTPRoute can never carry it: this is a tamper-proof origin marker.
-func IsSyntheticRoute(name string) bool {
-	return strings.HasPrefix(name, syntheticRouteNamePrefix)
-}
-
-// ParseSyntheticRoute is the inverse of mangleIngressName. Given a synthetic
-// route namespace and name, it returns the source Ingress key and the rule
-// suffix. isSynthetic is false when name is not a synthetic route name.
-//
-// The prefix is stripped first, then the remaining "name:suffix" is cut at the
-// first ':'. The Ingress name is a valid Kubernetes name (so it never contains
-// ':'), making the cut unambiguous even if a suffix ever contained one.
-func ParseSyntheticRoute(routeNamespace, name string) (ingress types.NamespacedName, suffix string, isSynthetic bool) {
-	rest, ok := strings.CutPrefix(name, syntheticRouteNamePrefix)
-	if !ok {
-		return types.NamespacedName{}, "", false
+func (b *IngressBuilderImpl) deleteRoutesForIngress(ingKey types.NamespacedName) {
+	for key, treeRoute := range b.GateTree.HTTPRoutes {
+		if src, _, ok := utils.ParseSyntheticRoute(key.Namespace, key.Name); ok && src == ingKey {
+			b.ClusterStore.Updates.HTTPRoutes[key] = store.Update[*gatewayv1.HTTPRoute]{
+				OldObject: treeRoute.K8sResource,
+				Status:    store.StatusDeleted,
+			}
+		}
 	}
-	ingressName, suffix, ok := strings.Cut(rest, ":")
-	if !ok {
-		return types.NamespacedName{}, "", false
-	}
-	return types.NamespacedName{Namespace: routeNamespace, Name: ingressName}, suffix, true
 }

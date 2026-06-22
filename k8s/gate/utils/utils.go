@@ -21,12 +21,23 @@ import (
 	"slices"
 	"strings"
 
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
+
+// syntheticRouteNamePrefix prefixes the name of every synthetic HTTPRoute.
+// It contains ':' on purpose: ':' is illegal in a Kubernetes object name
+// (RFC 1123 subdomain), so the prefix doubles as a tamper-proof origin marker.
+// A real HTTPRoute can never carry such a name (the API server rejects it), so
+// a synthetic route can neither collide with a real one in the
+// GateTree.HTTPRoutes map nor be impersonated by a user-controlled resource —
+// no annotation or label is needed, and none is set so that real Ingress
+// annotations can be carried through later without conflict.
+const syntheticRouteNamePrefix = "ing:"
 
 type ObjectWithTimestamp interface {
 	GetCreationTimestamp() metav1.Time
@@ -262,4 +273,36 @@ func ConvertSliceWithFunc[U, V any](arg []U, f func(U) V) []V {
 
 func ConvertV1Alpha2HostnameToString(hostname v1alpha2.Hostname) string {
 	return string(hostname)
+}
+
+// MangleIngressName builds the collision-free name of a synthetic HTTPRoute,
+// e.g. "ing:my-app:0" for the first rule of Ingress "my-app".
+func MangleIngressName(ingress *networkingv1.Ingress, suffix string) string {
+	return fmt.Sprintf("%s%s:%s", syntheticRouteNamePrefix, ingress.Name, suffix)
+}
+
+// IsSyntheticRoute reports whether an HTTPRoute name was produced by
+// mangleIngressName. The ':' prefix is illegal in a Kubernetes object name, so a
+// real HTTPRoute can never carry it: this is a tamper-proof origin marker.
+func IsSyntheticRoute(name string) bool {
+	return strings.HasPrefix(name, syntheticRouteNamePrefix)
+}
+
+// ParseSyntheticRoute is the inverse of mangleIngressName. Given a synthetic
+// route namespace and name, it returns the source Ingress key and the rule
+// suffix. isSynthetic is false when name is not a synthetic route name.
+//
+// The prefix is stripped first, then the remaining "name:suffix" is cut at the
+// first ':'. The Ingress name is a valid Kubernetes name (so it never contains
+// ':'), making the cut unambiguous even if a suffix ever contained one.
+func ParseSyntheticRoute(routeNamespace, name string) (ingress types.NamespacedName, suffix string, isSynthetic bool) {
+	rest, ok := strings.CutPrefix(name, syntheticRouteNamePrefix)
+	if !ok {
+		return types.NamespacedName{}, "", false
+	}
+	ingressName, suffix, ok := strings.Cut(rest, ":")
+	if !ok {
+		return types.NamespacedName{}, "", false
+	}
+	return types.NamespacedName{Namespace: routeNamespace, Name: ingressName}, suffix, true
 }
