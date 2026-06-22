@@ -204,6 +204,10 @@ func Add(
 		DisableIPv6:                cfg.HaproxyParams.DisableIPv6,
 		HugServiceLabelKey:         cfg.HugServiceLabelKey,
 		HugServiceLabelVal:         cfg.HugServiceLabelVal,
+		IngressClass:               cfg.IngressClass,
+		EmptyIngressClass:          cfg.EmptyIngressClass,
+		HTTPIngressFrontendPort:    cfg.HTTPIngressFrontendPort,
+		HTTPSIngressFrontendPort:   cfg.HTTPSIngressFrontendPort,
 	}
 	haproxyCfgMgrParams, err := haproxy.NewHaproxyConfMgrParams(extractGVK, cfg.HaproxyParams, certificateStorage, mapsStorage)
 	if err != nil {
@@ -618,6 +622,9 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 					k8spredicate.And(
 						k8spredicate.GenerationChangedPredicate{},
 						predicate.NewNamespacePredicate(cfg.Namespaces),
+						predicate.AnnotationPredicate{Annotation: "cr-backend"},
+						// TODO see if still relevant
+						predicate.AnnotationPredicate{Annotation: "ingress.class"},
 					),
 				),
 				// TODO see if enqueue is necessary for service
@@ -633,7 +640,12 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 						predicate.NewNamespacePredicate(cfg.Namespaces),
 					),
 				),
-				// TODO see if enqueue is necessary for service
+				WithEnqueueFor([]enqueueForParams{
+					{
+						watchSource: objtypes.ObjectTypeIngressClass,
+						enqueueFunc: enqueueIngressesForIngressClass,
+					},
+				}),
 			},
 		},
 	}

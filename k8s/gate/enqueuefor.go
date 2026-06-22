@@ -22,6 +22,7 @@ import (
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -672,6 +673,28 @@ func enqueueHugConfForGlobalCR(ctrlclient client.Client, extractGVK utilsk8s.Ext
 						Name:      hugConf.GetName(),
 					}})
 				}
+			}
+		}
+		return requests
+	}
+}
+
+// enqueueIngressesForIngressClass returns a handler.EventHandler that enqueues all Ingresses
+// that reference the IngressClass.
+func enqueueIngressesForIngressClass(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctx context.Context, o client.Object) []reconcile.Request {
+		ingressList := &networkingv1.IngressList{}
+		if err := ctrlclient.List(ctx, ingressList); err != nil {
+			return nil
+		}
+		var requests []reconcile.Request
+		ingressClass := o.(*networkingv1.IngressClass)
+		for _, ingress := range ingressList.Items {
+			if utils.PointerDefaultValueIfNil(ingress.Spec.IngressClassName) == ingressClass.ObjectMeta.Name {
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: ingress.Namespace,
+					Name:      ingress.Name,
+				}})
 			}
 		}
 		return requests
