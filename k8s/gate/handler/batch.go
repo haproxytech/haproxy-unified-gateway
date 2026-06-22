@@ -62,10 +62,20 @@ type GateTreeConfig struct {
 	ControllerConfNsName types.NamespacedName
 	// ControllerName
 	ControllerName string
+	// IngressClass is the value of --ingress.class used to select managed Ingresses.
+	IngressClass string
 	// HugServiceLabelKey is the label key used to identify the HUG Kubernetes service.
 	HugServiceLabelKey string
 	// HugServiceLabelVal is the label value used to identify the HUG Kubernetes service.
 	HugServiceLabelVal string
+	// HTTPIngressFrontendPort is the listening port of the HTTP listener of the
+	// synthetic Ingress gateway.
+	HTTPIngressFrontendPort int
+	// HTTPSIngressFrontendPort is the listening port of the HTTPS listener of the
+	// synthetic Ingress gateway.
+	HTTPSIngressFrontendPort int
+	// EmptyIngressClass, when IngressClass is set, also selects classless Ingresses.
+	EmptyIngressClass bool
 	// StoreCertificatesOnDisk is a flag that indicates to the gate library to store certificates on disk
 	StoreCertificateOnDisk bool
 	// StoreMapsOnDisk is a flag that indicates to the gate library to store maps on disk
@@ -88,8 +98,8 @@ type eventHandlerImpl struct {
 	statusUpdater        status.StatusUpdater
 	hugServiceReconciler *hugservice.ServiceReconciler
 	logger               *slog.Logger
-	config               GateTreeConfig
 	treeBuilder          GateTreeBuilder
+	config               GateTreeConfig
 	statusOnce           sync.Once
 }
 
@@ -132,8 +142,12 @@ func NewEventHandlerImpl(
 			Updated: make(map[string]certificate.CrtListData),
 			Deleted: make(map[string]certificate.CrtListData),
 		},
-		PortBinder:     caps.Detect(context.Background(), capsLogger),
-		ControllerName: gateTreeConfig.ControllerName,
+		PortBinder:               caps.Detect(context.Background(), capsLogger),
+		ControllerName:           gateTreeConfig.ControllerName,
+		IngressClass:             gateTreeConfig.IngressClass,
+		EmptyIngressClass:        gateTreeConfig.EmptyIngressClass,
+		HTTPIngressFrontendPort:  gateTreeConfig.HTTPIngressFrontendPort,
+		HTTPSIngressFrontendPort: gateTreeConfig.HTTPSIngressFrontendPort,
 	}
 
 	treeBuilder := NewGateTreeBuilder(&controllerStore, gateTreeConfig)

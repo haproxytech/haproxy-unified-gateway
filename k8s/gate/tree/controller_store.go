@@ -49,6 +49,16 @@ type ControllerStore struct {
 	mapPort2Listeners         map[gatewayv1.PortNumber]listenerConflict
 	// from config
 	ControllerName string
+	// IngressClass is the value of --ingress.class used to select managed Ingresses.
+	IngressClass string
+	// EmptyIngressClass, when IngressClass is set, also selects classless Ingresses.
+	EmptyIngressClass bool
+	// HTTPIngressFrontendPort is the listening port of the HTTP listener of the
+	// synthetic Ingress gateway.
+	HTTPIngressFrontendPort int
+	// HTTPSIngressFrontendPort is the listening port of the HTTPS listener of the
+	// synthetic Ingress gateway.
+	HTTPSIngressFrontendPort int
 }
 
 type CertUpdates struct {

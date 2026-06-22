@@ -27,13 +27,17 @@ Available options:
 | DefaultsSectionName | `name`(string) |
 | DisableIPv4 |  |
 | DisableIPv6 |  |
+| EmptyIngressClass | `empty`(bool) |
 | FrontendNameTemplate | `template`(string) |
 | GatewayNsName | `gatewayNsName`(types.NamespacedName) |
+| HTTPIngressFrontendPort | `port`(int) |
+| HTTPSIngressFrontendPort | `port`(int) |
 | HaproxyConfChannel | `treeCh`(*ast.ChanType) |
 | HaproxyDirs | `dirs`(haproxy.HaproxyDirs) |
 | HugServiceLabel | `key`(string) |
 | IPV4BindAddr | `addr`(string) |
 | IPV6BindAddr | `addr`(string) |
+| IngressClass | `ingressClass`(string) |
 | InitialStructured | `structuredCfg`(structured.Structured) |
 | KubeConfig | `kubeconfig`(string) |
 | LeaderElectionConfig | `leaderElectionEnabled`(bool) |
@@ -139,6 +143,19 @@ import (
 controller, err := controller.New(opt.DisableIPv6())
 ```
 
+### EmptyIngressClass
+
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.EmptyIngressClass(empty))
+```
+
 ### FrontendNameTemplate
 
 
@@ -163,6 +180,32 @@ import (
 )
 
 controller, err := controller.New(opt.GatewayNsName(gatewayNsName))
+```
+
+### HTTPIngressFrontendPort
+
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.HTTPIngressFrontendPort(port))
+```
+
+### HTTPSIngressFrontendPort
+
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.HTTPSIngressFrontendPort(port))
 ```
 
 ### HaproxyConfChannel
@@ -228,6 +271,19 @@ import (
 )
 
 controller, err := controller.New(opt.IPV6BindAddr(addr))
+```
+
+### IngressClass
+
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.IngressClass(ingressClass))
 ```
 
 ### InitialStructured

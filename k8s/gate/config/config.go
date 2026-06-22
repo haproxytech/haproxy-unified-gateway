@@ -68,6 +68,10 @@ type Configuration struct {
 	HugServiceLabelKey string
 	// HugServiceLabelVal is the label value used to identify the HUG Kubernetes service.
 	HugServiceLabelVal string
+	// IngressClass is the value of --ingress.class: the IngressClass controller
+	// suffix this instance handles. Empty means it matches the bare controller
+	// name "haproxy.org/ingress-controller".
+	IngressClass string
 	// LeaderElectionConfig contains the configuration for leader election.
 	LeaderElectionConfig LeaderElectionConfig
 	// Namespaces is a list of namespaces to watch.
@@ -92,8 +96,17 @@ type Configuration struct {
 	//
 	// This applies to all controllers.
 	CacheResyncPeriod time.Duration
+	// HTTPIngressFrontendPort is the listening port of the HTTP listener of the
+	// synthetic Ingress gateway.
+	HTTPIngressFrontendPort int
+	// HTTPSIngressFrontendPort is the listening port of the HTTPS listener of the
+	// synthetic Ingress gateway.
+	HTTPSIngressFrontendPort int
 	// InitialStructuredHaproxyConfOK bool
 	InitialStructuredHaproxyConfOK bool
+	// EmptyIngressClass, when IngressClass is set, also selects Ingresses that
+	// have no ingressClassName.
+	EmptyIngressClass bool
 }
 
 // ControllerPodConfig contains information about this Pod.

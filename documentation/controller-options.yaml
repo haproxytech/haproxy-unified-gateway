@@ -36,6 +36,12 @@ DisableIPv6:
     name: DisableIPv6
     comment: ""
     args: []
+EmptyIngressClass:
+    name: EmptyIngressClass
+    comment: ""
+    args:
+        - name: empty
+          type: bool
 FrontendNameTemplate:
     name: FrontendNameTemplate
     comment: ""
@@ -48,6 +54,18 @@ GatewayNsName:
     args:
         - name: gatewayNsName
           type: types.NamespacedName
+HTTPIngressFrontendPort:
+    name: HTTPIngressFrontendPort
+    comment: ""
+    args:
+        - name: port
+          type: int
+HTTPSIngressFrontendPort:
+    name: HTTPSIngressFrontendPort
+    comment: ""
+    args:
+        - name: port
+          type: int
 HaproxyConfChannel:
     name: HaproxyConfChannel
     comment: ""
@@ -77,6 +95,12 @@ IPV6BindAddr:
     comment: ""
     args:
         - name: addr
+          type: string
+IngressClass:
+    name: IngressClass
+    comment: ""
+    args:
+        - name: ingressClass
           type: string
 InitialStructured:
     name: InitialStructured
