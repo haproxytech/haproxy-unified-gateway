@@ -28,27 +28,23 @@ func NewReferenceManager(controllerStore *ControllerStore) *ReferenceManager {
 	}
 }
 
+// UpdateRefences refreshes the Secret references derived from Gateway listener
+// TLS certificateRefs (consumed by the CertificateBuilder via ReferencedSecrets).
+//
+// The previous snapshot is taken on every call so the CertificateBuilder's
+// current-vs-previous diff stays correct even on cycles without a rebuild. The
+// reference set itself is fully rebuilt from the current Gateways only when a
+// Gateway changed this cycle: a stateless rebuild avoids maintaining the reverse
+// index incrementally, and the cost stays in-memory (the cert I/O is made
+// incremental by the diff downstream).
 func (rm *ReferenceManager) UpdateRefences() {
-	rm.cleanReferencedObjects()
-	needsSecretsReferencesRebuild := rm.needsReferencedSecretsRebuild()
+	rm.ReferencedObjects.PreviousReferencedSecrets = rm.ReferencedObjects.ReferencedSecrets.DeepCopy()
 
-	if !needsSecretsReferencesRebuild {
+	if len(rm.ClusterStore.Updates.Gateways) == 0 {
 		return
 	}
 
-	// Secrets refs
-	rm.buildSecretReferences()
-}
-
-func (rm *ReferenceManager) needsReferencedSecretsRebuild() bool {
-	return len(rm.ClusterStore.Updates.Gateways) > 0
-}
-
-func (rm *ReferenceManager) buildSecretReferences() {
-	if needsSecretsReferencesRebuild := rm.needsReferencedSecretsRebuild(); !needsSecretsReferencesRebuild {
-		return
-	}
-
+	rm.ReferencedObjects.ReferencedSecrets.CleanOwners()
 	for _, gw := range rm.ClusterStore.Gateways {
 		for _, listener := range gw.Spec.Listeners {
 			if listener.TLS == nil {
@@ -64,12 +60,5 @@ func (rm *ReferenceManager) buildSecretReferences() {
 				rm.ReferencedObjects.ReferencedSecrets.AddReferencedByUsingKeys(rm.Logger, nsName, NewListenerKey(gw, listener), ownerGVK)
 			}
 		}
-	}
-}
-
-func (rm *ReferenceManager) cleanReferencedObjects() {
-	rm.ReferencedObjects.PreviousReferencedSecrets = rm.ReferencedObjects.ReferencedSecrets.DeepCopy()
-	if rm.needsReferencedSecretsRebuild() {
-		rm.ReferencedObjects.ReferencedSecrets.CleanOwners()
 	}
 }
