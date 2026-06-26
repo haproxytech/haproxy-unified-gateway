@@ -25,6 +25,7 @@ import (
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -187,6 +188,11 @@ func (s *StatusUpdaterImpl) prepareGatewayUpdates(ctx context.Context, gateways 
 		if gw.TreeStatus.Status == store.StatusDeleted || gw.TreeStatus.Status == "" {
 			continue
 		}
+		// The synthetic ingress gateway is controller-owned and has no API object,
+		// so there is no cluster resource to patch a status on.
+		if gw.GatewayForIngress {
+			continue
+		}
 		s.config.logger.LogAttrs(
 			context.Background(), slog.LevelDebug,
 			"Preparing status update",
@@ -226,6 +232,10 @@ func (s *StatusUpdaterImpl) prepareHTTPRouteUpdates(httpRoutes map[types.Namespa
 	var writes PreparedStatusUpdates
 	for _, route := range httpRoutes {
 		if route.TreeStatus.Status == store.StatusDeleted || route.TreeStatus.Status == "" {
+			continue
+		}
+		// Ingress-derived synthetic routes have no API object to patch a status on.
+		if utils.IsSyntheticName(route.K8sResource.Name) {
 			continue
 		}
 		s.config.logger.LogAttrs(

@@ -231,6 +231,20 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 		}
 	}
 
+	// The synthetic ingress gateway only accepts synthetic (Ingress-derived)
+	// routes. parentRef.Name (ObjectName) has no character pattern, so a real
+	// HTTPRoute could name "ing:gateway"; reject it explicitly here. This is
+	// defence in depth: the synthetic gateway's empty namespace already makes it
+	// unreachable from a real parentRef, but this guard keeps the reservation
+	// independent of that namespace choice.
+	if utils.IsSyntheticName(treeGw.K8sResource.Name) && !utils.IsSyntheticName(r.K8sResource.Name) {
+		return checkParentRefResult{
+			Managed:    true,
+			Valid:      false,
+			Conditions: rc.ConditionNotAcceptedRouteReasonNotAllowedByListeners(),
+		}
+	}
+
 	// Compute the list of attachable Listeners
 	attachableListeners := make([]*Listener, 0)
 	if parentRef.SectionName != nil {

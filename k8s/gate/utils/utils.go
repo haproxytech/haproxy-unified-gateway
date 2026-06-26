@@ -281,10 +281,10 @@ func MangleIngressName(ingress *networkingv1.Ingress, suffix string) string {
 	return fmt.Sprintf("%s%s:%s", syntheticRouteNamePrefix, ingress.Name, suffix)
 }
 
-// IsSyntheticRoute reports whether an HTTPRoute name was produced by
+// IsSyntheticName reports whether the name was produced by
 // mangleIngressName. The ':' prefix is illegal in a Kubernetes object name, so a
-// real HTTPRoute can never carry it: this is a tamper-proof origin marker.
-func IsSyntheticRoute(name string) bool {
+// real Kubernetes resource can never carry it: this is a tamper-proof origin marker.
+func IsSyntheticName(name string) bool {
 	return strings.HasPrefix(name, syntheticRouteNamePrefix)
 }
 
@@ -305,4 +305,36 @@ func ParseSyntheticRoute(routeNamespace, name string) (ingress types.NamespacedN
 		return types.NamespacedName{}, "", false
 	}
 	return types.NamespacedName{Namespace: routeNamespace, Name: ingressName}, suffix, true
+}
+
+// AnnotationPrefixes are the prefixes under which HAProxy Ingress/Service
+// annotations are recognised. An annotation may be used bare (no prefix) or with
+// any of these; e.g. "cr-backend", "haproxy.org/cr-backend" and
+// "haproxy.com/cr-backend" are equivalent.
+var AnnotationPrefixes = []string{
+	"ingress.kubernetes.io",
+	"haproxy.org",
+	"haproxy.com",
+}
+
+// AnnotationKeys returns the accepted keys for an annotation suffix: the bare
+// suffix first, then each supported prefix joined with '/'.
+func AnnotationKeys(suffix string) []string {
+	keys := make([]string, 0, len(AnnotationPrefixes)+1)
+	keys = append(keys, suffix)
+	for _, prefix := range AnnotationPrefixes {
+		keys = append(keys, prefix+"/"+suffix)
+	}
+	return keys
+}
+
+// AnnotationValue returns the value of the first present key among the accepted
+// keys for suffix (bare then prefixed), and whether one was found.
+func AnnotationValue(annotations map[string]string, suffix string) (string, bool) {
+	for _, key := range AnnotationKeys(suffix) {
+		if value, ok := annotations[key]; ok {
+			return value, true
+		}
+	}
+	return "", false
 }

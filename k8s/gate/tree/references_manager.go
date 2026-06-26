@@ -14,6 +14,11 @@
 package tree
 
 import (
+	"maps"
+	"slices"
+
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 )
@@ -45,7 +50,7 @@ func (rm *ReferenceManager) UpdateRefences() {
 	}
 
 	rm.ReferencedObjects.ReferencedSecrets.CleanOwners()
-	for _, gw := range rm.ClusterStore.Gateways {
+	for _, gw := range rm.gatewaysForSecretRefs() {
 		for _, listener := range gw.Spec.Listeners {
 			if listener.TLS == nil {
 				continue
@@ -61,4 +66,32 @@ func (rm *ReferenceManager) UpdateRefences() {
 			}
 		}
 	}
+}
+
+// gatewaysForSecretRefs returns the Gateways whose listener certificateRefs feed
+// ReferencedSecrets: the real Gateways from the store, plus the synthetic ingress
+// gateway. The synthetic gateway is deliberately kept out of ClusterStore.Gateways
+// (which must stay a faithful mirror of real K8s objects); it is merged into a
+// local copy here rather than polluting the store.
+func (rm *ReferenceManager) gatewaysForSecretRefs() []*gatewayv1.Gateway {
+	gateways := slices.Collect(maps.Values(rm.ClusterStore.Gateways))
+	if synthetic := rm.syntheticGateway(); synthetic != nil {
+		gateways = append(gateways, synthetic)
+	}
+	return gateways
+}
+
+// syntheticGateway returns the synthetic ingress gateway for this cycle, or nil if
+// there is none. It is taken from Updates.Gateways when (re)injected this cycle,
+// otherwise from the persisted GateTree: a full ReferencedSecrets rebuild can be
+// triggered by an unrelated real Gateway change on a cycle where the synthetic
+// gateway was not re-injected, and its certificateRefs must survive that rebuild.
+func (rm *ReferenceManager) syntheticGateway() *gatewayv1.Gateway {
+	if upd, ok := rm.ClusterStore.Updates.Gateways[syntheticGatewayNamespacedName]; ok && upd.NewObject != nil {
+		return upd.NewObject
+	}
+	if treeGw, ok := rm.GateTree.Gateways[syntheticGatewayNamespacedName]; ok && treeGw != nil {
+		return treeGw.K8sResource
+	}
+	return nil
 }

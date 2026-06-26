@@ -47,6 +47,13 @@ func TestComputeListenerConflicts(t *testing.T) {
 		}
 	}
 
+	// Helper to create a synthetic ingress Gateway (GatewayForIngress set).
+	mkIngressGateway := func(name string, creationTime time.Time, listeners ...gatewayv1.Listener) *Gateway {
+		g := mkGateway(name, creationTime, listeners...)
+		g.GatewayForIngress = true
+		return g
+	}
+
 	// Helper to create a Listener
 	mkListener := func(name string, port int, protocol gatewayv1.ProtocolType, hostname *string) gatewayv1.Listener {
 		var h *gatewayv1.Hostname
@@ -251,6 +258,28 @@ func TestComputeListenerConflicts(t *testing.T) {
 			expected: map[string]listenerConflictCondition{
 				"default/old_http":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
 				"default/new_https": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategorySecure},
+			},
+		},
+		{
+			// GatewayForIngress must win the port conflict even when the synthetic
+			// gateway is newer than the real one. It is processed first regardless
+			// of creation timestamp, so it claims the port's protocol category and
+			// the real listener conflicts. Without that rule the oldest-wins default
+			// would let the real (older) Gateway displace ingress traffic.
+			name: "Ingress gateway wins the port conflict despite being newer",
+			gateways: []*Gateway{
+				mkGateway(
+					"real", t1,
+					mkListener("http", 80, gatewayv1.HTTPProtocolType, nil),
+				),
+				mkIngressGateway(
+					"ing", t2,
+					mkListener("https", 80, gatewayv1.HTTPSProtocolType, nil),
+				),
+			},
+			expected: map[string]listenerConflictCondition{
+				"default/ing_https": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
+				"default/real_http": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{

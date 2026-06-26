@@ -67,12 +67,28 @@ func (b *IngressBuilderImpl) ComputeTreeUpdates() {
 		if rawIngress == nil {
 			continue
 		}
-		if !b.isIngressClassSupported(utils.PointerDefaultValueIfNil(rawIngress.Spec.IngressClassName),
-			b.IngressClass, b.EmptyIngressClass) {
+		ingressClassName := utils.PointerDefaultValueIfNil(rawIngress.Spec.IngressClassName)
+		eligible := b.isIngressClassSupported(ingressClassName, b.IngressClass, b.EmptyIngressClass)
+		b.Logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
+			"Processing Ingress update",
+			slog.String("ingress", updatedIngressNamespacedName.String()),
+			slog.String("status", string(updatedIngress.Status)),
+			slog.String("ingressClassName", ingressClassName),
+			slog.Bool("eligible", eligible),
+		)
+		if !eligible {
 			b.deleteRoutesForIngress(updatedIngressNamespacedName)
 			continue
 		}
-		for key, route := range b.convertIngressToHTTPRoutes(rawIngress) {
+		routes := b.convertIngressToHTTPRoutes(rawIngress)
+		b.Logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
+			"Translated Ingress into synthetic HTTPRoutes",
+			slog.String("ingress", updatedIngressNamespacedName.String()),
+			slog.Int("syntheticRoutes", len(routes)),
+		)
+		for key, route := range routes {
 			b.ClusterStore.Updates.HTTPRoutes[key] = store.Update[*gatewayv1.HTTPRoute]{
 				NewObject: route,
 				Status:    updatedIngress.Status,
@@ -121,13 +137,13 @@ func (b *IngressBuilderImpl) ingressPathsToRules(
 ) []gatewayv1.HTTPRouteRule {
 	rules := make([]gatewayv1.HTTPRouteRule, 0, len(paths))
 	for i := range paths {
-		path := paths[i]
-		backendRef, ok := b.ingressBackendToRef(ingress, &path.Backend, backendCRFilters)
+		httpPath := paths[i]
+		backendRef, ok := b.ingressBackendToRef(ingress, &httpPath.Backend, backendCRFilters)
 		if !ok {
 			continue
 		}
 		rules = append(rules, gatewayv1.HTTPRouteRule{
-			Matches:     []gatewayv1.HTTPRouteMatch{ingressPathToMatch(path)},
+			Matches:     []gatewayv1.HTTPRouteMatch{ingressPathToMatch(httpPath)},
 			BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
 		})
 	}
@@ -135,9 +151,10 @@ func (b *IngressBuilderImpl) ingressPathsToRules(
 }
 
 // ingressBackendToRef converts an Ingress backend to an HTTPBackendRef. Only
-// Service backends referenced by numeric port are supported for now; Resource
-// backends and named ports are skipped (reported false) with a log. backendCRFilters
-// (a Backend CR ExtensionRef, possibly nil) is attached to the produced backendRef.
+// Service backends are supported (Resource backends are skipped with a log). The
+// Service port may be numeric or named; a named port is resolved against the
+// referenced Service in the Ingress namespace. backendCRFilters (a Backend CR
+// ExtensionRef, possibly nil) is attached to the produced backendRef.
 func (b *IngressBuilderImpl) ingressBackendToRef(
 	ingress *networkingv1.Ingress, backend *networkingv1.IngressBackend,
 	backendCRFilters []gatewayv1.HTTPRouteFilter,
@@ -146,12 +163,11 @@ func (b *IngressBuilderImpl) ingressBackendToRef(
 		b.logSkippedBackend(ingress, "only Service backends are supported")
 		return gatewayv1.HTTPBackendRef{}, false
 	}
-	if backend.Service.Port.Number == 0 {
-		b.logSkippedBackend(ingress, "named service ports are not supported yet")
+	port, ok := b.resolveServicePort(ingress, backend.Service)
+	if !ok {
 		return gatewayv1.HTTPBackendRef{}, false
 	}
 
-	port := gatewayv1.PortNumber(backend.Service.Port.Number)
 	return gatewayv1.HTTPBackendRef{
 		BackendRef: gatewayv1.BackendRef{
 			BackendObjectReference: gatewayv1.BackendObjectReference{
@@ -166,12 +182,52 @@ func (b *IngressBuilderImpl) ingressBackendToRef(
 	}, true
 }
 
-func (b *IngressBuilderImpl) logSkippedBackend(ingress *networkingv1.Ingress, reason string) {
-	b.Logger.LogAttrs(context.Background(), slog.LevelWarn,
-		"Skipping Ingress backend",
+// resolveServicePort returns the numeric Service port for an Ingress backend. A
+// numeric port is used as-is; a named port is looked up on the referenced Service
+// (which lives in the Ingress namespace). Resolution fails (reported false, with a
+// log) when the Service is not yet in the store or has no port with that name. A
+// Service change re-enqueues the Ingress (enqueueIngressesForService), so a
+// transient miss is retried on the next batch.
+func (b *IngressBuilderImpl) resolveServicePort(
+	ingress *networkingv1.Ingress, svc *networkingv1.IngressServiceBackend,
+) (gatewayv1.PortNumber, bool) {
+	if svc.Port.Number != 0 {
+		return gatewayv1.PortNumber(svc.Port.Number), true
+	}
+	if svc.Port.Name == "" {
+		b.logSkippedBackend(ingress, "service backend has neither a port number nor a port name")
+		return 0, false
+	}
+
+	key := types.NamespacedName{Namespace: ingress.Namespace, Name: svc.Name}
+	service := b.ClusterStore.Services[key]
+	if service == nil {
+		b.logSkippedBackend(
+			ingress, "service not found to resolve named port",
+			slog.String("service", key.String()),
+			slog.String("portName", svc.Port.Name),
+		)
+		return 0, false
+	}
+	for _, p := range service.Spec.Ports {
+		if p.Name == svc.Port.Name {
+			return gatewayv1.PortNumber(p.Port), true
+		}
+	}
+	b.logSkippedBackend(
+		ingress, "named port not found on service",
+		slog.String("service", key.String()),
+		slog.String("portName", svc.Port.Name),
+	)
+	return 0, false
+}
+
+func (b *IngressBuilderImpl) logSkippedBackend(ingress *networkingv1.Ingress, reason string, attrs ...slog.Attr) {
+	all := append([]slog.Attr{
 		slog.String("ingress", client.ObjectKeyFromObject(ingress).String()),
 		slog.String("reason", reason),
-	)
+	}, attrs...)
+	b.Logger.LogAttrs(context.Background(), slog.LevelWarn, "Skipping Ingress backend", all...)
 }
 
 // ingressBackendCRFilters reads the Backend CR annotation and, when present and
@@ -188,7 +244,7 @@ func (b *IngressBuilderImpl) logSkippedBackend(ingress *networkingv1.Ingress, re
 // namespace (k8s/gate/haproxy/backends.go), so an out-of-namespace CR needs a
 // dedicated mechanism.
 func (b *IngressBuilderImpl) ingressBackendCRFilters(ingress *networkingv1.Ingress) []gatewayv1.HTTPRouteFilter {
-	value, ok := ingress.Annotations[ingressBackendCRAnnotation]
+	value, ok := utils.AnnotationValue(ingress.Annotations, ingressBackendCRAnnotation)
 	if !ok || value == "" {
 		return nil
 	}
@@ -200,7 +256,8 @@ func (b *IngressBuilderImpl) ingressBackendCRFilters(ingress *networkingv1.Ingre
 	}
 
 	if namespace != ingress.Namespace {
-		b.Logger.LogAttrs(context.Background(), slog.LevelWarn,
+		b.Logger.LogAttrs(
+			context.Background(), slog.LevelWarn,
 			"Ignoring cross-namespace Backend CR annotation on Ingress (not supported yet)",
 			slog.String("ingress", client.ObjectKeyFromObject(ingress).String()),
 			slog.String(ingressBackendCRAnnotation, value),
@@ -222,8 +279,11 @@ func (b *IngressBuilderImpl) ingressBackendCRFilters(ingress *networkingv1.Ingre
 // namespace is the real Ingress namespace (so same-namespace backend resolution
 // holds); only the name is mangled to guarantee a collision-free identity.
 //
-// TODO: ParentRefs are left empty here. Resolving the target Gateway (the
-// "ingress gateway" option discussed) is a separate part and will populate them.
+// The parentRef targets the synthetic ingress gateway by its fixed key. Its
+// empty namespace is reachable only because this route is built in memory (a
+// real route could not set parentRef.Namespace to "", which the API rejects) —
+// that is what lets ingress routes attach where real routes cannot. SectionName
+// is omitted so the route attaches to every compatible listener (http + https).
 func newSyntheticHTTPRoute(
 	ingress *networkingv1.Ingress, name, host string, rules []gatewayv1.HTTPRouteRule,
 ) *gatewayv1.HTTPRoute {
@@ -232,12 +292,24 @@ func newSyntheticHTTPRoute(
 		hostnames = []gatewayv1.Hostname{gatewayv1.Hostname(host)}
 	}
 
+	group := gatewayv1.Group(gatewayv1.GroupName)
+	kind := gatewayv1.Kind("Gateway")
+	gatewayNamespace := gatewayv1.Namespace(syntheticGatewayNamespacedName.Namespace)
+
 	return &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ingress.Namespace,
 			Name:      name,
 		},
 		Spec: gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{{
+					Group:     &group,
+					Kind:      &kind,
+					Namespace: &gatewayNamespace,
+					Name:      gatewayv1.ObjectName(syntheticGatewayNamespacedName.Name),
+				}},
+			},
 			Hostnames: hostnames,
 			Rules:     rules,
 		},
@@ -253,10 +325,10 @@ func newSyntheticHTTPRoute(
 // leaves its meaning "up to the IngressClass"; for now it falls back to the
 // PathPrefix default like a nil pathType, but HAProxy could also interpret it as
 // a regular expression (PathMatchRegularExpression). Revisit before GA.
-func ingressPathToMatch(path networkingv1.HTTPIngressPath) gatewayv1.HTTPRouteMatch {
+func ingressPathToMatch(httpPath networkingv1.HTTPIngressPath) gatewayv1.HTTPRouteMatch {
 	matchType := gatewayv1.PathMatchPathPrefix
-	if path.PathType != nil {
-		switch *path.PathType {
+	if httpPath.PathType != nil {
+		switch *httpPath.PathType {
 		case networkingv1.PathTypeExact:
 			matchType = gatewayv1.PathMatchExact
 		case networkingv1.PathTypePrefix:
@@ -264,7 +336,7 @@ func ingressPathToMatch(path networkingv1.HTTPIngressPath) gatewayv1.HTTPRouteMa
 		}
 	}
 
-	value := path.Path
+	value := httpPath.Path
 	if value == "" {
 		value = "/"
 	}
@@ -274,28 +346,34 @@ func ingressPathToMatch(path networkingv1.HTTPIngressPath) gatewayv1.HTTPRouteMa
 	}
 }
 
-func (b *IngressBuilderImpl) isIngressClassSupported(ingressClass, controllerClass string, allowEmptyClass bool) bool {
+// isIngressClassSupported reports whether an Ingress with the given
+// ingressClassName is handled by this controller instance, following the
+// IngressClass eligibility rules. It lives on ControllerStore so both the
+// Ingress and synthetic-gateway builders can use it.
+func (b *ControllerStore) isIngressClassSupported(ingressClassFromIngress, controllerIngressClassParameter string,
+	allowEmptyClass bool,
+) bool {
 	var supported bool
-	var igClassControllerFromSpec string
-	if igClassResource := b.ClusterStore.IngressClasses[types.NamespacedName{Name: ingressClass}]; igClassResource != nil {
-		igClassControllerFromSpec = igClassResource.Spec.Controller
+	var ingressgClassControllerFromSpec string
+	if ingressClassResource := b.ClusterStore.IngressClasses[types.NamespacedName{Name: ingressClassFromIngress}]; ingressClassResource != nil {
+		ingressgClassControllerFromSpec = ingressClassResource.Spec.Controller
 	}
-	if ingressClass == "" {
+	if ingressClassFromIngress == "" {
 		for _, ingressClass := range b.ClusterStore.IngressClasses {
 			if ingressClass.Annotations["ingressclass.kubernetes.io/is-default-class"] == "true" {
-				igClassControllerFromSpec = ingressClass.Spec.Controller
+				ingressgClassControllerFromSpec = ingressClass.Spec.Controller
 				break
 			}
 		}
 	}
 
-	switch controllerClass {
+	switch controllerIngressClassParameter {
 	case "":
-		supported = (ingressClass == "" && igClassControllerFromSpec == "") ||
-			igClassControllerFromSpec == CONTROLLER
+		supported = (ingressClassFromIngress == "" && ingressgClassControllerFromSpec == "") ||
+			ingressgClassControllerFromSpec == CONTROLLER
 	default:
-		supported = ingressClass == "" && allowEmptyClass ||
-			igClassControllerFromSpec == path.Join(CONTROLLER, controllerClass)
+		supported = ingressClassFromIngress == "" && allowEmptyClass ||
+			ingressgClassControllerFromSpec == path.Join(CONTROLLER, controllerIngressClassParameter)
 	}
 
 	return supported

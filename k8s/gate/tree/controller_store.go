@@ -19,6 +19,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/certificate"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -118,6 +119,9 @@ func (b *ControllerStore) ResetCrtListUpdates() {
 func (b *ControllerStore) CheckGatewayClassExists(gwcName string) bool {
 	gwcKey := types.NamespacedName{Name: gwcName}
 	_, ok := b.GateTree.GatewayClasses[gwcKey]
+	if !ok && utils.IsSyntheticName(gwcName) {
+		return true
+	}
 	return ok
 }
 

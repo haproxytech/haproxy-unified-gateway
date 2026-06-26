@@ -40,6 +40,10 @@ func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(result diffs.HaproxyConf
 		if !ok {
 			continue
 		}
+		// The synthetic ingress gateway has no API object to patch a status on.
+		if gw.GatewayForIngress {
+			continue
+		}
 		gwKey := gwKey
 		params := StatusUpdateParams[*gatewayv1.Gateway]{
 			Object:        objtypes.ObjectTypeGateway,

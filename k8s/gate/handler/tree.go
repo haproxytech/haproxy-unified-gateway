@@ -19,10 +19,15 @@ import (
 )
 
 type GateTreeBuilder struct {
-	cfg GateTreeConfig
 	*tree.ControllerStore
 	referenceManager *tree.ReferenceManager
-	builder          []tree.Builder
+	// preBuilders run before the reference rebuild (UpdateRefences); postBuilders
+	// run after it. Same mechanism, different phase: a pre-builder produces state
+	// the reference rebuild and the main builders must already see the
+	// synthetic ingress gateway injected into Updates.Gateways.
+	preBuilders  []tree.Builder
+	postBuilders []tree.Builder
+	cfg          GateTreeConfig
 }
 
 func (b *GateTreeBuilder) GetTree() *tree.GateTree {
@@ -52,8 +57,8 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 	// --------------
 	// Gateway
 	gatewayBuilder := tree.NewGatewayBuilder(tree.GatewayBuilderParams{
-		ControllerStore:       controllerStore,
-		CertificateStorage:    cfg.CertificateStorage,
+		ControllerStore: controllerStore,
+		// CertificateStorage:    cfg.CertificateStorage,
 		ReferenceGrantManager: referenceGrantManager,
 	})
 
@@ -99,11 +104,19 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 	// Ingress
 
 	ingressBuilder := tree.NewIngressBuilder(controllerStore)
+
+	// Synthetic ingress gateway: run as a pre-step (see buildGateTree), not in the
+	// builder loop, so it is injected before the secret-reference rebuild.
+	syntheticGatewayBuilder := tree.NewSyntheticGatewayBuilder(controllerStore)
+
 	treeBuilder := GateTreeBuilder{
 		cfg:              cfg,
 		referenceManager: referenceManager,
 		ControllerStore:  controllerStore,
-		builder: []tree.Builder{
+		preBuilders: []tree.Builder{
+			syntheticGatewayBuilder,
+		},
+		postBuilders: []tree.Builder{
 			ingressBuilder,
 			referenceGrantBuilder,
 			secretBuilder,
@@ -127,6 +140,14 @@ func (b *GateTreeBuilder) buildGateTree() {
 	b.startBuild()
 
 	// --------------
+	// Pre-builders: run before the reference rebuild so their injected state
+	// (e.g. the synthetic ingress gateway in Updates.Gateways) is visible to it.
+	// --------------
+	for _, builder := range b.preBuilders {
+		builder.ComputeTreeUpdates()
+	}
+
+	// --------------
 	// Update the references
 	// --------------
 	b.referenceManager.UpdateRefences()
@@ -139,7 +160,7 @@ func (b *GateTreeBuilder) buildGateTree() {
 	// --------------
 	// Build the GateTree
 	// --------------
-	for _, builder := range b.builder {
+	for _, builder := range b.postBuilders {
 		builder.ComputeTreeUpdates()
 	}
 }
@@ -150,7 +171,10 @@ func (b *GateTreeBuilder) startBuild() {
 	// --------------
 	// Clean TreeUpdates
 	// --------------
-	for _, builder := range b.builder {
+	for _, builder := range b.preBuilders {
+		builder.CleanTreeUpdates()
+	}
+	for _, builder := range b.postBuilders {
 		builder.CleanTreeUpdates()
 	}
 	b.ControllerStore.CleanInstalledVersionsUpdates()

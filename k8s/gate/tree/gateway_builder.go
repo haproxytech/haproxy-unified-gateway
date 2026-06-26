@@ -15,9 +15,9 @@ package tree
 
 import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -25,7 +25,7 @@ import (
 var _ Builder = &GatewayBuilderImpl{}
 
 type GatewayBuilderImpl struct {
-	certStorage storage.CertificateStorage
+	// certStorage storage.CertificateStorage
 	*ControllerStore
 	referenceGrantManager *ReferenceGrantManager
 }
@@ -44,15 +44,15 @@ type listenerConflictCondition struct {
 type listenerConflict map[client.ObjectKey]listenerConflictCondition // map[listenerKey] for example "default/gw1_l1"
 
 type GatewayBuilderParams struct {
-	storage.CertificateStorage
+	// storage.CertificateStorage
 	*ControllerStore
 	*ReferenceGrantManager
 }
 
 func NewGatewayBuilder(params GatewayBuilderParams) Builder {
 	return &GatewayBuilderImpl{
-		ControllerStore:       params.ControllerStore,
-		certStorage:           params.CertificateStorage,
+		ControllerStore: params.ControllerStore,
+		// certStorage:           params.CertificateStorage,
 		referenceGrantManager: params.ReferenceGrantManager,
 	}
 }
@@ -113,9 +113,6 @@ func (b *GatewayBuilderImpl) computeTreeGatewayUpdate(gwKey client.ObjectKey, gw
 		treeGw = alreadyUnmanagedTreeGw
 	}
 
-	if treeGw.K8sResource.Name == "ingress" && treeGw.K8sResource.Namespace == "ingress" {
-		treeGw.GatewayForIngress = true
-	}
 	switch gwUpdate.Status {
 	case store.StatusUpserted:
 		if treeGw != nil {
@@ -123,7 +120,9 @@ func (b *GatewayBuilderImpl) computeTreeGatewayUpdate(gwKey client.ObjectKey, gw
 		} else {
 			treeGw = NewGateway(gwUpdate.NewObject)
 		}
-
+		if utils.IsSyntheticName(treeGw.K8sResource.Name) {
+			treeGw.GatewayForIngress = true
+		}
 		// Do we keep it in Managed or Unmanaged???
 		b.processManagementChecks(treeGw)
 

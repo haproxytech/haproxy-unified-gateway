@@ -14,6 +14,8 @@
 package tree
 
 import (
+	"slices"
+
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
@@ -40,6 +42,23 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 	// 0- Compute conflicts only between non-deleted Gateways and their listeners. Deleted Gateways and their listeners are ignored in the conflict detection.
 	// 1- Sort all non-deleted Gateways by creation timestamp
 	sortedGws := utils.MapToSortedListByCreationTimestamp(b.nonDeletedGateways())
+
+	// 1b- The synthetic ingress gateway must win port conflicts against real
+	// Gateways so Ingress traffic is never displaced. listenersPerPort lets the
+	// first listener seen on a port set that port's protocol category, so process
+	// ingress gateways first. The sort is stable, so the oldest-wins order is kept
+	// within each group. This makes the win explicit via GatewayForIngress rather
+	// than relying on the synthetic gateway's zero creation timestamp.
+	slices.SortStableFunc(sortedGws, func(a, b *Gateway) int {
+		switch {
+		case a.GatewayForIngress == b.GatewayForIngress:
+			return 0
+		case a.GatewayForIngress:
+			return -1
+		default:
+			return 1
+		}
+	})
 
 	portListeners := b.listenersPerPort(sortedGws)
 

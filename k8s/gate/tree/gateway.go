@@ -24,6 +24,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 
 	"github.com/imdario/mergo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -229,6 +230,15 @@ func (g *Gateway) checkGatewayClassIsValid(controllerStore ControllerStore) {
 	treeGwc, ok := controllerStore.GateTree.GatewayClasses[gwcKey]
 
 	if ok && treeGwc.Valid {
+		g.CheckValidGatewayClass = CheckResult{
+			Valid:      true,
+			Conditions: conditions.NewGatewayAcceptedOK(),
+		}
+		return
+	}
+	if !ok && utils.IsSyntheticName(string(g.K8sResource.Spec.GatewayClassName)) {
+		// The synthetic ingress gateway references a synthetic GatewayClass that
+		// does not exist in the API; treat it as valid (it is controller-owned).
 		g.CheckValidGatewayClass = CheckResult{
 			Valid:      true,
 			Conditions: conditions.NewGatewayAcceptedOK(),
