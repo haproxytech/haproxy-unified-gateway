@@ -241,6 +241,22 @@ func Add(
 	return nil
 }
 
+// ingressChangePredicate fires for an Ingress in a watched namespace when its
+// spec changes (generation) or when its cr-backend annotation changes. The
+// annotation is watched under every accepted prefix (bare, haproxy.org, …) since
+// they are equivalent. The class comes from spec.ingressClassName only (the
+// ingress.class annotation is no longer used for Ingress eligibility upstream).
+func ingressChangePredicate(namespaces []string) k8spredicate.Predicate {
+	changePredicates := []k8spredicate.Predicate{k8spredicate.GenerationChangedPredicate{}}
+	for _, key := range utils.AnnotationKeys("cr-backend") {
+		changePredicates = append(changePredicates, predicate.AnnotationPredicate{Annotation: key})
+	}
+	return k8spredicate.And(
+		predicate.NewNamespacePredicate(namespaces),
+		k8spredicate.Or(changePredicates...),
+	)
+}
+
 //revive:disable:function-length
 func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cfg config.Configuration, mgr manager.Manager, eventCh chan any) error {
 	type ctlrCfg struct {
@@ -618,16 +634,23 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 			name:       "Ingress",
 			objectType: objtypes.ObjectTypeIngress,
 			options: []Option{
-				WithK8sPredicate(
-					k8spredicate.And(
-						k8spredicate.GenerationChangedPredicate{},
+				WithK8sPredicate(ingressChangePredicate(cfg.Namespaces)),
+				WithEnqueueFor([]enqueueForParams{{
+					watchSource: objtypes.ObjectTypeService,
+					enqueueFunc: enqueueIngressesForService,
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
 						predicate.NewNamespacePredicate(cfg.Namespaces),
-						predicate.AnnotationPredicate{Annotation: "cr-backend"},
-						// TODO see if still relevant
-						predicate.AnnotationPredicate{Annotation: "ingress.class"},
 					),
-				),
-				// TODO see if enqueue is necessary for service
+				}}),
+				WithEnqueueFor([]enqueueForParams{{
+					watchSource: objtypes.ObjectTypeBackend,
+					enqueueFunc: enqueueIngressForBackendCR,
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				}}),
 			},
 		},
 		{
