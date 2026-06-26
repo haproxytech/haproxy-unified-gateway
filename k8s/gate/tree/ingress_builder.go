@@ -188,7 +188,7 @@ func (b *IngressBuilderImpl) logSkippedBackend(ingress *networkingv1.Ingress, re
 // namespace (k8s/gate/haproxy/backends.go), so an out-of-namespace CR needs a
 // dedicated mechanism.
 func (b *IngressBuilderImpl) ingressBackendCRFilters(ingress *networkingv1.Ingress) []gatewayv1.HTTPRouteFilter {
-	value, ok := ingress.Annotations[ingressBackendCRAnnotation]
+	value, ok := utils.AnnotationValue(ingress.Annotations, ingressBackendCRAnnotation)
 	if !ok || value == "" {
 		return nil
 	}
@@ -222,8 +222,11 @@ func (b *IngressBuilderImpl) ingressBackendCRFilters(ingress *networkingv1.Ingre
 // namespace is the real Ingress namespace (so same-namespace backend resolution
 // holds); only the name is mangled to guarantee a collision-free identity.
 //
-// TODO: ParentRefs are left empty here. Resolving the target Gateway (the
-// "ingress gateway" option discussed) is a separate part and will populate them.
+// The parentRef targets the synthetic ingress gateway by its fixed key. Its
+// empty namespace is reachable only because this route is built in memory (a
+// real route could not set parentRef.Namespace to "", which the API rejects) —
+// that is what lets ingress routes attach where real routes cannot. SectionName
+// is omitted so the route attaches to every compatible listener (http + https).
 func newSyntheticHTTPRoute(
 	ingress *networkingv1.Ingress, name, host string, rules []gatewayv1.HTTPRouteRule,
 ) *gatewayv1.HTTPRoute {
@@ -232,12 +235,24 @@ func newSyntheticHTTPRoute(
 		hostnames = []gatewayv1.Hostname{gatewayv1.Hostname(host)}
 	}
 
+	group := gatewayv1.Group(gatewayv1.GroupName)
+	kind := gatewayv1.Kind("Gateway")
+	gatewayNamespace := gatewayv1.Namespace(syntheticGatewayNamespacedName.Namespace)
+
 	return &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ingress.Namespace,
 			Name:      name,
 		},
 		Spec: gatewayv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{{
+					Group:     &group,
+					Kind:      &kind,
+					Namespace: &gatewayNamespace,
+					Name:      gatewayv1.ObjectName(syntheticGatewayNamespacedName.Name),
+				}},
+			},
 			Hostnames: hostnames,
 			Rules:     rules,
 		},
@@ -274,28 +289,33 @@ func ingressPathToMatch(path networkingv1.HTTPIngressPath) gatewayv1.HTTPRouteMa
 	}
 }
 
-func (b *IngressBuilderImpl) isIngressClassSupported(ingressClass, controllerClass string, allowEmptyClass bool) bool {
+// isIngressClassSupported reports whether an Ingress with the given
+// ingressClassName is handled by this controller instance, following the
+// IngressClass eligibility rules. It lives on ControllerStore so both the
+// Ingress and synthetic-gateway builders can use it.
+func (b *ControllerStore) isIngressClassSupported(ingressClassFromIngress, controllerIngressClassParameter string,
+	allowEmptyClass bool) bool {
 	var supported bool
-	var igClassControllerFromSpec string
-	if igClassResource := b.ClusterStore.IngressClasses[types.NamespacedName{Name: ingressClass}]; igClassResource != nil {
-		igClassControllerFromSpec = igClassResource.Spec.Controller
+	var ingressgClassControllerFromSpec string
+	if ingressClassResource := b.ClusterStore.IngressClasses[types.NamespacedName{Name: ingressClassFromIngress}]; ingressClassResource != nil {
+		ingressgClassControllerFromSpec = ingressClassResource.Spec.Controller
 	}
-	if ingressClass == "" {
+	if ingressClassFromIngress == "" {
 		for _, ingressClass := range b.ClusterStore.IngressClasses {
 			if ingressClass.Annotations["ingressclass.kubernetes.io/is-default-class"] == "true" {
-				igClassControllerFromSpec = ingressClass.Spec.Controller
+				ingressgClassControllerFromSpec = ingressClass.Spec.Controller
 				break
 			}
 		}
 	}
 
-	switch controllerClass {
+	switch controllerIngressClassParameter {
 	case "":
-		supported = (ingressClass == "" && igClassControllerFromSpec == "") ||
-			igClassControllerFromSpec == CONTROLLER
+		supported = (ingressClassFromIngress == "" && ingressgClassControllerFromSpec == "") ||
+			ingressgClassControllerFromSpec == CONTROLLER
 	default:
-		supported = ingressClass == "" && allowEmptyClass ||
-			igClassControllerFromSpec == path.Join(CONTROLLER, controllerClass)
+		supported = ingressClassFromIngress == "" && allowEmptyClass ||
+			ingressgClassControllerFromSpec == path.Join(CONTROLLER, controllerIngressClassParameter)
 	}
 
 	return supported

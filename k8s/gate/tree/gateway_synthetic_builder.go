@@ -17,6 +17,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 )
 
 var (
@@ -38,8 +40,13 @@ func NewSyntheticGatewayBuilder(controllerStore *ControllerStore) Builder {
 }
 
 func (b *SyntheticGatewayBuilderImpl) ComputeTreeUpdates() {
+	// Re-inject only when an Ingress or a Secret changed, or when the synthetic
+	// gateway does not exist yet. Existence is checked against the GateTree (where
+	// the GatewayBuilder materialises it): the synthetic gateway is intentionally
+	// kept out of ClusterStore.Gateways.
 	if len(b.ClusterStore.Updates.Ingresses) == 0 &&
-		b.ClusterStore.Gateways[syntheticGatewayNamespacedName] != nil {
+		len(b.ClusterStore.Updates.Secrets) == 0 &&
+		b.GateTree.Gateways[syntheticGatewayNamespacedName] != nil {
 		return
 	}
 
@@ -53,9 +60,13 @@ func (b *SyntheticGatewayBuilderImpl) ComputeTreeUpdates() {
 		Spec: gatewayv1.GatewaySpec{
 			GatewayClassName: "ing:gatewayclass",
 			Listeners: []gatewayv1.Listener{
-				{Name: "http", Port: gatewayv1.PortNumber(b.ControllerStore.HTTPIngressFrontendPort), Protocol: gatewayv1.HTTPProtocolType},
-				{Name: "https", Port: gatewayv1.PortNumber(b.ControllerStore.HTTPSIngressFrontendPort), Protocol: gatewayv1.HTTPSProtocolType,
-					TLS: &gatewayv1.ListenerTLSConfig{ /* CertificateRefs vide */ }},
+				{Name: "http",
+					Port:     gatewayv1.PortNumber(b.ControllerStore.HTTPIngressFrontendPort),
+					Protocol: gatewayv1.HTTPProtocolType},
+				{Name: "https",
+					Port:     gatewayv1.PortNumber(b.ControllerStore.HTTPSIngressFrontendPort),
+					Protocol: gatewayv1.HTTPSProtocolType,
+					TLS:      b.httpsListenerTLS()},
 			},
 			// Hostname nil to match everything.
 		},
@@ -65,3 +76,60 @@ func (b *SyntheticGatewayBuilderImpl) ComputeTreeUpdates() {
 }
 
 func (*SyntheticGatewayBuilderImpl) CleanTreeUpdates() {}
+
+// httpsListenerTLS builds the TLS config of the synthetic https listener. Its
+// CertificateRefs are the TLS secrets of every managed Ingress; the listener
+// serves plain HTTP while the list is empty (no Ingress TLS yet).
+func (b *SyntheticGatewayBuilderImpl) httpsListenerTLS() *gatewayv1.ListenerTLSConfig {
+	mode := gatewayv1.TLSModeTerminate
+	return &gatewayv1.ListenerTLSConfig{
+		Mode:            &mode,
+		CertificateRefs: b.ingressTLSCertificateRefs(),
+	}
+}
+
+// ingressTLSCertificateRefs collects, from every managed Ingress, a
+// SecretObjectReference per spec.tls[].secretName. Each ref carries the Ingress
+// namespace (SecretObjectReference, unlike ExtensionRef, is namespace-aware);
+// cross-namespace access is allowed because the synthetic gateway bypasses
+// ReferenceGrant for its certificate refs. Duplicates (same namespace/name) are
+// collapsed.
+func (b *SyntheticGatewayBuilderImpl) ingressTLSCertificateRefs() []gatewayv1.SecretObjectReference {
+	secretGroup := gatewayv1.Group("")
+	secretKind := gatewayv1.Kind("Secret")
+
+	seen := make(map[types.NamespacedName]struct{})
+	var refs []gatewayv1.SecretObjectReference
+
+	for _, ingress := range b.ClusterStore.Ingresses {
+		if ingress == nil {
+			continue
+		}
+		if !b.isIngressClassSupported(
+			utils.PointerDefaultValueIfNil(ingress.Spec.IngressClassName),
+			b.IngressClass, b.EmptyIngressClass,
+		) {
+			continue
+		}
+		for _, tls := range ingress.Spec.TLS {
+			if tls.SecretName == "" {
+				continue
+			}
+			key := types.NamespacedName{Namespace: ingress.Namespace, Name: tls.SecretName}
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+
+			namespace := gatewayv1.Namespace(ingress.Namespace)
+			refs = append(refs, gatewayv1.SecretObjectReference{
+				Group:     &secretGroup,
+				Kind:      &secretKind,
+				Name:      gatewayv1.ObjectName(tls.SecretName),
+				Namespace: &namespace,
+			})
+		}
+	}
+
+	return refs
+}
