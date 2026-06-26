@@ -26,6 +26,7 @@ import (
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	apiv1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -842,13 +843,94 @@ func enqueueIngressesForIngressClass(ctrlclient client.Client, _ utilsk8s.Extrac
 			return nil
 		}
 		var requests []reconcile.Request
-		ingressClass := o.(*networkingv1.IngressClass)
+		ingressClass, ok := o.(*networkingv1.IngressClass)
+		if !ok {
+			return nil
+		}
 		for _, ingress := range ingressList.Items {
 			if utils.PointerDefaultValueIfNil(ingress.Spec.IngressClassName) == ingressClass.ObjectMeta.Name {
 				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
 					Namespace: ingress.Namespace,
 					Name:      ingress.Name,
 				}})
+			}
+		}
+		return requests
+	}
+}
+
+// enqueueIngressesForService returns a handler.EventHandler that enqueues all Ingresses
+// that reference the Service.
+func enqueueIngressesForService(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctx context.Context, o client.Object) []reconcile.Request {
+		ingressList := &networkingv1.IngressList{}
+		if err := ctrlclient.List(ctx, ingressList); err != nil {
+			return nil
+		}
+		var requests []reconcile.Request
+		service, ok := o.(*v1.Service)
+		if !ok {
+			return nil
+		}
+		serviceName := service.Name
+		serviceNamespace := service.Namespace
+
+		for _, ingress := range ingressList.Items {
+			for _, rule := range ingress.Spec.Rules {
+				if rule.HTTP == nil {
+					continue
+				}
+				for _, path := range rule.HTTP.Paths {
+					ingressSvc := path.Backend.Service
+					if ingressSvc == nil {
+						continue
+					}
+					if ingressSvc.Name == serviceName && ingress.Namespace == serviceNamespace {
+						requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+							Namespace: ingress.Namespace,
+							Name:      ingress.Name,
+						}})
+					}
+				}
+			}
+		}
+		return requests
+	}
+}
+
+// enqueueIngressForBackendCR returns a handler.EventHandler that enqueues all Ingress
+// related to an observed Backend.
+func enqueueIngressForBackendCR(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctx context.Context, o client.Object) []reconcile.Request {
+		var requests []reconcile.Request
+
+		// Ingress
+		ingressList := &networkingv1.IngressList{}
+
+		if err := ctrlclient.List(ctx, ingressList, &client.ListOptions{}); err != nil {
+			return []reconcile.Request{}
+		}
+		backend, ok := o.(*v3.Backend)
+		if !ok {
+			return []reconcile.Request{}
+		}
+		for _, ingress := range ingressList.Items {
+			if crBackendAnnotation, hasBackendCRAnnotation := utils.AnnotationValue(ingress.Annotations, "cr-backend"); hasBackendCRAnnotation {
+				items := strings.SplitN(crBackendAnnotation, "/", 2)
+				backendCRNamespace := ingress.Namespace
+				var backendCRName string
+				if len(items) == 2 {
+					backendCRNamespace = items[0]
+					backendCRName = items[1]
+				} else {
+					backendCRName = items[0]
+				}
+				if backend.Namespace == backendCRNamespace && backend.Name == backendCRName {
+					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+						Namespace: ingress.Namespace,
+						Name:      ingress.Name,
+					}})
+				}
 			}
 		}
 		return requests
