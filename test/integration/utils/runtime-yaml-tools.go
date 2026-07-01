@@ -24,6 +24,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,6 +49,16 @@ const (
 	timeout  = time.Second * 10
 	interval = time.Second * 1
 )
+
+// sortedKeys returns the keys of m in ascending order.
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
 
 // CreateRuntimeObjectsFromYAMLFiles reads YAML files, decodes them into Kubernetes objects,
 // and creates them using the provided client.
@@ -93,7 +104,13 @@ func CreateRuntimeObjectsFromYAMLFiles(params RuntimeYamlParams) error {
 		mnames[manifest] = struct{}{}
 	}
 
-	for fileName, filePath := range fileList {
+	// Apply manifests in a deterministic (sorted) order. Map iteration is random,
+	// which makes the resource creation order non-deterministic; that in turn makes
+	// creationTimestamp-based tie-breaking (e.g. the listener conflict "oldest-wins"
+	// resolution) depend on run speed, so the same fixtures can yield different
+	// winners between a fast run and a slow (debug) one.
+	for _, fileName := range sortedKeys(fileList) {
+		filePath := fileList[fileName]
 		// if ManifestNames is not empty, then consider only those ones
 		if len(mnames) > 0 {
 			if _, ok := mnames[fileName]; !ok {
