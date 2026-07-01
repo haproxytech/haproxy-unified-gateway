@@ -1,0 +1,77 @@
+// Copyright 2025 HAProxy Technologies LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package ingress
+
+import (
+	"path"
+	"testing"
+
+	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
+	"github.com/stretchr/testify/suite"
+)
+
+type IngressTestSuite struct {
+	IngressSuite
+}
+
+func TestIngressTestSuite(t *testing.T) {
+	suite.Run(t, new(IngressTestSuite))
+}
+
+// An Ingress whose IngressClass is bound to the controller (bare
+// haproxy.org/ingress-controller name, matching the integration controller
+// which runs with no --ingress-class) is translated into a synthetic HTTPRoute
+// attached to the synthetic ingress gateway, so the referenced Service backend
+// is created.
+func (s *IngressTestSuite) Test_Ingress_Accepted() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "ok")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+}
+
+// When two Ingresses are created in the same batch, one bound to the controller
+// and one bound to a foreign controller, only the eligible one is translated.
+// The eligible backend acts as a synchronisation barrier: once it exists the
+// batch has been processed, so the foreign Ingress backend must be absent.
+func (s *IngressTestSuite) Test_Ingress_NotAccepted_ForeignController() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "foreign_controller")
+	manifests := []string{
+		"ingressclass-hug.yaml", "ingressclass-foreign.yaml",
+		"http-echo.yaml", "http-echo-foreign.yaml",
+		"ingress-hug.yaml", "ingress-foreign.yaml",
+	}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Barrier: the eligible Ingress backend is created.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+	// The foreign-controller Ingress must not have produced a backend.
+	s.ExpectBackendsDoNotExist(s.Test().Ctx, "hug_e2e-tests-ingress_http-echo-foreign_80__")
+}
+
+// An Ingress backend that references its Service port by name is resolved to the
+// Service's numeric port, so the backend is created just like a numeric-port one.
+func (s *IngressTestSuite) Test_Ingress_NamedServicePort() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "named_port")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Service port "web" resolves to 80, so the backend name uses 80.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+}

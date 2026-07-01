@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-echo
+spec:
+  ingressClassName: hug
+  rules:
+    - host: named.ingress
+      http:
+        paths:
+          - path: /named
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  name: web

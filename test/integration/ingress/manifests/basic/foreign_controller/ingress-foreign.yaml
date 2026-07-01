@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-foreign
+spec:
+  ingressClassName: foreign
+  rules:
+    - host: foreign.ingress
+      http:
+        paths:
+          - path: /path1
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo-foreign
+                port:
+                  number: 80
