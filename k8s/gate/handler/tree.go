@@ -113,11 +113,7 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 		cfg:              cfg,
 		referenceManager: referenceManager,
 		ControllerStore:  controllerStore,
-		preBuilders: []tree.Builder{
-			syntheticGatewayBuilder,
-		},
 		postBuilders: []tree.Builder{
-			ingressBuilder,
 			referenceGrantBuilder,
 			secretBuilder,
 			gatewayClassBuilder,
@@ -129,6 +125,16 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 			tlsRouteBuilder,
 			defaultsCRBuilder,
 		},
+	}
+
+	// Ingress support is opt-in. When disabled, neither the synthetic gateway nor
+	// the Ingress translation runs, so a pure Gateway API deployment is untouched.
+	// When enabled, the synthetic gateway is injected as a pre-builder (before the
+	// reference rebuild) and the Ingress builder runs first among the post-builders
+	// (referenceGrantBuilder must see its output).
+	if cfg.EnableIngress {
+		treeBuilder.preBuilders = append(treeBuilder.preBuilders, syntheticGatewayBuilder)
+		treeBuilder.postBuilders = append([]tree.Builder{ingressBuilder}, treeBuilder.postBuilders...)
 	}
 
 	return treeBuilder

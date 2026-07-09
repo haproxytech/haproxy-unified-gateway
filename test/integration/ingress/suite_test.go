@@ -31,7 +31,7 @@ type IngressSuite struct {
 }
 
 func (s *IngressSuite) SetupSuite() {
-	s.BaseSuite.SetupSuite("", 0)
+	s.BaseSuite.SetupSuite("", 0, func(t *base.IntTest) { t.EnableIngress = true })
 }
 
 func (s *IngressSuite) TearDownSuite() {

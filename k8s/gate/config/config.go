@@ -107,6 +107,10 @@ type Configuration struct {
 	// EmptyIngressClass, when IngressClass is set, also selects Ingresses that
 	// have no ingressClassName.
 	EmptyIngressClass bool
+	// EnableIngress turns on Kubernetes Ingress support: the Ingress/IngressClass
+	// controllers and the synthetic-gateway/Ingress tree builders. Disabled by
+	// default so a pure Gateway API deployment is unaffected.
+	EnableIngress bool
 }
 
 // ControllerPodConfig contains information about this Pod.

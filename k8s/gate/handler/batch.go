@@ -76,6 +76,8 @@ type GateTreeConfig struct {
 	HTTPSIngressFrontendPort int
 	// EmptyIngressClass, when IngressClass is set, also selects classless Ingresses.
 	EmptyIngressClass bool
+	// EnableIngress turns on the Ingress and synthetic-gateway tree builders.
+	EnableIngress bool
 	// StoreCertificatesOnDisk is a flag that indicates to the gate library to store certificates on disk
 	StoreCertificateOnDisk bool
 	// StoreMapsOnDisk is a flag that indicates to the gate library to store maps on disk

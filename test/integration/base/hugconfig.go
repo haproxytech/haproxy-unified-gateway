@@ -65,6 +65,7 @@ func hugConfig(test *IntTest, t *testing.T) hugconfig.HUGConfig {
 			logging.LogCategoryHugService:    slog.LevelDebug,
 			logging.LogCategoryMapsStorage:   slog.LevelDebug,
 		},
+		EnableIngress: test.EnableIngress,
 	}
 
 	_ = hconfig.Init(external)

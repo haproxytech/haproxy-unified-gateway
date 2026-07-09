@@ -70,6 +70,7 @@ type HUGConfig struct {
 	Version                      bool `ff:"          long: version,                         usage: 'print version and exit'"`
 	JobCheckCRD                  bool `ff:"          long: job-check-crd,                   usage: 'run CRD refresh job and exit'"`
 	EmptyIngressClass            bool `ff:"          long: empty-ingress-class,                        usage: 'when ingress-class is set, also handle Ingresses that have no ingressClassName'"`
+	EnableIngress                bool `ff:"          long: enable-ingress,                             usage: 'enable Kubernetes Ingress support: watch Ingress/IngressClass and translate them onto a synthetic Gateway (disabled by default)'"`
 }
 
 //revive:enable:line-length-limit

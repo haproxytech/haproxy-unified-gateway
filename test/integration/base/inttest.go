@@ -97,6 +97,10 @@ type IntTest struct {
 	HaproxyCfgDir     string
 	RuntimeSocketPath string
 	PIDFilePath       string
+	// EnableIngress opts the controller under test into Kubernetes Ingress
+	// support. Off by default so suites that don't exercise Ingress do not get
+	// the synthetic gateway's extra frontends.
+	EnableIngress bool
 }
 
 func NewIntTest(t *testing.T, crdRelativePath string, levelsUp int) (test IntTest, err error) {

@@ -63,10 +63,14 @@ func (b *BaseSuite) Test() IntTest {
 	return b.test
 }
 
-func (b *BaseSuite) SetupSuite(crdRelativePath string, levelsUp int) {
+func (b *BaseSuite) SetupSuite(crdRelativePath string, levelsUp int, opts ...func(*IntTest)) {
 	var err error
 	b.test, err = NewIntTest(b.T(), crdRelativePath, levelsUp)
 	b.Require().NoError(err)
+
+	for _, o := range opts {
+		o(&b.test)
+	}
 
 	b.test.StartTestEnv(b.T())
 	b.startMetricsSampler()
