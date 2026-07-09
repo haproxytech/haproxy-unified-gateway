@@ -1128,8 +1128,15 @@ func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 		}
 		beMd := b.metadataManager.BackendMetaData(routesInfo)
 
-		// All entries for a given backend name share the same filters and match prefix
-		// (because the name is derived from their hash). Pick any one entry.
+		// All entries for a given backend name share the same filters, because the
+		// name is derived from their filter hash (see getFilterHash). So backendRef
+		// and ruleFilters are safe to take from any one entry.
+		//
+		// The match prefix is NOT part of that hash, so co-owners may in principle
+		// differ on it. This only bites URLRewrite/RequestRedirect ReplacePrefixMatch:
+		// two rules with an identical rewrite filter but different matched prefixes on
+		// the same service collide onto one backend and get an arbitrary prefix. That
+		// is a pre-existing limitation, independent of the Ingress feature.
 		var first BackendImpactedInCycle
 		for _, impactedBE := range mapImpactedBEs {
 			first = impactedBE
