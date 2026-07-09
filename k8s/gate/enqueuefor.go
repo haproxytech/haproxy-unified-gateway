@@ -910,10 +910,10 @@ func enqueueIngressForBackendCR(ctrlclient client.Client, _ utilsk8s.ExtractGVK)
 		if err := ctrlclient.List(ctx, ingressList, &client.ListOptions{}); err != nil {
 			return []reconcile.Request{}
 		}
-		backend, ok := o.(*v3.Backend)
-		if !ok {
-			return []reconcile.Request{}
-		}
+		// o is either HUG's own *v3.Backend or the foreign kubernetes-ingress
+		// Backend CR observed as a generic *unstructured.Unstructured. Both
+		// satisfy client.Object, so only the namespaced name is needed to match
+		// the cr-backend annotation.
 		for _, ingress := range ingressList.Items {
 			if crBackendAnnotation, hasBackendCRAnnotation := utils.AnnotationValue(ingress.Annotations, "cr-backend"); hasBackendCRAnnotation {
 				items := strings.SplitN(crBackendAnnotation, "/", 2)
@@ -925,7 +925,7 @@ func enqueueIngressForBackendCR(ctrlclient client.Client, _ utilsk8s.ExtractGVK)
 				} else {
 					backendCRName = items[0]
 				}
-				if backend.Namespace == backendCRNamespace && backend.Name == backendCRName {
+				if o.GetNamespace() == backendCRNamespace && o.GetName() == backendCRName {
 					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
 						Namespace: ingress.Namespace,
 						Name:      ingress.Name,

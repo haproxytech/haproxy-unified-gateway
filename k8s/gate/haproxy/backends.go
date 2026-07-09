@@ -580,7 +580,7 @@ func (b *HaproxyConfMgrImpl) cleanupUnreferencedBackendsForHTTPRoutes(ownerType 
 func (b *HaproxyConfMgrImpl) newBackend(backendName string, md metadata.MetaData,
 	backendRef gatewayv1.HTTPBackendRef, ruleFilters []gatewayv1.HTTPRouteFilter, matchPrefix string,
 	sessionPersistence *gatewayv1.SessionPersistence,
-	httpTimeouts *gatewayv1.HTTPRouteTimeouts, namespace string, isHTTPBackend bool,
+	httpTimeouts *gatewayv1.HTTPRouteTimeouts, namespace string, isHTTPBackend bool, isIngressBackend bool,
 ) (*models.Backend, error) {
 	// First, we merge the Backend CRDs from filters, if there are some
 	// Backend CRDs are defined in the Filters of type: ExtensionRef
@@ -614,7 +614,7 @@ func (b *HaproxyConfMgrImpl) newBackend(backendName string, md metadata.MetaData
 	}
 
 	// Now Merge with the Backend CRs
-	errs := b.mergeWithBackendCRs(backendRef, newBackend, namespace)
+	errs := b.mergeWithBackendCRs(backendRef, newBackend, namespace, isIngressBackend)
 	// Handling session persistence with cookie
 	if sessionPersistence != nil &&
 		utils.PointerDefaultValueIfNil(sessionPersistence.Type) == gatewayv1.CookieBasedSessionPersistence {
@@ -701,7 +701,9 @@ func (b *HaproxyConfMgrImpl) newRedirectBackend(backendName string, md metadata.
 	return be, nil
 }
 
-func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBackendRef, newBackend *models.Backend, namespace string) utils.Errors {
+func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBackendRef, newBackend *models.Backend,
+	namespace string, isIngressBackend bool,
+) utils.Errors {
 	var errs utils.Errors
 
 	// Now Merge with the Backend CRs
@@ -743,8 +745,7 @@ func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBacken
 			Namespace: namespace,
 			Name:      string(filter.ExtensionRef.Name),
 		}
-		_ = nsName
-		beCR, ok := b.controllerStore.ClusterStore.BackendCRs[nsName]
+		beCR, ok := b.resolveBackendCR(nsName, isIngressBackend)
 		if !ok {
 			continue
 		}
@@ -826,6 +827,60 @@ func (b *HaproxyConfMgrImpl) mergeServiceBackendCR(newBackend *models.Backend, b
 	cr := beCR.DeepCopy()
 	cr.Spec.BackendBase.Name = ""
 	return mergo.Merge(newBackend, &cr.Spec.Backend, mergo.WithOverride)
+}
+
+// resolveBackendCR resolves the Backend CR referenced by nsName. The reference
+// is resolved strictly by origin: a Gateway API HTTPRoute (isIngressBackend
+// false) may only reference HUG's own Backend CR (group gate.v3.haproxy.org),
+// and an Ingress (isIngressBackend true) may only reference the foreign
+// kubernetes-ingress Backend CR. Without this separation, resolving by name
+// alone would let an Ingress borrow a HUG Backend CR (or vice versa) since both
+// stores are keyed by namespaced name.
+//
+// The foreign Backend CR is watched and stored generically as an
+// *unstructured.Unstructured so HUG carries no build-time dependency on the
+// kubernetes-ingress project. The two CRDs are structurally identical and differ
+// only by API group, so the unstructured payload is converted into a *v3.Backend
+// on the fly. A conversion failure is logged and treated as "not found" so a
+// single malformed CR cannot break the whole backend build.
+func (b *HaproxyConfMgrImpl) resolveBackendCR(nsName k8stypes.NamespacedName, isIngressBackend bool) (*v3.Backend, bool) {
+	if !isIngressBackend {
+		beCR, ok := b.controllerStore.ClusterStore.BackendCRs[nsName]
+		return beCR, ok
+	}
+
+	u, ok := b.controllerStore.ClusterStore.IngressBackendCRs[nsName]
+	if !ok {
+		return nil, false
+	}
+
+	// Round-trip through JSON rather than runtime.DefaultUnstructuredConverter:
+	// v3.BackendSpec inlines client-native's models.Backend, whose fields rely on
+	// custom JSON (un)marshalling. JSON decoding takes the exact same path the API
+	// server uses to decode HUG's own Backend CR, so the two stay consistent; the
+	// reflection-based converter would silently skip those custom hooks.
+	data, err := json.Marshal(u.Object)
+	if err != nil {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError,
+			"Failed to marshal foreign Ingress Backend CR",
+			logging.LogAttrKey(nsName),
+			logging.LogAttrError(err),
+		)
+		return nil, false
+	}
+
+	beCR := &v3.Backend{}
+	if err := json.Unmarshal(data, beCR); err != nil {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError,
+			"Failed to convert foreign Ingress Backend CR",
+			logging.LogAttrKey(nsName),
+			logging.LogAttrError(err),
+		)
+		return nil, false
+	}
+	return beCR, true
 }
 
 // getRedirectFilterHash produces a hash identifying a redirect-only backend.
@@ -929,8 +984,118 @@ func (b *HaproxyConfMgrImpl) processBackendsModifiedInCycle() error {
 	return errs.Result()
 }
 
+// backendOwnersOrigin inspects the routes that own a backend to derive their
+// common namespace and its origin. A backend name is derived from
+// service+port+filterHash, so a regular HTTPRoute and the synthetic Ingress
+// route can share one backend (same service, port and filters). The origin is
+// therefore decided over ALL owners, not an arbitrary one: isIngressBackend is
+// true only when every owner route is synthetic (ing:...); isMixed is true when
+// synthetic and regular routes both own the backend.
+func backendOwnersOrigin(ownersForRoute map[client.ObjectKey]int64) (namespace string, isIngressBackend, isMixed bool) {
+	syntheticOwners, totalOwners := 0, 0
+	for owner := range ownersForRoute {
+		namespace = owner.Namespace
+		totalOwners++
+		if utils.IsSyntheticName(owner.Name) {
+			syntheticOwners++
+		}
+	}
+	isIngressBackend = totalOwners > 0 && syntheticOwners == totalOwners
+	isMixed = syntheticOwners > 0 && syntheticOwners < totalOwners
+	return namespace, isIngressBackend, isMixed
+}
+
+// backendOrigin returns the backend's common namespace and whether it is an
+// Ingress backend, constraining a cr-backend ExtensionRef to resolve against the
+// foreign Ingress Backend CR store. A mixed set is a genuine misconfiguration
+// (an Ingress and a Gateway API route referencing the same cr-backend name,
+// which may denote different CRs across API groups); it resolves against HUG
+// Backend CRs — the native meaning of the gate.v3.haproxy.org group — and warns.
+func (b *HaproxyConfMgrImpl) backendOrigin(ownersForRoute map[client.ObjectKey]int64, backendName string) (string, bool) {
+	namespace, isIngressBackend, isMixed := backendOwnersOrigin(ownersForRoute)
+	if isMixed {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelWarn,
+			"Backend shared by Ingress and Gateway API routes; cr-backend resolves against HUG Backend CRs",
+			logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
+			slog.String("backend", backendName),
+		)
+	}
+	return namespace, isIngressBackend
+}
+
+// discardMistypedIngressBackends drops, before any backend is built, every
+// Ingress-origin backend whose cr-backend ExtensionRef points to a HUG Backend CR
+// (group gate.v3.haproxy.org) instead of a foreign Ingress Backend CR. An Ingress
+// may only reference an ingress.v3.haproxy.org Backend; referencing a HUG one is
+// a type error. Rather than silently building a backend with defaults (the
+// ExtensionRef resolving to nothing in the Ingress store), the backend is set
+// aside and the error is logged so the misconfiguration is visible.
+func (b *HaproxyConfMgrImpl) discardMistypedIngressBackends() {
+	for backendName, mapImpactedBEs := range b.backendsImpactedInCycle.Upserted {
+		owners, ok := b.backendOwners.owners[backendName]
+		if !ok {
+			continue
+		}
+		// Only HTTPRoute-owned backends can originate from an Ingress.
+		ownersForRoute, ok := owners[BackendOwnerTypeHTTPRoute]
+		if !ok {
+			continue
+		}
+		namespace, isIngressBackend, _ := backendOwnersOrigin(ownersForRoute)
+		if !isIngressBackend {
+			continue
+		}
+
+		var first BackendImpactedInCycle
+		for _, impactedBE := range mapImpactedBEs {
+			first = impactedBE
+			break
+		}
+		crName, mismatch := b.ingressCRBackendReferencesHugCR(first.BackendRef, namespace)
+		if !mismatch {
+			continue
+		}
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError,
+			"Ingress cr-backend references a HUG Backend CR, which is not allowed; backend set aside",
+			logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
+			slog.String("backend", backendName),
+			slog.String("crBackend", namespace+"/"+crName),
+		)
+		delete(b.backendsImpactedInCycle.Upserted, backendName)
+	}
+}
+
+// ingressCRBackendReferencesHugCR reports whether a backendRef's cr-backend
+// ExtensionRef resolves to a HUG Backend CR but not to a foreign Ingress Backend
+// CR — i.e. an Ingress referencing the wrong CR type. It returns the offending
+// CR name when so.
+func (b *HaproxyConfMgrImpl) ingressCRBackendReferencesHugCR(backendRef gatewayv1.HTTPBackendRef, namespace string) (string, bool) {
+	for _, filter := range backendRef.Filters {
+		if filter.Type != gatewayv1.HTTPRouteFilterExtensionRef {
+			continue
+		}
+		if !utilsk8s.IsFilterExtensionRefKindSupported(filter.ExtensionRef, b.params.extractGVK) {
+			continue
+		}
+		nsName := k8stypes.NamespacedName{Namespace: namespace, Name: string(filter.ExtensionRef.Name)}
+		if _, inIngress := b.controllerStore.ClusterStore.IngressBackendCRs[nsName]; inIngress {
+			continue
+		}
+		if _, inHug := b.controllerStore.ClusterStore.BackendCRs[nsName]; inHug {
+			return nsName.Name, true
+		}
+	}
+	return "", false
+}
+
 func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 	var errs utils.Errors
+
+	// Set aside Ingress backends whose cr-backend references a HUG Backend CR
+	// (wrong type) before building anything, logging the misconfiguration.
+	b.discardMistypedIngressBackends()
 
 	for backendName, mapImpactedBEs := range b.backendsImpactedInCycle.Upserted {
 		routesInfo := make(map[string]metadata.RouteMetadaInfo)
@@ -1011,14 +1176,10 @@ func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 				}
 			}
 		}
-		// Same for Namespace, it should be the same for all
-		var namespace string
-		for owner := range ownersForRoute {
-			namespace = owner.Namespace
-			break
-		}
+		namespace, isIngressBackend := b.backendOrigin(ownersForRoute, backendName)
 
-		be, err := b.newBackend(backendName, beMd, backendRef, ruleFilters, matchPrefix, sessionPersistence, httpTimeouts, namespace, isHTTPBackend)
+		be, err := b.newBackend(backendName, beMd, backendRef, ruleFilters, matchPrefix,
+			sessionPersistence, httpTimeouts, namespace, isHTTPBackend, isIngressBackend)
 		if err != nil {
 			errs.Add(err)
 			continue

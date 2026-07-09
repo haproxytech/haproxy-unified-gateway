@@ -17,6 +17,7 @@ import (
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -36,6 +37,16 @@ var (
 	ObjectTypeRefGrant     = &gatewayv1beta1.ReferenceGrant{}
 	ObjectTypeIngress      = &networkingv1.Ingress{}
 	ObjectTypeIngressClass = &networkingv1.IngressClass{}
+
+	// ObjectTypeIngressBackendCR is a generic (unstructured) handle on the
+	// foreign kubernetes-ingress Backend CR. It is watched and stored
+	// unstructured so HUG carries no build dependency on the kubernetes-ingress
+	// project; the payload is converted to *v3.Backend on the fly at resolution
+	// time. The GVK must match the CRD installed in the cluster.
+	ObjectTypeIngressBackendCR = &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "ingress.v3.haproxy.org/v3",
+		"kind":       "Backend",
+	}}
 )
 
 var (

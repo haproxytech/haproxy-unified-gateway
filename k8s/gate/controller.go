@@ -18,6 +18,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/index"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/predicate"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
@@ -45,6 +47,7 @@ import (
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -159,25 +162,26 @@ func Add(
 	}
 
 	clusterStore := &store.ClusterStore{
-		GatewayClasses:  make(map[types.NamespacedName]*gatewayv1.GatewayClass),
-		Gateways:        make(map[types.NamespacedName]*gatewayv1.Gateway),
-		HTTPRoutes:      make(map[types.NamespacedName]*gatewayv1.HTTPRoute),
-		TLSRoutes:       make(map[types.NamespacedName]*gatewayv1alpha2.TLSRoute),
-		Services:        make(map[types.NamespacedName]*apiv1.Service),
-		Namespaces:      make(map[types.NamespacedName]*apiv1.Namespace),
-		Secrets:         make(map[types.NamespacedName]*apiv1.Secret),
-		ConfigMaps:      make(map[types.NamespacedName]*apiv1.ConfigMap),
-		GatewayAPICRDs:  make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
-		HugGates:        make(map[types.NamespacedName]*v3.HugGate),
-		HugConfs:        make(map[types.NamespacedName]*v3.HugConf),
-		EndpointSlices:  make(map[types.NamespacedName]*discoveryV1.EndpointSlice),
-		ReferenceGrants: make(map[types.NamespacedName]*gatewayv1beta1.ReferenceGrant),
-		BackendCRs:      make(map[types.NamespacedName]*v3.Backend),
-		GlobalCRs:       make(map[types.NamespacedName]*v3.Global),
-		DefaultsCRs:     make(map[types.NamespacedName]*v3.Defaults),
-		Updates:         store.NewClusterUpdates(),
-		Ingresses:       map[types.NamespacedName]*networkingv1.Ingress{},
-		IngressClasses:  map[types.NamespacedName]*networkingv1.IngressClass{},
+		GatewayClasses:    make(map[types.NamespacedName]*gatewayv1.GatewayClass),
+		Gateways:          make(map[types.NamespacedName]*gatewayv1.Gateway),
+		HTTPRoutes:        make(map[types.NamespacedName]*gatewayv1.HTTPRoute),
+		TLSRoutes:         make(map[types.NamespacedName]*gatewayv1alpha2.TLSRoute),
+		Services:          make(map[types.NamespacedName]*apiv1.Service),
+		Namespaces:        make(map[types.NamespacedName]*apiv1.Namespace),
+		Secrets:           make(map[types.NamespacedName]*apiv1.Secret),
+		ConfigMaps:        make(map[types.NamespacedName]*apiv1.ConfigMap),
+		GatewayAPICRDs:    make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
+		HugGates:          make(map[types.NamespacedName]*v3.HugGate),
+		HugConfs:          make(map[types.NamespacedName]*v3.HugConf),
+		EndpointSlices:    make(map[types.NamespacedName]*discoveryV1.EndpointSlice),
+		ReferenceGrants:   make(map[types.NamespacedName]*gatewayv1beta1.ReferenceGrant),
+		BackendCRs:        make(map[types.NamespacedName]*v3.Backend),
+		GlobalCRs:         make(map[types.NamespacedName]*v3.Global),
+		DefaultsCRs:       make(map[types.NamespacedName]*v3.Defaults),
+		Updates:           store.NewClusterUpdates(),
+		Ingresses:         map[types.NamespacedName]*networkingv1.Ingress{},
+		IngressClasses:    map[types.NamespacedName]*networkingv1.IngressClass{},
+		IngressBackendCRs: map[types.NamespacedName]*unstructured.Unstructured{},
 	}
 
 	var certificateStorage storage.CertificateStorage
@@ -209,6 +213,7 @@ func Add(
 		HugServiceLabelVal:         cfg.HugServiceLabelVal,
 		IngressClass:               cfg.IngressClass,
 		EmptyIngressClass:          cfg.EmptyIngressClass,
+		EnableIngress:              cfg.EnableIngress,
 		HTTPIngressFrontendPort:    cfg.HTTPIngressFrontendPort,
 		HTTPSIngressFrontendPort:   cfg.HTTPSIngressFrontendPort,
 	}
@@ -260,14 +265,111 @@ func ingressChangePredicate(namespaces []string) k8spredicate.Predicate {
 	)
 }
 
-//revive:disable:function-length
-func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cfg config.Configuration, mgr manager.Manager, eventCh chan any) error {
-	type ctlrCfg struct {
-		name       string
-		objectType ctrlruntimeclient.Object
-		options    []Option
+type ctlrCfg struct {
+	name       string
+	objectType ctrlruntimeclient.Object
+	options    []Option
+}
+
+// ingressControllerCfgs returns the controller registrations for Ingress
+// support: the Ingress and IngressClass controllers, plus the foreign
+// kubernetes-ingress Backend CR controller when its CRD is installed. It is only
+// called when Ingress support is enabled (--enable-ingress).
+//
+// The foreign Backend CR is watched generically (unstructured); its CRD ships
+// with the kubernetes-ingress project, not with HUG, so it may be absent.
+// Watching a Kind whose CRD is not installed leaves the informer permanently
+// unsynced, which stalls the whole controller (including the Ingress controller
+// that references it as an enqueue source). The RESTMapper is probed once here
+// and the watch is wired only when the CRD is present.
+func ingressControllerCfgs(ctx context.Context, cfg config.Configuration, mgr manager.Manager) []ctlrCfg {
+	ingressBackendGVK := objtypes.ObjectTypeIngressBackendCR.GroupVersionKind()
+	_, ingressBackendMapErr := mgr.GetRESTMapper().RESTMapping(ingressBackendGVK.GroupKind(), ingressBackendGVK.Version)
+	ingressBackendCRDInstalled := ingressBackendMapErr == nil
+	if !ingressBackendCRDInstalled {
+		cfg.Logger.LogAttrs(
+			ctx, slog.LevelInfo,
+			"Foreign Ingress Backend CRD not installed; cr-backend references to it are disabled",
+			logging.LogAttrCategory(logging.LogCategoryK8s),
+			slog.String("gvk", ingressBackendGVK.String()),
+		)
 	}
 
+	ingressOptions := []Option{
+		WithK8sPredicate(ingressChangePredicate(cfg.Namespaces)),
+		WithEnqueueFor([]enqueueForParams{{
+			watchSource: objtypes.ObjectTypeService,
+			enqueueFunc: enqueueIngressesForService,
+			predicate: k8spredicate.And(
+				k8spredicate.ResourceVersionChangedPredicate{},
+				predicate.NewNamespacePredicate(cfg.Namespaces),
+			),
+		}}),
+		WithEnqueueFor([]enqueueForParams{{
+			watchSource: objtypes.ObjectTypeBackend,
+			enqueueFunc: enqueueIngressForBackendCR,
+			predicate: k8spredicate.And(
+				k8spredicate.ResourceVersionChangedPredicate{},
+				predicate.NewNamespacePredicate(cfg.Namespaces),
+			),
+		}}),
+	}
+	if ingressBackendCRDInstalled {
+		// Re-reconcile Ingresses when the foreign Backend CR they reference changes.
+		ingressOptions = append(ingressOptions, WithEnqueueFor([]enqueueForParams{{
+			watchSource: objtypes.ObjectTypeIngressBackendCR,
+			enqueueFunc: enqueueIngressForBackendCR,
+			predicate: k8spredicate.And(
+				k8spredicate.ResourceVersionChangedPredicate{},
+				predicate.NewNamespacePredicate(cfg.Namespaces),
+			),
+		}}))
+	}
+
+	cfgs := []ctlrCfg{
+		{
+			name:       "Ingress",
+			objectType: objtypes.ObjectTypeIngress,
+			options:    ingressOptions,
+		},
+		{
+			name:       "IngressClass",
+			objectType: objtypes.ObjectTypeIngressClass,
+			options: []Option{
+				// IngressClass is cluster-scoped: it has no namespace, so a
+				// namespace predicate would filter every event out. Only react to
+				// spec (generation) changes.
+				WithK8sPredicate(
+					k8spredicate.GenerationChangedPredicate{},
+				),
+				WithEnqueueFor([]enqueueForParams{
+					{
+						watchSource: objtypes.ObjectTypeIngressClass,
+						enqueueFunc: enqueueIngressesForIngressClass,
+					},
+				}),
+			},
+		},
+	}
+	if ingressBackendCRDInstalled {
+		cfgs = append(cfgs, ctlrCfg{
+			name:       "Ingress BackendCR",
+			objectType: objtypes.ObjectTypeIngressBackendCR,
+			options: []Option{
+				WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				),
+			},
+		})
+	}
+	return cfgs
+}
+
+//revive:disable:function-length
+func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cfg config.Configuration, mgr manager.Manager, eventCh chan any) error {
 	crdWithGVK := apiext.CustomResourceDefinition{}
 	crdWithGVK.SetGroupVersionKind(
 		schema.GroupVersionKind{Group: apiext.GroupName, Version: "v1", Kind: "CustomResourceDefinition"},
@@ -643,47 +745,18 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 				// watch ReferenceGrant to re-enqueue affected routes when a grant changes.
 			},
 		},
-		{
-			name:       "Ingress",
-			objectType: objtypes.ObjectTypeIngress,
-			options: []Option{
-				WithK8sPredicate(ingressChangePredicate(cfg.Namespaces)),
-				WithEnqueueFor([]enqueueForParams{{
-					watchSource: objtypes.ObjectTypeService,
-					enqueueFunc: enqueueIngressesForService,
-					predicate: k8spredicate.And(
-						k8spredicate.ResourceVersionChangedPredicate{},
-						predicate.NewNamespacePredicate(cfg.Namespaces),
-					),
-				}}),
-				WithEnqueueFor([]enqueueForParams{{
-					watchSource: objtypes.ObjectTypeBackend,
-					enqueueFunc: enqueueIngressForBackendCR,
-					predicate: k8spredicate.And(
-						k8spredicate.ResourceVersionChangedPredicate{},
-						predicate.NewNamespacePredicate(cfg.Namespaces),
-					),
-				}}),
-			},
-		},
-		{
-			name:       "IngressClass",
-			objectType: objtypes.ObjectTypeIngressClass,
-			options: []Option{
-				// IngressClass is cluster-scoped: it has no namespace, so a
-				// namespace predicate would filter every event out. Only react to
-				// spec (generation) changes.
-				WithK8sPredicate(
-					k8spredicate.GenerationChangedPredicate{},
-				),
-				WithEnqueueFor([]enqueueForParams{
-					{
-						watchSource: objtypes.ObjectTypeIngressClass,
-						enqueueFunc: enqueueIngressesForIngressClass,
-					},
-				}),
-			},
-		},
+	}
+
+	// Ingress support is opt-in (--enable-ingress). When disabled, the Ingress,
+	// IngressClass and foreign Backend controllers are never registered, so a pure
+	// Gateway API deployment is untouched. The matching tree builders are gated the
+	// same way in handler.NewGateTreeBuilder.
+	if cfg.EnableIngress {
+		controllerRegisterCfgs = append(controllerRegisterCfgs, ingressControllerCfgs(ctx, cfg, mgr)...)
+	} else {
+		cfg.Logger.LogAttrs(ctx, slog.LevelInfo,
+			"Ingress support disabled; set --enable-ingress to watch Ingress resources",
+			logging.LogAttrCategory(logging.LogCategoryK8s))
 	}
 
 	for _, registerConfig := range controllerRegisterCfgs {

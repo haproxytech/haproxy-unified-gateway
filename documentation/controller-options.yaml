@@ -42,6 +42,12 @@ EmptyIngressClass:
     args:
         - name: empty
           type: bool
+EnableIngress:
+    name: EnableIngress
+    comment: ""
+    args:
+        - name: enable
+          type: bool
 FrontendNameTemplate:
     name: FrontendNameTemplate
     comment: ""

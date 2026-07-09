@@ -24,12 +24,14 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/events"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // NamespacedNameFilterFunc is a function that returns true if the resource should be processed by the reconciler.
@@ -75,6 +77,12 @@ func (r *Reconciler) mustCreateNewObject(objectType client.Object) (client.Objec
 		partialObj.SetGroupVersionKind(objectType.GetObjectKind().GroupVersionKind())
 
 		return partialObj, nil
+	}
+
+	if _, ok := objectType.(*unstructured.Unstructured); ok {
+		nu := &unstructured.Unstructured{}
+		nu.SetGroupVersionKind(schema.GroupVersionKind{Group: "ingress.v3.haproxy.org", Version: "v3", Kind: "Backend"})
+		return nu, nil
 	}
 
 	t := reflect.TypeOf(objectType).Elem()

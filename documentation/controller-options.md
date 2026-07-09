@@ -28,6 +28,7 @@ Available options:
 | DisableIPv4 |  |
 | DisableIPv6 |  |
 | EmptyIngressClass | `empty`(bool) |
+| EnableIngress | `enable`(bool) |
 | FrontendNameTemplate | `template`(string) |
 | GatewayNsName | `gatewayNsName`(types.NamespacedName) |
 | HTTPIngressFrontendPort | `port`(int) |
@@ -154,6 +155,19 @@ import (
 )
 
 controller, err := controller.New(opt.EmptyIngressClass(empty))
+```
+
+### EnableIngress
+
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.EnableIngress(enable))
 ```
 
 ### FrontendNameTemplate

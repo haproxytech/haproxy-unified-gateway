@@ -20,6 +20,7 @@ import (
 	discoveryV1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -51,45 +52,47 @@ type Update[T client.Object] struct {
 
 // ClusterUpdated contains the updates that happened to cluster objects during a sync cycle
 type ClusterUpdates struct {
-	GatewayClasses  map[types.NamespacedName]Update[*gatewayv1.GatewayClass]
-	Gateways        map[types.NamespacedName]Update[*gatewayv1.Gateway]
-	HTTPRoutes      map[types.NamespacedName]Update[*gatewayv1.HTTPRoute]
-	TLSRoutes       map[types.NamespacedName]Update[*gatewayv1alpha2.TLSRoute]
-	Services        map[types.NamespacedName]Update[*v1.Service]
-	Namespaces      map[types.NamespacedName]Update[*v1.Namespace]
-	Secrets         map[types.NamespacedName]Update[*v1.Secret]
-	ConfigMaps      map[types.NamespacedName]Update[*v1.ConfigMap]
-	GatewayAPICRDs  map[types.NamespacedName]Update[*metav1.PartialObjectMetadata]
-	HugGates        map[types.NamespacedName]Update[*v3.HugGate]
-	BackendCRs      map[types.NamespacedName]Update[*v3.Backend]
-	GlobalCRs       map[types.NamespacedName]Update[*v3.Global]
-	DefaultsCRs     map[types.NamespacedName]Update[*v3.Defaults]
-	HugConfs        map[types.NamespacedName]Update[*v3.HugConf]
-	EndpointSlices  map[types.NamespacedName]Update[*discoveryV1.EndpointSlice]
-	ReferenceGrants map[types.NamespacedName]Update[*gatewayv1beta1.ReferenceGrant]
-	Ingresses       map[types.NamespacedName]Update[*networkingv1.Ingress]
-	IngressClasses  map[types.NamespacedName]Update[*networkingv1.IngressClass]
+	GatewayClasses    map[types.NamespacedName]Update[*gatewayv1.GatewayClass]
+	Gateways          map[types.NamespacedName]Update[*gatewayv1.Gateway]
+	HTTPRoutes        map[types.NamespacedName]Update[*gatewayv1.HTTPRoute]
+	TLSRoutes         map[types.NamespacedName]Update[*gatewayv1alpha2.TLSRoute]
+	Services          map[types.NamespacedName]Update[*v1.Service]
+	Namespaces        map[types.NamespacedName]Update[*v1.Namespace]
+	Secrets           map[types.NamespacedName]Update[*v1.Secret]
+	ConfigMaps        map[types.NamespacedName]Update[*v1.ConfigMap]
+	GatewayAPICRDs    map[types.NamespacedName]Update[*metav1.PartialObjectMetadata]
+	HugGates          map[types.NamespacedName]Update[*v3.HugGate]
+	BackendCRs        map[types.NamespacedName]Update[*v3.Backend]
+	GlobalCRs         map[types.NamespacedName]Update[*v3.Global]
+	DefaultsCRs       map[types.NamespacedName]Update[*v3.Defaults]
+	HugConfs          map[types.NamespacedName]Update[*v3.HugConf]
+	EndpointSlices    map[types.NamespacedName]Update[*discoveryV1.EndpointSlice]
+	ReferenceGrants   map[types.NamespacedName]Update[*gatewayv1beta1.ReferenceGrant]
+	Ingresses         map[types.NamespacedName]Update[*networkingv1.Ingress]
+	IngressClasses    map[types.NamespacedName]Update[*networkingv1.IngressClass]
+	IngressBackendCRs map[types.NamespacedName]Update[*unstructured.Unstructured]
 }
 
 func NewClusterUpdates() ClusterUpdates {
 	return ClusterUpdates{
-		GatewayClasses:  make(map[types.NamespacedName]Update[*gatewayv1.GatewayClass]),
-		Gateways:        make(map[types.NamespacedName]Update[*gatewayv1.Gateway]),
-		HTTPRoutes:      make(map[types.NamespacedName]Update[*gatewayv1.HTTPRoute]),
-		TLSRoutes:       make(map[types.NamespacedName]Update[*gatewayv1alpha2.TLSRoute]),
-		Services:        make(map[types.NamespacedName]Update[*v1.Service]),
-		Namespaces:      make(map[types.NamespacedName]Update[*v1.Namespace]),
-		Secrets:         make(map[types.NamespacedName]Update[*v1.Secret]),
-		ConfigMaps:      make(map[types.NamespacedName]Update[*v1.ConfigMap]),
-		GatewayAPICRDs:  make(map[types.NamespacedName]Update[*metav1.PartialObjectMetadata]),
-		HugGates:        make(map[types.NamespacedName]Update[*v3.HugGate]),
-		BackendCRs:      make(map[types.NamespacedName]Update[*v3.Backend]),
-		GlobalCRs:       make(map[types.NamespacedName]Update[*v3.Global]),
-		DefaultsCRs:     make(map[types.NamespacedName]Update[*v3.Defaults]),
-		HugConfs:        make(map[types.NamespacedName]Update[*v3.HugConf]),
-		EndpointSlices:  make(map[types.NamespacedName]Update[*discoveryV1.EndpointSlice]),
-		ReferenceGrants: make(map[types.NamespacedName]Update[*gatewayv1beta1.ReferenceGrant]),
-		Ingresses:       make(map[types.NamespacedName]Update[*networkingv1.Ingress]),
-		IngressClasses:  make(map[types.NamespacedName]Update[*networkingv1.IngressClass]),
+		GatewayClasses:    make(map[types.NamespacedName]Update[*gatewayv1.GatewayClass]),
+		Gateways:          make(map[types.NamespacedName]Update[*gatewayv1.Gateway]),
+		HTTPRoutes:        make(map[types.NamespacedName]Update[*gatewayv1.HTTPRoute]),
+		TLSRoutes:         make(map[types.NamespacedName]Update[*gatewayv1alpha2.TLSRoute]),
+		Services:          make(map[types.NamespacedName]Update[*v1.Service]),
+		Namespaces:        make(map[types.NamespacedName]Update[*v1.Namespace]),
+		Secrets:           make(map[types.NamespacedName]Update[*v1.Secret]),
+		ConfigMaps:        make(map[types.NamespacedName]Update[*v1.ConfigMap]),
+		GatewayAPICRDs:    make(map[types.NamespacedName]Update[*metav1.PartialObjectMetadata]),
+		HugGates:          make(map[types.NamespacedName]Update[*v3.HugGate]),
+		BackendCRs:        make(map[types.NamespacedName]Update[*v3.Backend]),
+		GlobalCRs:         make(map[types.NamespacedName]Update[*v3.Global]),
+		DefaultsCRs:       make(map[types.NamespacedName]Update[*v3.Defaults]),
+		HugConfs:          make(map[types.NamespacedName]Update[*v3.HugConf]),
+		EndpointSlices:    make(map[types.NamespacedName]Update[*discoveryV1.EndpointSlice]),
+		ReferenceGrants:   make(map[types.NamespacedName]Update[*gatewayv1beta1.ReferenceGrant]),
+		Ingresses:         make(map[types.NamespacedName]Update[*networkingv1.Ingress]),
+		IngressClasses:    make(map[types.NamespacedName]Update[*networkingv1.IngressClass]),
+		IngressBackendCRs: make(map[types.NamespacedName]Update[*unstructured.Unstructured]),
 	}
 }
