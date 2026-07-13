@@ -18,6 +18,12 @@ const (
 	// https://gateway-api.sigs.k8s.io/guides/api-design/?h=version#supported-api-versions
 	BundleVersionAnnotation = "gateway.networking.k8s.io/bundle-version"
 
+	// ServiceBackendCRAnnotation is the Service annotation naming a Backend CR
+	// merged, by override, into every backend built for that Service (the Service
+	// wins over the route-level cr-backend). The value is "name" or
+	// "namespace/name".
+	ServiceBackendCRAnnotation = "gate.v3.haproxy.org/backend-cr"
+
 	// Stats Frontend name
 	StatsFrontendName = "stats"
 	// DefaultsSectionName

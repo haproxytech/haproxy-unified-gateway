@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/haproxytech/client-native/v6/models"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	haproxyfilters "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/filters"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/metadata"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/templates"
@@ -748,7 +749,66 @@ func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBacken
 			continue
 		}
 	}
+
+	// Finally, a Service-level Backend CR (gate.v3.haproxy.org/backend-cr) is
+	// applied last, by override, so it takes precedence over the route-level
+	// cr-backend result (service > httproute).
+	if err := b.mergeServiceBackendCR(newBackend, backendRef, namespace); err != nil {
+		errs.Add(err)
+	}
 	return errs
+}
+
+// mergeServiceBackendCR resolves the Backend CR named by the target Service's
+// backend-cr annotation and merges it (override) into newBackend. The annotation
+// value is "name" or "namespace/name"; a cross-namespace reference is not yet
+// supported (it will require a ReferenceGrant) and is skipped with a log. A
+// missing or unresolved reference is logged and ignored so one bad annotation
+// cannot break the backend build.
+func (b *HaproxyConfMgrImpl) mergeServiceBackendCR(newBackend *models.Backend, backendRef gatewayv1.HTTPBackendRef, routeNamespace string) error {
+	svcKey := tree.ServiceNsNameKey(routeNamespace, backendRef.BackendObjectReference)
+	service, ok := b.controllerStore.ClusterStore.Services[svcKey]
+	if !ok || service == nil {
+		return nil
+	}
+	value := service.Annotations[constants.ServiceBackendCRAnnotation]
+	if value == "" {
+		return nil
+	}
+
+	crNamespace := svcKey.Namespace
+	crName := value
+	if ns, name, found := strings.Cut(value, "/"); found {
+		crNamespace, crName = ns, name
+	}
+	if crNamespace != svcKey.Namespace {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError,
+			"Service backend-cr annotation references a cross-namespace Backend CR, which is not supported yet",
+			logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
+			slog.String("service", svcKey.String()),
+			slog.String("backendCR", crNamespace+"/"+crName),
+		)
+		return nil
+	}
+
+	beCR, ok := b.controllerStore.ClusterStore.BackendCRs[k8stypes.NamespacedName{Namespace: crNamespace, Name: crName}]
+	if !ok || beCR == nil {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError,
+			"Service backend-cr annotation references a Backend CR that does not exist",
+			logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
+			slog.String("service", svcKey.String()),
+			slog.String("backendCR", crNamespace+"/"+crName),
+		)
+		return nil
+	}
+
+	// Deep copy so blanking the name does not mutate the store object; override
+	// (no AppendSlice) so the Service CR replaces, not appends to, the route result.
+	cr := beCR.DeepCopy()
+	cr.Spec.BackendBase.Name = ""
+	return mergo.Merge(newBackend, &cr.Spec.Backend, mergo.WithOverride)
 }
 
 // getRedirectFilterHash produces a hash identifying a redirect-only backend.
