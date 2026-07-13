@@ -27,7 +27,26 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
+
+// grantServiceToBackend builds a ReferenceGrantManager permitting a Service in
+// fromNs to reference a HUG Backend CR in toNs (the grant lives in toNs).
+func grantServiceToBackend(fromNs, toNs string) *tree.ReferenceGrantManager {
+	rgm := tree.NewReferenceGrantManager()
+	rgm.UpsertReferenceGrant(tree.ReferenceGrant{
+		K8sResource: &gatewayv1beta1.ReferenceGrant{
+			ObjectMeta: metav1.ObjectMeta{Namespace: toNs, Name: "grant"},
+			Spec: gatewayv1beta1.ReferenceGrantSpec{
+				From: []gatewayv1beta1.ReferenceGrantFrom{{Group: "", Kind: "Service", Namespace: gatewayv1.Namespace(fromNs)}},
+				To:   []gatewayv1beta1.ReferenceGrantTo{{Group: gatewayv1.Group(v3.GroupName), Kind: "Backend"}},
+			},
+		},
+		TreeStatus: tree.TreeUpdate[tree.ReferenceGrant]{Status: store.StatusUpserted},
+	})
+	rgm.ComputeToFrom()
+	return rgm
+}
 
 func serviceCRMgr(
 	services map[k8stypes.NamespacedName]*apiv1.Service,
@@ -114,17 +133,37 @@ func TestMergeServiceBackendCR(t *testing.T) {
 		}
 	})
 
-	t.Run("cross-namespace reference is skipped (not supported yet)", func(t *testing.T) {
+	t.Run("cross-namespace without a ReferenceGrant is skipped", func(t *testing.T) {
 		mgr := serviceCRMgr(
 			map[k8stypes.NamespacedName]*apiv1.Service{svcNN: annotatedService("team-a", "echo", "other/tuning")},
 			map[k8stypes.NamespacedName]*v3.Backend{
 				{Namespace: "other", Name: "tuning"}: tuningCR("http", ""),
 			},
 		)
+		// No ReferenceGrantManager set (nil) => not permitted.
 		be := &models.Backend{BackendBase: models.BackendBase{Mode: "tcp"}}
 		_ = mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a")
 		if be.Mode != "tcp" {
-			t.Errorf("expected cross-namespace to be skipped, Mode=%q", be.Mode)
+			t.Errorf("expected cross-namespace to be skipped without a grant, Mode=%q", be.Mode)
+		}
+	})
+
+	t.Run("cross-namespace with a ReferenceGrant is merged", func(t *testing.T) {
+		mgr := serviceCRMgr(
+			map[k8stypes.NamespacedName]*apiv1.Service{svcNN: annotatedService("team-a", "echo", "shared/tuning")},
+			map[k8stypes.NamespacedName]*v3.Backend{
+				{Namespace: "shared", Name: "tuning"}: tuningCR("http", ""),
+			},
+		)
+		// Grant: Service in team-a may reference a Backend in shared.
+		mgr.controllerStore.ReferenceGrantManager = grantServiceToBackend("team-a", "shared")
+
+		be := &models.Backend{BackendBase: models.BackendBase{Mode: "tcp"}}
+		if err := mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if be.Mode != "http" {
+			t.Errorf("expected the granted cross-namespace CR to merge, Mode=%q", be.Mode)
 		}
 	})
 
