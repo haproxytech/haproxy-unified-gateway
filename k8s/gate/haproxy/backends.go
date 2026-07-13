@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/haproxytech/client-native/v6/models"
+	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	haproxyfilters "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/filters"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/metadata"
@@ -781,15 +782,24 @@ func (b *HaproxyConfMgrImpl) mergeServiceBackendCR(newBackend *models.Backend, b
 	if ns, name, found := strings.Cut(value, "/"); found {
 		crNamespace, crName = ns, name
 	}
+	// A cross-namespace reference must be permitted by a ReferenceGrant
+	// (from the Service, to the Backend CR); same-namespace is always allowed.
 	if crNamespace != svcKey.Namespace {
-		b.logger.LogAttrs(
-			context.Background(), slog.LevelError,
-			"Service backend-cr annotation references a cross-namespace Backend CR, which is not supported yet",
-			logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
-			slog.String("service", svcKey.String()),
-			slog.String("backendCR", crNamespace+"/"+crName),
+		rgm := b.controllerStore.ReferenceGrantManager
+		granted := rgm != nil && rgm.IsAccessGranted(
+			tree.GrantFrom{Group: "", Kind: "Service", Namespace: svcKey.Namespace},
+			tree.GrantTo{Group: v3.GroupName, Kind: "Backend", Namespace: crNamespace, Name: crName},
 		)
-		return nil
+		if !granted {
+			b.logger.LogAttrs(
+				context.Background(), slog.LevelError,
+				"Service backend-cr annotation references a cross-namespace Backend CR not permitted by any ReferenceGrant",
+				logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
+				slog.String("service", svcKey.String()),
+				slog.String("backendCR", crNamespace+"/"+crName),
+			)
+			return nil
+		}
 	}
 
 	beCR, ok := b.controllerStore.ClusterStore.BackendCRs[k8stypes.NamespacedName{Namespace: crNamespace, Name: crName}]
