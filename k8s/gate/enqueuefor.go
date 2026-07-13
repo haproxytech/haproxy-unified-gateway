@@ -17,11 +17,14 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
+	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -363,38 +366,83 @@ func enqueueHTTPRouteForBackendCR(dns utils.DedicatedNamespaces) func(ctrlclient
 				return []reconcile.Request{}
 			}
 
+			// Services whose backend-cr annotation points at the changed Backend CR:
+			// routes targeting them must also be re-reconciled so the Service-level
+			// merge picks up the change.
+			annotatedSvcs := servicesReferencingBackendCR(ctx, ctrlclient, types.NamespacedName{
+				Namespace: o.GetNamespace(),
+				Name:      o.GetName(),
+			})
+
 			for _, route := range routeList.Items {
 				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
 					continue
 				}
-				for _, rule := range route.Spec.Rules {
-					// BackendRef Filters
-					for _, backendRef := range rule.BackendRefs {
-						for _, filter := range backendRef.Filters {
-							if filter.Type != gatewayv1.HTTPRouteFilterExtensionRef {
-								continue
-							}
-							// We only accept v3.Backend
-							if !utilsk8s.IsFilterExtensionRefKindSupported(filter.ExtensionRef, extractGVK) {
-								continue
-							}
-							nsName := types.NamespacedName{
-								Namespace: route.Namespace,
-								Name:      string(filter.ExtensionRef.Name),
-							}
-							if nsName.Name == o.GetName() && nsName.Namespace == o.GetNamespace() {
-								requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-									Namespace: route.GetNamespace(),
-									Name:      route.GetName(),
-								}})
-							}
-						}
-					}
+				if !routeUsesBackendCR(&route, o, annotatedSvcs, extractGVK) {
+					continue
 				}
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: route.GetNamespace(),
+					Name:      route.GetName(),
+				}})
 			}
 			return requests
 		}
 	}
+}
+
+// routeUsesBackendCR reports whether a route is affected by a change to the
+// Backend CR o, either through a route-level cr-backend ExtensionRef or because
+// one of its target Services carries a backend-cr annotation resolving to o.
+func routeUsesBackendCR(route *gatewayv1.HTTPRoute, o client.Object, annotatedSvcs map[types.NamespacedName]struct{}, extractGVK utilsk8s.ExtractGVK) bool {
+	for _, rule := range route.Spec.Rules {
+		for _, backendRef := range rule.BackendRefs {
+			// Route-level cr-backend ExtensionRef.
+			for _, filter := range backendRef.Filters {
+				if filter.Type != gatewayv1.HTTPRouteFilterExtensionRef {
+					continue
+				}
+				if !utilsk8s.IsFilterExtensionRefKindSupported(filter.ExtensionRef, extractGVK) {
+					continue
+				}
+				if string(filter.ExtensionRef.Name) == o.GetName() && route.Namespace == o.GetNamespace() {
+					return true
+				}
+			}
+			// Service-level backend-cr annotation.
+			svcNsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, route.Namespace)
+			if _, ok := annotatedSvcs[svcNsName]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// servicesReferencingBackendCR lists the Services whose backend-cr annotation
+// resolves to the given Backend CR. Only same-namespace references are matched
+// (cross-namespace support requires a ReferenceGrant and is handled separately).
+func servicesReferencingBackendCR(ctx context.Context, ctrlclient client.Client, cr types.NamespacedName) map[types.NamespacedName]struct{} {
+	result := map[types.NamespacedName]struct{}{}
+	svcList := &apiv1.ServiceList{}
+	if err := ctrlclient.List(ctx, svcList); err != nil {
+		return result
+	}
+	for i := range svcList.Items {
+		svc := &svcList.Items[i]
+		value := svc.Annotations[constants.ServiceBackendCRAnnotation]
+		if value == "" {
+			continue
+		}
+		crNamespace, crName := svc.Namespace, value
+		if ns, name, found := strings.Cut(value, "/"); found {
+			crNamespace, crName = ns, name
+		}
+		if crNamespace == svc.Namespace && crNamespace == cr.Namespace && crName == cr.Name {
+			result[types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}] = struct{}{}
+		}
+	}
+	return result
 }
 
 // enqueueTLSRouteForService returns a handler.EventHandler that enqueues all TLSRoutes
