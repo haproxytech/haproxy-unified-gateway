@@ -35,6 +35,11 @@ type ControllerStore struct {
 	ExtractGVK             utilsk8s.ExtractGVK
 	CertUpdates            *CertUpdates
 	CrtListUpdates         *CrtListUpdates
+	// ReferenceGrantManager is the shared, per-cycle-refreshed grant index. It is
+	// set once by handler.NewGateTreeBuilder and read by consumers that need to
+	// validate cross-namespace references outside the tree builders (e.g. the
+	// Service-level Backend CR merge in the HAProxy config manager).
+	ReferenceGrantManager *ReferenceGrantManager
 	// PortBinder reports whether the controller process can bind to a given
 	// port — derived from CAP_NET_BIND_SERVICE and the netns sysctl.
 	PortBinder caps.PortBinder

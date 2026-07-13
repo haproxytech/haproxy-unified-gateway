@@ -420,8 +420,10 @@ func routeUsesBackendCR(route *gatewayv1.HTTPRoute, o client.Object, annotatedSv
 }
 
 // servicesReferencingBackendCR lists the Services whose backend-cr annotation
-// resolves to the given Backend CR. Only same-namespace references are matched
-// (cross-namespace support requires a ReferenceGrant and is handled separately).
+// resolves to the given Backend CR, including cross-namespace references. This is
+// used only to decide which routes to re-enqueue, so it does not check the
+// ReferenceGrant: over-enqueuing is harmless, and the merge re-validates the
+// grant and skips a cross-namespace CR that is not permitted.
 func servicesReferencingBackendCR(ctx context.Context, ctrlclient client.Client, cr types.NamespacedName) map[types.NamespacedName]struct{} {
 	result := map[types.NamespacedName]struct{}{}
 	svcList := &apiv1.ServiceList{}
@@ -438,7 +440,7 @@ func servicesReferencingBackendCR(ctx context.Context, ctrlclient client.Client,
 		if ns, name, found := strings.Cut(value, "/"); found {
 			crNamespace, crName = ns, name
 		}
-		if crNamespace == svc.Namespace && crNamespace == cr.Namespace && crName == cr.Name {
+		if crNamespace == cr.Namespace && crName == cr.Name {
 			result[types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}] = struct{}{}
 		}
 	}

@@ -43,8 +43,11 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 	gatewayClassBuilder := tree.NewGatewayClassBuilder(gatewayClassBuilderParams)
 
 	// --------------
-	// ReferenceGrant manager (shared across all route and gateway builders)
+	// ReferenceGrant manager (shared across all route and gateway builders, and
+	// published on the ControllerStore so post-tree consumers like the HAProxy
+	// Service-level Backend CR merge can validate cross-namespace references).
 	referenceGrantManager := tree.NewReferenceGrantManager()
+	controllerStore.ReferenceGrantManager = referenceGrantManager
 
 	// --------------
 	// Gateway
