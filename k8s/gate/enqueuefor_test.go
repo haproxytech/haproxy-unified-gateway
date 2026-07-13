@@ -120,11 +120,12 @@ func TestServicesReferencingBackendCR(t *testing.T) {
 		t.Fatalf("scheme: %v", err)
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
-		svcWithAnnotation("team-a", "svc-name-only", "tuning"),      // matches
-		svcWithAnnotation("team-a", "svc-ns-name", "team-a/tuning"), // matches
-		svcWithAnnotation("team-a", "svc-cross-ns", "other/tuning"), // cross-ns, ignored
+		svcWithAnnotation("team-a", "svc-name-only", "tuning"),      // matches (same ns)
+		svcWithAnnotation("team-a", "svc-ns-name", "team-a/tuning"), // matches (explicit ns)
+		svcWithAnnotation("team-b", "svc-crossns", "team-a/tuning"), // matches (cross-ns, grant checked at merge)
+		svcWithAnnotation("team-a", "svc-other-cr", "other/tuning"), // other CR, ignored
 		svcWithAnnotation("team-a", "svc-none", ""),                 // no annotation
-		svcWithAnnotation("team-b", "svc-other-ns", "tuning"),       // other CR namespace
+		svcWithAnnotation("team-b", "svc-other-ns-name", "tuning"),  // resolves to team-b/tuning, ignored
 	).Build()
 
 	got := servicesReferencingBackendCR(context.Background(), cl, types.NamespacedName{Namespace: "team-a", Name: "tuning"})
@@ -132,6 +133,7 @@ func TestServicesReferencingBackendCR(t *testing.T) {
 	want := map[types.NamespacedName]struct{}{
 		{Namespace: "team-a", Name: "svc-name-only"}: {},
 		{Namespace: "team-a", Name: "svc-ns-name"}:   {},
+		{Namespace: "team-b", Name: "svc-crossns"}:   {},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("want %d services, got %d: %v", len(want), len(got), got)
