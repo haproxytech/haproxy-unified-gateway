@@ -459,12 +459,19 @@ func (b *HaproxyConfMgrImpl) getRedirectBackendName(filters []gatewayv1.HTTPRout
 }
 
 func (b *HaproxyConfMgrImpl) addImpactedLTSBackendUpserted(backendName string, routeKey client.ObjectKey,
-	_ gatewayv1alpha2.BackendRef,
+	tlsBackendRef gatewayv1alpha2.BackendRef,
 ) {
+	// TLSRoute carries no route-level filters, but the BackendObjectReference is
+	// needed so the Service-level Backend CR merge (mergeServiceBackendCR) can
+	// resolve the target Service from this backend.
 	impactedBe := BackendImpactedInCycle{
 		Name:         backendName,
 		HTTPRouteKey: routeKey,
-		// BackendRef:   tlsBackendRef,
+		BackendRef: gatewayv1.HTTPBackendRef{
+			BackendRef: gatewayv1.BackendRef{
+				BackendObjectReference: tlsBackendRef.BackendObjectReference,
+			},
+		},
 	}
 
 	if _, ok := b.backendsImpactedInCycle.Upserted[backendName]; !ok {
