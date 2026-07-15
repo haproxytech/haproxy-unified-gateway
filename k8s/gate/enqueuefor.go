@@ -532,6 +532,31 @@ func enqueueTLSRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient cl
 	}
 }
 
+// servicesWithBackendCRInNamespace returns the Services whose backend-cr
+// annotation resolves cross-namespace to grantNamespace (the referenced Backend
+// CR lives in grantNamespace, a different namespace than the Service). These are
+// the Services a ReferenceGrant in grantNamespace can affect; a same-namespace
+// reference never consults a grant, so it is excluded to avoid spurious enqueues.
+func servicesWithBackendCRInNamespace(ctx context.Context, ctrlclient client.Client, grantNamespace string) map[configuration.NamespaceNameValue]struct{} {
+	result := map[configuration.NamespaceNameValue]struct{}{}
+	svcList := &apiv1.ServiceList{}
+	if err := ctrlclient.List(ctx, svcList); err != nil {
+		return result
+	}
+	for _, svc := range svcList.Items {
+		value := svc.Annotations[constants.ServiceBackendCRAnnotation]
+		if value == "" {
+			continue
+		}
+		crBackendNamespaceName := configuration.NamespaceNameValueFromStringWithDefaultNs(value, svc.Namespace)
+		if crBackendNamespaceName.Namespace == grantNamespace &&
+			crBackendNamespaceName.Namespace != svc.Namespace {
+			result[configuration.NamespaceNameValue{Namespace: svc.Namespace, Name: svc.Name}] = struct{}{}
+		}
+	}
+	return result
+}
+
 // enqueueHTTPRouteForReferenceGrant returns a handler.EventHandler that enqueues all HTTPRoutes
 // that have a cross-namespace backendRef pointing to the changed ReferenceGrant's namespace.
 // A ReferenceGrant lives in the *target* namespace (the namespace of the referenced resource),
@@ -542,25 +567,7 @@ func enqueueHTTPRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.Extr
 		if err := ctrlclient.List(ctx, routeList); err != nil {
 			return nil
 		}
-		svcList := &apiv1.ServiceList{}
-		if err := ctrlclient.List(ctx, svcList); err != nil {
-			return nil
-		}
-		svcWithBackendCRInRGNamespace := map[configuration.NamespaceNameValue]struct{}{}
-		for _, svc := range svcList.Items {
-			value := svc.Annotations[constants.ServiceBackendCRAnnotation]
-			if value == "" {
-				continue
-			}
-			crBackendNamespaceName := configuration.NamespaceNameValueFromStringWithDefaultNs(value, svc.Namespace)
-			if crBackendNamespaceName.Namespace == o.GetNamespace() &&
-				crBackendNamespaceName.Namespace != svc.Namespace {
-				svcWithBackendCRInRGNamespace[configuration.NamespaceNameValue{
-					Namespace: svc.Namespace,
-					Name:      svc.Name,
-				}] = struct{}{}
-			}
-		}
+		svcWithBackendCRInRGNamespace := servicesWithBackendCRInNamespace(ctx, ctrlclient, o.GetNamespace())
 
 		var requests []reconcile.Request
 		for _, route := range routeList.Items {
@@ -656,9 +663,11 @@ func enqueueTLSRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.Extra
 		if err := ctrlclient.List(ctx, routeList); err != nil {
 			return nil
 		}
+		svcWithBackendCRInRGNamespace := servicesWithBackendCRInNamespace(ctx, ctrlclient, o.GetNamespace())
+
 		var requests []reconcile.Request
 		for _, route := range routeList.Items {
-			if tlsRouteHasCrossNamespaceRefTo(route, o.GetNamespace()) {
+			if tlsRouteHasCrossNamespaceRefTo(route, o.GetNamespace(), svcWithBackendCRInRGNamespace) {
 				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
 					Namespace: route.Namespace,
 					Name:      route.Name,
@@ -669,13 +678,75 @@ func enqueueTLSRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.Extra
 	}
 }
 
-// tlsRouteHasCrossNamespaceRefTo reports whether any backendRef in the route targets
-// a resource in targetNamespace from a different namespace.
-func tlsRouteHasCrossNamespaceRefTo(route gatewayv1alpha2.TLSRoute, targetNamespace string) bool {
+// tlsRouteHasCrossNamespaceRefTo reports whether the route is affected by a grant in
+// targetNamespace: either a backendRef directly targets a resource in targetNamespace
+// from a different namespace, or one of its target Services carries a backend-cr
+// annotation resolving cross-namespace to targetNamespace (svcWithBackendCRInRGNamespace).
+func tlsRouteHasCrossNamespaceRefTo(route gatewayv1alpha2.TLSRoute, targetNamespace string, svcWithBackendCRInRGNamespace map[configuration.NamespaceNameValue]struct{}) bool {
 	for _, rule := range route.Spec.Rules {
 		for _, backendRef := range rule.BackendRefs {
-			if backendRef.Namespace != nil && string(*backendRef.Namespace) == targetNamespace &&
+			backendRefNs := backendRef.Namespace
+			if backendRefNs != nil && string(*backendRefNs) == targetNamespace &&
 				targetNamespace != route.Namespace {
+				return true
+			}
+			backendRefNsAfterInference := route.Namespace
+			if backendRefNs != nil {
+				backendRefNsAfterInference = string(*backendRefNs)
+			}
+			if _, svcFound := svcWithBackendCRInRGNamespace[configuration.NamespaceNameValue{
+				Namespace: backendRefNsAfterInference,
+				Name:      string(backendRef.Name),
+			}]; svcFound {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// enqueueTLSRouteForBackendCR re-enqueues every TLSRoute whose target Service carries a
+// backend-cr annotation pointing at the changed Backend CR, so the Service-level merge
+// picks up the change. TLSRoutes have no route-level cr-backend ExtensionRef, so only the
+// Service-annotation path applies here (unlike enqueueHTTPRouteForBackendCR).
+func enqueueTLSRouteForBackendCR(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			routeList := &gatewayv1alpha2.TLSRouteList{}
+			if err := ctrlclient.List(ctx, routeList); err != nil {
+				return nil
+			}
+
+			annotatedSvcs := servicesReferencingBackendCR(ctx, ctrlclient, types.NamespacedName{
+				Namespace: o.GetNamespace(),
+				Name:      o.GetName(),
+			})
+
+			var requests []reconcile.Request
+			for _, route := range routeList.Items {
+				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
+					continue
+				}
+				if !tlsRouteUsesServiceBackendCR(&route, annotatedSvcs) {
+					continue
+				}
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: route.GetNamespace(),
+					Name:      route.GetName(),
+				}})
+			}
+			return requests
+		}
+	}
+}
+
+// tlsRouteUsesServiceBackendCR reports whether any backendRef of the route targets one of
+// the Services in annotatedSvcs (Services whose backend-cr annotation points at a given CR).
+func tlsRouteUsesServiceBackendCR(route *gatewayv1alpha2.TLSRoute, annotatedSvcs map[types.NamespacedName]struct{}) bool {
+	for _, rule := range route.Spec.Rules {
+		for _, backendRef := range rule.BackendRefs {
+			svcNsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, route.Namespace)
+			if _, ok := annotatedSvcs[svcNsName]; ok {
 				return true
 			}
 		}

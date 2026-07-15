@@ -583,6 +583,16 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 							predicate.NewNamespacePredicate(cfg.Namespaces),
 						),
 					},
+					// Watch Backend CRs — a Service-level backend-cr annotation may
+					// point a TLSRoute's target Service at this CR.
+					{
+						watchSource: objtypes.ObjectTypeBackend,
+						enqueueFunc: enqueueTLSRouteForBackendCR(dedicatedNs),
+						predicate: k8spredicate.And(
+							k8spredicate.ResourceVersionChangedPredicate{},
+							predicate.NewNamespacePredicate(cfg.Namespaces),
+						),
+					},
 					// Watch ReferenceGrants — cross-namespace backendRef access may change
 					{
 						watchSource: objtypes.ObjectTypeRefGrant,
