@@ -20,6 +20,7 @@ import (
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
 	"github.com/haproxytech/haproxy-unified-gateway/hug/configuration"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -201,10 +203,135 @@ func TestHTTPRouteHasCrossNamespaceRefTo(t *testing.T) {
 	})
 }
 
+// tlsRouteToServiceNs builds a TLSRoute whose single backendRef targets svcName,
+// with an explicit svcNs when non-empty (a cross-namespace Service reference).
+func tlsRouteToServiceNs(routeNs, svcName, svcNs string) *gatewayv1alpha2.TLSRoute {
+	ref := gatewayv1.BackendObjectReference{Name: gatewayv1.ObjectName(svcName)}
+	if svcNs != "" {
+		ns := gatewayv1.Namespace(svcNs)
+		ref.Namespace = &ns
+	}
+	return &gatewayv1alpha2.TLSRoute{
+		ObjectMeta: metav1.ObjectMeta{Namespace: routeNs, Name: "r"},
+		Spec: gatewayv1alpha2.TLSRouteSpec{Rules: []gatewayv1alpha2.TLSRouteRule{{
+			BackendRefs: []gatewayv1.BackendRef{{BackendObjectReference: ref}},
+		}}},
+	}
+}
+
+func TestTLSRouteHasCrossNamespaceRefTo(t *testing.T) {
+	empty := map[configuration.NamespaceNameValue]struct{}{}
+
+	t.Run("direct cross-namespace backendRef matches", func(t *testing.T) {
+		route := tlsRouteToServiceNs("team-a", "echo", "shared")
+		if !tlsRouteHasCrossNamespaceRefTo(*route, "shared", empty) {
+			t.Error("expected a direct cross-namespace backendRef to match")
+		}
+	})
+
+	t.Run("same-namespace backendRef does not panic and matches only via the set", func(t *testing.T) {
+		route := tlsRouteToServiceNs("team-a", "echo", "") // backendRef.Namespace nil (same-ns)
+		if tlsRouteHasCrossNamespaceRefTo(*route, "shared", empty) {
+			t.Error("expected no match for a same-namespace backendRef with an empty set")
+		}
+		set := map[configuration.NamespaceNameValue]struct{}{
+			{Namespace: "team-a", Name: "echo"}: {},
+		}
+		if !tlsRouteHasCrossNamespaceRefTo(*route, "shared", set) {
+			t.Error("expected a match through the annotated Service set")
+		}
+	})
+
+	t.Run("no match when the service is not in the set", func(t *testing.T) {
+		route := tlsRouteToServiceNs("team-a", "echo", "")
+		set := map[configuration.NamespaceNameValue]struct{}{
+			{Namespace: "other", Name: "echo"}: {},
+		}
+		if tlsRouteHasCrossNamespaceRefTo(*route, "shared", set) {
+			t.Error("expected no match when the target service is not in the set")
+		}
+	})
+}
+
+func TestTLSRouteUsesServiceBackendCR(t *testing.T) {
+	t.Run("match through an annotated target Service", func(t *testing.T) {
+		route := tlsRouteToServiceNs("team-a", "echo", "")
+		annotated := map[types.NamespacedName]struct{}{
+			{Namespace: "team-a", Name: "echo"}: {},
+		}
+		if !tlsRouteUsesServiceBackendCR(route, annotated) {
+			t.Error("expected a match through the annotated target Service")
+		}
+	})
+
+	t.Run("no match without an annotated Service", func(t *testing.T) {
+		route := tlsRouteToServiceNs("team-a", "echo", "")
+		if tlsRouteUsesServiceBackendCR(route, map[types.NamespacedName]struct{}{}) {
+			t.Error("expected no match with an empty set")
+		}
+	})
+}
+
+func TestEnqueueTLSRouteForReferenceGrant(t *testing.T) {
+	t.Run("all same-namespace does not enqueue", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
+			svcWithAnnotation("ns1", "echo", "tuning"),
+			tlsRouteToServiceNs("ns1", "echo", ""),
+		).Build()
+
+		reqs := enqueueTLSRouteForReferenceGrant(cl, testExtractGVKBackend)(context.Background(), refGrant("ns1"))
+		if len(reqs) != 0 {
+			t.Fatalf("expected no enqueue for an all-same-namespace setup, got %v", reqs)
+		}
+	})
+
+	t.Run("cross-namespace annotation enqueues the route", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
+			svcWithAnnotation("team-a", "echo", "shared/tuning"),
+			tlsRouteToServiceNs("team-a", "echo", ""),
+		).Build()
+
+		reqs := enqueueTLSRouteForReferenceGrant(cl, testExtractGVKBackend)(context.Background(), refGrant("shared"))
+		if len(reqs) != 1 || reqs[0].Namespace != "team-a" || reqs[0].Name != "r" {
+			t.Fatalf("expected the team-a route to be enqueued, got %v", reqs)
+		}
+	})
+}
+
+func TestEnqueueTLSRouteForBackendCR(t *testing.T) {
+	t.Run("route to an annotated service is enqueued", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
+			svcWithAnnotation("team-a", "echo", "tuning"),
+			tlsRouteToServiceNs("team-a", "echo", ""),
+		).Build()
+
+		reqs := enqueueTLSRouteForBackendCR(utils.NewDedicatedNamespaces(nil))(cl, testExtractGVKBackend)(
+			context.Background(), crObject("team-a", "tuning"),
+		)
+		if len(reqs) != 1 || reqs[0].Namespace != "team-a" || reqs[0].Name != "r" {
+			t.Fatalf("expected the team-a route to be enqueued, got %v", reqs)
+		}
+	})
+
+	t.Run("route to a non-annotated service is not enqueued", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
+			svcWithAnnotation("team-a", "echo", ""),
+			tlsRouteToServiceNs("team-a", "echo", ""),
+		).Build()
+
+		reqs := enqueueTLSRouteForBackendCR(utils.NewDedicatedNamespaces(nil))(cl, testExtractGVKBackend)(
+			context.Background(), crObject("team-a", "tuning"),
+		)
+		if len(reqs) != 0 {
+			t.Fatalf("expected no enqueue when the target service is not annotated, got %v", reqs)
+		}
+	})
+}
+
 func newScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{apiv1.AddToScheme, gatewayv1.Install, gatewayv1beta1.Install} {
+	for _, add := range []func(*runtime.Scheme) error{apiv1.AddToScheme, gatewayv1.Install, gatewayv1alpha2.Install, gatewayv1beta1.Install} {
 		if err := add(scheme); err != nil {
 			t.Fatalf("scheme: %v", err)
 		}
