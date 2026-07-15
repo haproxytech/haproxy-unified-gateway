@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
+	"github.com/haproxytech/haproxy-unified-gateway/hug/configuration"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 
@@ -541,9 +542,29 @@ func enqueueHTTPRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.Extr
 		if err := ctrlclient.List(ctx, routeList); err != nil {
 			return nil
 		}
+		svcList := &apiv1.ServiceList{}
+		if err := ctrlclient.List(ctx, svcList); err != nil {
+			return nil
+		}
+		svcWithBackendCRInRGNamespace := map[configuration.NamespaceNameValue]struct{}{}
+		for _, svc := range svcList.Items {
+			value := svc.Annotations[constants.ServiceBackendCRAnnotation]
+			if value == "" {
+				continue
+			}
+			crBackendNamespaceName := configuration.NamespaceNameValueFromStringWithDefaultNs(value, svc.Namespace)
+			if crBackendNamespaceName.Namespace == o.GetNamespace() &&
+				crBackendNamespaceName.Namespace != svc.Namespace {
+				svcWithBackendCRInRGNamespace[configuration.NamespaceNameValue{
+					Namespace: svc.Namespace,
+					Name:      svc.Name,
+				}] = struct{}{}
+			}
+		}
+
 		var requests []reconcile.Request
 		for _, route := range routeList.Items {
-			if httpRouteHasCrossNamespaceRefTo(route, o.GetNamespace()) {
+			if httpRouteHasCrossNamespaceRefTo(route, o.GetNamespace(), svcWithBackendCRInRGNamespace) {
 				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
 					Namespace: route.Namespace,
 					Name:      route.Name,
@@ -584,11 +605,23 @@ func enqueueGatewayForReferenceGrant(dg utils.DedicatedGateway) func(ctrlclient 
 
 // httpRouteHasCrossNamespaceRefTo reports whether any backendRef in the route targets
 // a resource in targetNamespace from a different namespace.
-func httpRouteHasCrossNamespaceRefTo(route gatewayv1.HTTPRoute, targetNamespace string) bool {
+func httpRouteHasCrossNamespaceRefTo(route gatewayv1.HTTPRoute, targetNamespace string, svcWithBackendCRInRGNamespace map[configuration.NamespaceNameValue]struct{}) bool {
 	for _, rule := range route.Spec.Rules {
 		for _, backendRef := range rule.BackendRefs {
-			if backendRef.Namespace != nil && string(*backendRef.Namespace) == targetNamespace &&
+			backendRefNs := backendRef.Namespace
+			backendRefName := backendRef.Name
+			if backendRefNs != nil && string(*backendRefNs) == targetNamespace &&
 				targetNamespace != route.Namespace {
+				return true
+			}
+			backendRefNsAfterInference := route.Namespace
+			if backendRefNs != nil {
+				backendRefNsAfterInference = string(*backendRefNs)
+			}
+			if _, svcFound := svcWithBackendCRInRGNamespace[configuration.NamespaceNameValue{
+				Namespace: backendRefNsAfterInference,
+				Name:      string(backendRefName),
+			}]; svcFound {
 				return true
 			}
 		}
