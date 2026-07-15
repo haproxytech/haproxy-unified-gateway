@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
+	"github.com/haproxytech/haproxy-unified-gateway/hug/configuration"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 func testExtractGVKBackend(client.Object) schema.GroupVersionKind {
@@ -143,4 +145,99 @@ func TestServicesReferencingBackendCR(t *testing.T) {
 			t.Errorf("expected %s to be matched", k)
 		}
 	}
+}
+
+// routeToServiceNs builds an HTTPRoute whose single backendRef targets svcName,
+// with an explicit svcNs when non-empty (a cross-namespace Service reference).
+func routeToServiceNs(routeNs, svcName, svcNs string) *gatewayv1.HTTPRoute {
+	ref := gatewayv1.BackendObjectReference{Name: gatewayv1.ObjectName(svcName)}
+	if svcNs != "" {
+		ns := gatewayv1.Namespace(svcNs)
+		ref.Namespace = &ns
+	}
+	return &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{Namespace: routeNs, Name: "r"},
+		Spec: gatewayv1.HTTPRouteSpec{Rules: []gatewayv1.HTTPRouteRule{{
+			BackendRefs: []gatewayv1.HTTPBackendRef{{
+				BackendRef: gatewayv1.BackendRef{BackendObjectReference: ref},
+			}},
+		}}},
+	}
+}
+
+func TestHTTPRouteHasCrossNamespaceRefTo(t *testing.T) {
+	empty := map[configuration.NamespaceNameValue]struct{}{}
+
+	t.Run("direct cross-namespace backendRef matches", func(t *testing.T) {
+		route := routeToServiceNs("team-a", "echo", "shared")
+		if !httpRouteHasCrossNamespaceRefTo(*route, "shared", empty) {
+			t.Error("expected a direct cross-namespace backendRef to match")
+		}
+	})
+
+	t.Run("same-namespace backendRef does not panic and matches only via the set", func(t *testing.T) {
+		route := routeToServiceNs("team-a", "echo", "") // backendRef.Namespace nil (same-ns)
+		// No annotated service: must not panic, must not match.
+		if httpRouteHasCrossNamespaceRefTo(*route, "shared", empty) {
+			t.Error("expected no match for a same-namespace backendRef with an empty set")
+		}
+		// Service resolved in the route namespace is in the set: match.
+		set := map[configuration.NamespaceNameValue]struct{}{
+			{Namespace: "team-a", Name: "echo"}: {},
+		}
+		if !httpRouteHasCrossNamespaceRefTo(*route, "shared", set) {
+			t.Error("expected a match through the annotated Service set")
+		}
+	})
+
+	t.Run("no match when the service is not in the set", func(t *testing.T) {
+		route := routeToServiceNs("team-a", "echo", "")
+		set := map[configuration.NamespaceNameValue]struct{}{
+			{Namespace: "other", Name: "echo"}: {},
+		}
+		if httpRouteHasCrossNamespaceRefTo(*route, "shared", set) {
+			t.Error("expected no match when the target service is not in the set")
+		}
+	})
+}
+
+func newScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	for _, add := range []func(*runtime.Scheme) error{apiv1.AddToScheme, gatewayv1.Install, gatewayv1beta1.Install} {
+		if err := add(scheme); err != nil {
+			t.Fatalf("scheme: %v", err)
+		}
+	}
+	return scheme
+}
+
+func refGrant(ns string) *gatewayv1beta1.ReferenceGrant {
+	return &gatewayv1beta1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "grant"}}
+}
+
+func TestEnqueueHTTPRouteForReferenceGrant(t *testing.T) {
+	t.Run("all same-namespace does not enqueue", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
+			svcWithAnnotation("ns1", "echo", "tuning"), // same-namespace CR reference
+			routeToServiceNs("ns1", "echo", ""),
+		).Build()
+
+		reqs := enqueueHTTPRouteForReferenceGrant(cl, testExtractGVKBackend)(context.Background(), refGrant("ns1"))
+		if len(reqs) != 0 {
+			t.Fatalf("expected no enqueue for an all-same-namespace setup, got %v", reqs)
+		}
+	})
+
+	t.Run("cross-namespace annotation enqueues the route", func(t *testing.T) {
+		cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
+			svcWithAnnotation("team-a", "echo", "shared/tuning"), // cross-ns CR in the grant namespace
+			routeToServiceNs("team-a", "echo", ""),
+		).Build()
+
+		reqs := enqueueHTTPRouteForReferenceGrant(cl, testExtractGVKBackend)(context.Background(), refGrant("shared"))
+		if len(reqs) != 1 || reqs[0].Namespace != "team-a" || reqs[0].Name != "r" {
+			t.Fatalf("expected the team-a route to be enqueued, got %v", reqs)
+		}
+	})
 }
