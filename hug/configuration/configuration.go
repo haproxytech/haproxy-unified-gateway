@@ -313,3 +313,21 @@ func (c *HUGConfig) Init(external External) error {
 	}
 	return nil
 }
+
+// SetWithDefaultNs parses "namespace/name" or "name" (the latter falling back to
+// defaultNs). It cannot fail: a value without "/" is a bare name, so there is no
+// error to return.
+func (nv *NamespaceNameValue) SetWithDefaultNs(s string, defaultNs string) {
+	nv.Namespace = defaultNs
+	nv.Name = s
+	if ns, name, found := strings.Cut(s, "/"); found {
+		nv.Namespace = ns
+		nv.Name = name
+	}
+}
+
+func NamespaceNameValueFromStringWithDefaultNs(s string, defaultNs string) NamespaceNameValue {
+	var namespaceNameValue NamespaceNameValue
+	namespaceNameValue.SetWithDefaultNs(s, defaultNs)
+	return namespaceNameValue
+}
