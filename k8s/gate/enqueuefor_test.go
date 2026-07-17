@@ -22,6 +22,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	apiv1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -365,6 +366,76 @@ func TestEnqueueHTTPRouteForReferenceGrant(t *testing.T) {
 		reqs := enqueueHTTPRouteForReferenceGrant(cl, testExtractGVKBackend)(context.Background(), refGrant("shared"))
 		if len(reqs) != 1 || reqs[0].Namespace != "team-a" || reqs[0].Name != "r" {
 			t.Fatalf("expected the team-a route to be enqueued, got %v", reqs)
+		}
+	})
+}
+
+func ingressWithClass(ns, name, className string) *networkingv1.Ingress {
+	ing := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	if className != "" {
+		ing.Spec.IngressClassName = &className
+	}
+	return ing
+}
+
+func ingressClass(name string, isDefault bool) *networkingv1.IngressClass {
+	ic := &networkingv1.IngressClass{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	if isDefault {
+		ic.Annotations = map[string]string{constants.DefaultIngressClassAnnotation: "true"}
+	}
+	return ic
+}
+
+func TestEnqueueIngressesForIngressClass(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := networkingv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("scheme: %v", err)
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		ingressWithClass("team-a", "named", "haproxy"), // references haproxy by name
+		ingressWithClass("team-a", "unclassed", ""),    // depends on the default class
+		ingressWithClass("team-b", "other", "nginx"),   // unrelated class
+	).Build()
+
+	enqueued := func(o *networkingv1.IngressClass) map[types.NamespacedName]struct{} {
+		reqs := enqueueIngressesForIngressClass(cl, nil)(context.Background(), o)
+		got := make(map[types.NamespacedName]struct{}, len(reqs))
+		for _, r := range reqs {
+			got[r.NamespacedName] = struct{}{}
+		}
+		return got
+	}
+
+	t.Run("named class enqueues only the Ingresses referencing it", func(t *testing.T) {
+		got := enqueued(ingressClass("haproxy", false))
+		if _, ok := got[types.NamespacedName{Namespace: "team-a", Name: "named"}]; !ok {
+			t.Error("expected the named-referencing Ingress to be enqueued")
+		}
+		if _, ok := got[types.NamespacedName{Namespace: "team-a", Name: "unclassed"}]; ok {
+			t.Error("did not expect the unclassed Ingress for a non-default class")
+		}
+		if len(got) != 1 {
+			t.Fatalf("expected exactly one request, got %v", got)
+		}
+	})
+
+	t.Run("default class also enqueues unclassed Ingresses", func(t *testing.T) {
+		got := enqueued(ingressClass("haproxy", true))
+		if _, ok := got[types.NamespacedName{Namespace: "team-a", Name: "named"}]; !ok {
+			t.Error("expected the named-referencing Ingress to be enqueued")
+		}
+		if _, ok := got[types.NamespacedName{Namespace: "team-a", Name: "unclassed"}]; !ok {
+			t.Error("expected the unclassed Ingress to be enqueued for a default class")
+		}
+		if len(got) != 2 {
+			t.Fatalf("expected two requests, got %v", got)
+		}
+	})
+
+	t.Run("unrelated non-default class enqueues nothing here", func(t *testing.T) {
+		got := enqueued(ingressClass("does-not-exist", false))
+		if len(got) != 0 {
+			t.Fatalf("expected no requests, got %v", got)
 		}
 	})
 }
