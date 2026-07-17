@@ -432,6 +432,12 @@ func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
 	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
 		for _, listener := range route.Listeners.Iterate {
 			for _, listener := range listener {
+				// A listener with no virtual listener name is not programmed
+				// (e.g. an invalid listener the route still attaches to); skip it
+				// so its maps are not written under an empty-named frontend ("hug_").
+				if listener.VirtualListenerName == "" {
+					continue
+				}
 				frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
 				routeValueName := listener.Key().String() + "/" + routeKey.String()
 				origin := maps.ResourceOrigin{Namespace: routeKey.Namespace, Name: routeValueName}
