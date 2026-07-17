@@ -80,6 +80,34 @@ func (b *SyntheticGatewayBuilderImpl) ComputeTreeUpdates() {
 		Namespaces: &gatewayv1.RouteNamespaces{From: &fromAll},
 	}
 
+	listeners := []gatewayv1.Listener{
+		{
+			Name:          "http",
+			Port:          gatewayv1.PortNumber(b.ControllerStore.HTTPIngressFrontendPort),
+			Protocol:      gatewayv1.HTTPProtocolType,
+			AllowedRoutes: allowFromAll,
+		},
+	}
+	// The https listener is added only when at least one managed Ingress carries
+	// a TLS secret. A Gateway API HTTPS/Terminate listener with no certificateRefs
+	// is invalid, so declaring it unconditionally would leave an invalid listener
+	// that never gets a virtual listener name; synthetic routes attach to every
+	// compatible listener (no sectionName), so their maps would then be written to
+	// an empty-named frontend directory ("hug_").
+	if certRefs := b.ingressTLSCertificateRefs(); len(certRefs) > 0 {
+		mode := gatewayv1.TLSModeTerminate
+		listeners = append(listeners, gatewayv1.Listener{
+			Name:     "https",
+			Port:     gatewayv1.PortNumber(b.ControllerStore.HTTPSIngressFrontendPort),
+			Protocol: gatewayv1.HTTPSProtocolType,
+			TLS: &gatewayv1.ListenerTLSConfig{
+				Mode:            &mode,
+				CertificateRefs: certRefs,
+			},
+			AllowedRoutes: allowFromAll,
+		})
+	}
+
 	previousGatewayUpdate := b.ClusterStore.Updates.Gateways[syntheticGatewayNamespacedName]
 	previousGatewayUpdate.OldObject = previousGatewayUpdate.NewObject
 	previousGatewayUpdate.Status = store.StatusUpserted
@@ -90,21 +118,7 @@ func (b *SyntheticGatewayBuilderImpl) ComputeTreeUpdates() {
 		},
 		Spec: gatewayv1.GatewaySpec{
 			GatewayClassName: "ing:gatewayclass",
-			Listeners: []gatewayv1.Listener{
-				{
-					Name:          "http",
-					Port:          gatewayv1.PortNumber(b.ControllerStore.HTTPIngressFrontendPort),
-					Protocol:      gatewayv1.HTTPProtocolType,
-					AllowedRoutes: allowFromAll,
-				},
-				{
-					Name:          "https",
-					Port:          gatewayv1.PortNumber(b.ControllerStore.HTTPSIngressFrontendPort),
-					Protocol:      gatewayv1.HTTPSProtocolType,
-					TLS:           b.httpsListenerTLS(),
-					AllowedRoutes: allowFromAll,
-				},
-			},
+			Listeners:        listeners,
 			// Hostname nil to match everything.
 		},
 	}
@@ -113,17 +127,6 @@ func (b *SyntheticGatewayBuilderImpl) ComputeTreeUpdates() {
 }
 
 func (*SyntheticGatewayBuilderImpl) CleanTreeUpdates() {}
-
-// httpsListenerTLS builds the TLS config of the synthetic https listener. Its
-// CertificateRefs are the TLS secrets of every managed Ingress; the listener
-// serves plain HTTP while the list is empty (no Ingress TLS yet).
-func (b *SyntheticGatewayBuilderImpl) httpsListenerTLS() *gatewayv1.ListenerTLSConfig {
-	mode := gatewayv1.TLSModeTerminate
-	return &gatewayv1.ListenerTLSConfig{
-		Mode:            &mode,
-		CertificateRefs: b.ingressTLSCertificateRefs(),
-	}
-}
 
 // ingressTLSCertificateRefs collects, from every managed Ingress, a
 // SecretObjectReference per spec.tls[].secretName. Each ref carries the Ingress
