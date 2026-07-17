@@ -329,6 +329,30 @@ func TestComputeTreeUpdatesReevaluatesOnIngressClassChange(t *testing.T) {
 		assert.Equal(t, store.StatusUpserted, got.Status)
 	})
 
+	t.Run("named class added -> previously ineligible ingress becomes eligible -> route created", func(t *testing.T) {
+		// An Ingress created before its IngressClass is ineligible (no backend).
+		// When the matching class is added, only the class change is in the batch
+		// (the Ingress is not in Updates.Ingresses); the builder must still
+		// re-evaluate the Ingress and create its synthetic route, without a
+		// controller restart.
+		ingress := mkIngressWithRule(ns, "web", "haproxy")
+		added := mkIngressClass(ingressClassFixture{name: "haproxy", controller: CONTROLLER})
+		b, syntheticKey := newBuilder(
+			ingress,
+			map[types.NamespacedName]*networkingv1.IngressClass{{Name: "haproxy"}: added}, // class now present
+			map[types.NamespacedName]store.Update[*networkingv1.IngressClass]{
+				{Name: "haproxy"}: {Status: store.StatusUpserted, NewObject: added},
+			},
+			"", false,
+		)
+
+		b.ComputeTreeUpdates()
+
+		got, ok := b.ClusterStore.Updates.HTTPRoutes[syntheticKey]
+		assert.True(t, ok, "expected the Ingress to be re-evaluated and its route created on class add")
+		assert.Equal(t, store.StatusUpserted, got.Status)
+	})
+
 	t.Run("default class deleted -> unclassed ingress ineligible -> route deleted", func(t *testing.T) {
 		ingress := mkIngressWithRule(ns, "web", "") // unclassed: depends on the default class
 		// A default class with a matching suffixed controller made the unclassed
