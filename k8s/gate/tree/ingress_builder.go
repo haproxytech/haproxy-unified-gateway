@@ -27,6 +27,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 )
@@ -53,13 +54,29 @@ func NewIngressBuilder(controllerStore *ControllerStore) Builder {
 	}
 }
 
+// ingressToProcess is an Ingress scheduled for (re)evaluation this cycle, with
+// the update status to carry into the synthetic HTTPRoute updates it produces.
+type ingressToProcess struct {
+	ingress *networkingv1.Ingress
+	status  store.Status
+}
+
 // ComputeTreeUpdates translates the Ingress updates of this cycle into synthetic
 // raw HTTPRoute updates and injects them into ClusterStore.Updates.HTTPRoutes.
 // The HTTPRouteBuilder, running afterwards, consumes them like any other
 // HTTPRoute update (raw -> tree conversion, checks, rules, backends, maps), so
 // the whole pipeline is reused without duplication.
+//
+// Besides the directly-updated Ingresses, it also re-evaluates the Ingresses
+// whose eligibility may have changed because a referenced IngressClass changed
+// in this cycle (see addIngressesForChangedClasses). Nothing else consumes
+// Updates.IngressClasses, so without this an IngressClass deletion would leave a
+// now-ineligible Ingress (and its backends) in the configuration whenever the
+// Ingress re-enqueue did not land in the same batch as the class deletion.
 func (b *IngressBuilderImpl) ComputeTreeUpdates() {
-	for updatedIngressNamespacedName, updatedIngress := range b.ClusterStore.Updates.Ingresses {
+	toProcess := make(map[types.NamespacedName]ingressToProcess)
+
+	for key, updatedIngress := range b.ClusterStore.Updates.Ingresses {
 		rawIngress := updatedIngress.NewObject
 		if updatedIngress.Status == store.StatusDeleted {
 			rawIngress = updatedIngress.OldObject
@@ -67,34 +84,89 @@ func (b *IngressBuilderImpl) ComputeTreeUpdates() {
 		if rawIngress == nil {
 			continue
 		}
-		ingressClassName := utils.PointerDefaultValueIfNil(rawIngress.Spec.IngressClassName)
-		eligible := b.isIngressClassSupported(ingressClassName, b.IngressClass, b.EmptyIngressClass)
-		b.Logger.LogAttrs(
-			context.Background(), slog.LevelDebug,
-			"Processing Ingress update",
-			slog.String("ingress", updatedIngressNamespacedName.String()),
-			slog.String("status", string(updatedIngress.Status)),
-			slog.String("ingressClassName", ingressClassName),
-			slog.Bool("eligible", eligible),
-		)
-		if !eligible {
-			b.deleteRoutesForIngress(updatedIngressNamespacedName)
-			continue
-		}
-		routes := b.convertIngressToHTTPRoutes(rawIngress)
-		b.Logger.LogAttrs(
-			context.Background(), slog.LevelDebug,
-			"Translated Ingress into synthetic HTTPRoutes",
-			slog.String("ingress", updatedIngressNamespacedName.String()),
-			slog.Int("syntheticRoutes", len(routes)),
-		)
-		for key, route := range routes {
-			b.ClusterStore.Updates.HTTPRoutes[key] = store.Update[*gatewayv1.HTTPRoute]{
-				NewObject: route,
-				Status:    updatedIngress.Status,
-			}
+		toProcess[key] = ingressToProcess{ingress: rawIngress, status: updatedIngress.Status}
+	}
+
+	b.addIngressesForChangedClasses(toProcess)
+
+	for key, item := range toProcess {
+		b.processIngressUpdate(key, item.ingress, item.status)
+	}
+}
+
+// addIngressesForChangedClasses schedules, for re-evaluation, the Ingresses
+// affected by an IngressClass change in this cycle: those that reference a
+// changed class by name, plus every unclassed Ingress when a default class was
+// added or removed (an unclassed Ingress's eligibility depends on the default
+// class). Ingresses already scheduled from Updates.Ingresses keep their own
+// status and are not overwritten.
+func (b *IngressBuilderImpl) addIngressesForChangedClasses(toProcess map[types.NamespacedName]ingressToProcess) {
+	if len(b.ClusterStore.Updates.IngressClasses) == 0 {
+		return
+	}
+
+	changedClasses := make(map[string]struct{}, len(b.ClusterStore.Updates.IngressClasses))
+	defaultClassChanged := false
+	for name, updated := range b.ClusterStore.Updates.IngressClasses {
+		changedClasses[name.Name] = struct{}{}
+		if isDefaultIngressClass(updated.NewObject) || isDefaultIngressClass(updated.OldObject) {
+			defaultClassChanged = true
 		}
 	}
+
+	for key, ingress := range b.ClusterStore.Ingresses {
+		if ingress == nil {
+			continue
+		}
+		if _, already := toProcess[key]; already {
+			continue
+		}
+		className := utils.PointerDefaultValueIfNil(ingress.Spec.IngressClassName)
+		_, matchesName := changedClasses[className]
+		matchesDefault := className == "" && defaultClassChanged
+		if matchesName || matchesDefault {
+			toProcess[key] = ingressToProcess{ingress: ingress, status: store.StatusUpserted}
+		}
+	}
+}
+
+// processIngressUpdate re-checks a single Ingress's eligibility and either
+// translates it into synthetic HTTPRoutes or deletes the synthetic routes it
+// previously produced.
+func (b *IngressBuilderImpl) processIngressUpdate(key types.NamespacedName, rawIngress *networkingv1.Ingress, status store.Status) {
+	ingressClassName := utils.PointerDefaultValueIfNil(rawIngress.Spec.IngressClassName)
+	eligible := b.isIngressClassSupported(ingressClassName, b.IngressClass, b.EmptyIngressClass)
+	b.Logger.LogAttrs(
+		context.Background(), slog.LevelDebug,
+		"Processing Ingress update",
+		slog.String("ingress", key.String()),
+		slog.String("status", string(status)),
+		slog.String("ingressClassName", ingressClassName),
+		slog.Bool("eligible", eligible),
+	)
+	if !eligible {
+		b.deleteRoutesForIngress(key)
+		return
+	}
+	routes := b.convertIngressToHTTPRoutes(rawIngress)
+	b.Logger.LogAttrs(
+		context.Background(), slog.LevelDebug,
+		"Translated Ingress into synthetic HTTPRoutes",
+		slog.String("ingress", key.String()),
+		slog.Int("syntheticRoutes", len(routes)),
+	)
+	for routeKey, route := range routes {
+		b.ClusterStore.Updates.HTTPRoutes[routeKey] = store.Update[*gatewayv1.HTTPRoute]{
+			NewObject: route,
+			Status:    status,
+		}
+	}
+}
+
+// isDefaultIngressClass reports whether the IngressClass is annotated as the
+// cluster default.
+func isDefaultIngressClass(ic *networkingv1.IngressClass) bool {
+	return ic != nil && ic.Annotations[constants.DefaultIngressClassAnnotation] == "true"
 }
 
 func (*IngressBuilderImpl) CleanTreeUpdates() {}
@@ -360,7 +432,7 @@ func (b *ControllerStore) isIngressClassSupported(ingressClassFromIngress, contr
 	}
 	if ingressClassFromIngress == "" {
 		for _, ingressClass := range b.ClusterStore.IngressClasses {
-			if ingressClass.Annotations["ingressclass.kubernetes.io/is-default-class"] == "true" {
+			if isDefaultIngressClass(ingressClass) {
 				ingressgClassControllerFromSpec = ingressClass.Spec.Controller
 				break
 			}

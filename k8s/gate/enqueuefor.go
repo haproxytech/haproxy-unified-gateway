@@ -834,8 +834,10 @@ func enqueueHugConfForGlobalCR(ctrlclient client.Client, extractGVK utilsk8s.Ext
 	}
 }
 
-// enqueueIngressesForIngressClass returns a handler.EventHandler that enqueues all Ingresses
-// that reference the IngressClass.
+// enqueueIngressesForIngressClass returns a handler.EventHandler that enqueues the
+// Ingresses affected by an IngressClass change: those that reference it by name, plus
+// every unclassed Ingress when the class is the cluster default (an unclassed Ingress's
+// eligibility depends on the default class).
 func enqueueIngressesForIngressClass(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
 	return func(ctx context.Context, o client.Object) []reconcile.Request {
 		ingressList := &networkingv1.IngressList{}
@@ -847,8 +849,10 @@ func enqueueIngressesForIngressClass(ctrlclient client.Client, _ utilsk8s.Extrac
 		if !ok {
 			return nil
 		}
+		isDefault := ingressClass.Annotations[constants.DefaultIngressClassAnnotation] == "true"
 		for _, ingress := range ingressList.Items {
-			if utils.PointerDefaultValueIfNil(ingress.Spec.IngressClassName) == ingressClass.ObjectMeta.Name {
+			className := utils.PointerDefaultValueIfNil(ingress.Spec.IngressClassName)
+			if className == ingressClass.ObjectMeta.Name || (className == "" && isDefault) {
 				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
 					Namespace: ingress.Namespace,
 					Name:      ingress.Name,

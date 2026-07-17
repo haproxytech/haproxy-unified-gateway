@@ -23,6 +23,10 @@ const (
 	// wins over the route-level cr-backend). The value is "name" or
 	// "namespace/name".
 	ServiceBackendCRAnnotation = "gate.v3.haproxy.org/cr-backend"
+	// DefaultIngressClassAnnotation marks an IngressClass as the cluster default.
+	// An Ingress with no ingressClassName is then handled by that class, so its
+	// eligibility depends on whether such a default class exists.
+	DefaultIngressClassAnnotation = "ingressclass.kubernetes.io/is-default-class"
 
 	// Stats Frontend name
 	StatsFrontendName = "stats"
