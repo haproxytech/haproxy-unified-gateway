@@ -913,29 +913,62 @@ func enqueueIngressForBackendCR(ctrlclient client.Client, _ utilsk8s.ExtractGVK)
 		if err := ctrlclient.List(ctx, ingressList, &client.ListOptions{}); err != nil {
 			return []reconcile.Request{}
 		}
+
+		// Services whose backend-cr annotation points at the changed Backend CR:
+		// an Ingress targeting such a Service must also be re-reconciled so the
+		// Service-level merge picks up the change (mirrors enqueueHTTPRouteForBackendCR).
+		annotatedSvcs := servicesReferencingBackendCR(ctx, ctrlclient, types.NamespacedName{
+			Namespace: o.GetNamespace(),
+			Name:      o.GetName(),
+		})
+
 		// o is either HUG's own *v3.Backend or the foreign kubernetes-ingress
 		// Backend CR observed as a generic *unstructured.Unstructured. Both
-		// satisfy client.Object, so only the namespaced name is needed to match
-		// the cr-backend annotation.
-		for _, ingress := range ingressList.Items {
-			if crBackendAnnotation, hasBackendCRAnnotation := utils.AnnotationValue(ingress.Annotations, "cr-backend"); hasBackendCRAnnotation {
-				items := strings.SplitN(crBackendAnnotation, "/", 2)
-				backendCRNamespace := ingress.Namespace
-				var backendCRName string
-				if len(items) == 2 {
-					backendCRNamespace = items[0]
-					backendCRName = items[1]
-				} else {
-					backendCRName = items[0]
-				}
-				if o.GetNamespace() == backendCRNamespace && o.GetName() == backendCRName {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
-						Namespace: ingress.Namespace,
-						Name:      ingress.Name,
-					}})
-				}
+		// satisfy client.Object, so only the namespaced name is needed to match.
+		for i := range ingressList.Items {
+			ingress := &ingressList.Items[i]
+			if ingressUsesBackendCR(ingress, o, annotatedSvcs) {
+				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: ingress.Namespace,
+					Name:      ingress.Name,
+				}})
 			}
 		}
 		return requests
 	}
+}
+
+// ingressUsesBackendCR reports whether an Ingress is affected by a change to the
+// Backend CR o, either through its own cr-backend annotation or because one of
+// its target Services carries a backend-cr annotation resolving to o
+// (annotatedSvcs). An Ingress can only reference a Service in its own namespace.
+func ingressUsesBackendCR(ingress *networkingv1.Ingress, o client.Object, annotatedSvcs map[types.NamespacedName]struct{}) bool {
+	// Ingress-level cr-backend annotation.
+	if crBackendAnnotation, ok := utils.AnnotationValue(ingress.Annotations, "cr-backend"); ok {
+		backendCRNamespace := ingress.Namespace
+		backendCRName := crBackendAnnotation
+		if ns, name, found := strings.Cut(crBackendAnnotation, "/"); found {
+			backendCRNamespace, backendCRName = ns, name
+		}
+		if o.GetNamespace() == backendCRNamespace && o.GetName() == backendCRName {
+			return true
+		}
+	}
+
+	// Service-level backend-cr annotation on a target Service.
+	for _, rule := range ingress.Spec.Rules {
+		if rule.HTTP == nil {
+			continue
+		}
+		for _, path := range rule.HTTP.Paths {
+			if path.Backend.Service == nil {
+				continue
+			}
+			svcKey := types.NamespacedName{Namespace: ingress.Namespace, Name: path.Backend.Service.Name}
+			if _, ok := annotatedSvcs[svcKey]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
