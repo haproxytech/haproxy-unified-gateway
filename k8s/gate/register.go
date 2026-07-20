@@ -88,9 +88,13 @@ func WithOnlyMetadata() Option {
 }
 
 // WithEnqueueFor tells the controller to also watch for other types
+// WithEnqueueFor registers secondary-watch enqueue edges. It accumulates across
+// calls, so a controller may declare its edges in one call with a list or across
+// several WithEnqueueFor calls; every edge is kept (the previous behaviour
+// replaced the list, silently dropping all but the last call's edges).
 func WithEnqueueFor(l []enqueueForParams) Option {
 	return func(cfg *recConfig) {
-		cfg.enqueueForList = l
+		cfg.enqueueForList = append(cfg.enqueueForList, l...)
 	}
 }
 
