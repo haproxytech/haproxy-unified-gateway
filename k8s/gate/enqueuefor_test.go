@@ -386,6 +386,81 @@ func ingressClass(name string, isDefault bool) *networkingv1.IngressClass {
 	return ic
 }
 
+// ingressToService builds an Ingress with one HTTP path targeting svcName, and
+// an optional own cr-backend annotation.
+func ingressToService(ns, name, svcName, crAnnotation string) *networkingv1.Ingress {
+	ing := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	if crAnnotation != "" {
+		ing.Annotations = map[string]string{"cr-backend": crAnnotation}
+	}
+	ing.Spec.Rules = []networkingv1.IngressRule{{
+		IngressRuleValue: networkingv1.IngressRuleValue{
+			HTTP: &networkingv1.HTTPIngressRuleValue{
+				Paths: []networkingv1.HTTPIngressPath{{
+					Backend: networkingv1.IngressBackend{
+						Service: &networkingv1.IngressServiceBackend{Name: svcName},
+					},
+				}},
+			},
+		},
+	}}
+	return ing
+}
+
+func TestIngressUsesBackendCR(t *testing.T) {
+	noSvc := map[types.NamespacedName]struct{}{}
+
+	t.Run("ingress-level cr-backend annotation matches", func(t *testing.T) {
+		ing := ingressToService("ingress", "echo", "nginx-svc", "be-ing")
+		if !ingressUsesBackendCR(ing, crObject("ingress", "be-ing"), noSvc) {
+			t.Error("expected a match via the ingress cr-backend annotation")
+		}
+	})
+
+	t.Run("ingress-level annotation requires the same namespace and name", func(t *testing.T) {
+		ing := ingressToService("ingress", "echo", "nginx-svc", "be-ing")
+		if ingressUsesBackendCR(ing, crObject("other", "be-ing"), noSvc) {
+			t.Error("expected no match for a different CR namespace")
+		}
+	})
+
+	t.Run("service-annotation match via a target Service", func(t *testing.T) {
+		ing := ingressToService("ingress", "echo", "nginx-svc", "")
+		annotated := map[types.NamespacedName]struct{}{{Namespace: "ingress", Name: "nginx-svc"}: {}}
+		if !ingressUsesBackendCR(ing, crObject("ingress", "be-svc"), annotated) {
+			t.Error("expected a match through the annotated target Service")
+		}
+	})
+
+	t.Run("no match when neither applies", func(t *testing.T) {
+		ing := ingressToService("ingress", "echo", "nginx-svc", "")
+		if ingressUsesBackendCR(ing, crObject("ingress", "be-svc"), noSvc) {
+			t.Error("expected no match without an annotation or an annotated Service")
+		}
+	})
+}
+
+func TestEnqueueIngressForBackendCR(t *testing.T) {
+	scheme := runtime.NewScheme()
+	for _, add := range []func(*runtime.Scheme) error{apiv1.AddToScheme, networkingv1.AddToScheme} {
+		if err := add(scheme); err != nil {
+			t.Fatalf("scheme: %v", err)
+		}
+	}
+	// A Service annotated to be-svc, and an Ingress targeting that Service but
+	// with no cr-backend annotation of its own: changing be-svc must re-enqueue
+	// the Ingress so its Service-level merge is recomputed.
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		svcWithAnnotation("ingress", "nginx-svc", "be-svc"),
+		ingressToService("ingress", "echo", "nginx-svc", ""),
+	).Build()
+
+	reqs := enqueueIngressForBackendCR(cl, nil)(context.Background(), crObject("ingress", "be-svc"))
+	if len(reqs) != 1 || reqs[0].Namespace != "ingress" || reqs[0].Name != "echo" {
+		t.Fatalf("expected the echo Ingress to be enqueued on a be-svc change, got %v", reqs)
+	}
+}
+
 func TestEnqueueIngressesForIngressClass(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := networkingv1.AddToScheme(scheme); err != nil {
