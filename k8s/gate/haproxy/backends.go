@@ -1024,14 +1024,19 @@ func (b *HaproxyConfMgrImpl) backendOrigin(ownersForRoute map[client.ObjectKey]i
 	return namespace, isIngressBackend
 }
 
-// discardMistypedIngressBackends drops, before any backend is built, every
-// Ingress-origin backend whose cr-backend ExtensionRef points to a HUG Backend CR
-// (group gate.v3.haproxy.org) instead of a foreign Ingress Backend CR. An Ingress
-// may only reference an ingress.v3.haproxy.org Backend; referencing a HUG one is
-// a type error. Rather than silently building a backend with defaults (the
-// ExtensionRef resolving to nothing in the Ingress store), the backend is set
-// aside and the error is logged so the misconfiguration is visible.
-func (b *HaproxyConfMgrImpl) discardMistypedIngressBackends() {
+// warnMistypedIngressBackends logs, for every Ingress-origin backend whose
+// cr-backend ExtensionRef points to a HUG Backend CR (group gate.v3.haproxy.org)
+// instead of a foreign Ingress Backend CR, that the reference is not allowed. An
+// Ingress may only reference an ingress.v3.haproxy.org Backend; referencing a HUG
+// one is a type error.
+//
+// The reference is simply ignored during the build (it does not resolve in the
+// Ingress store, so mergeWithBackendCRs skips it), while the backend itself is
+// still created with defaults. This matches the behaviour of a Gateway API route
+// carrying a wrong-type cr-backend, where only the CR merge is skipped and the
+// backend is still built. Only the misconfiguration is surfaced here; the backend
+// is not set aside.
+func (b *HaproxyConfMgrImpl) warnMistypedIngressBackends() {
 	for backendName, mapImpactedBEs := range b.backendsImpactedInCycle.Upserted {
 		owners, ok := b.backendOwners.owners[backendName]
 		if !ok {
@@ -1058,12 +1063,11 @@ func (b *HaproxyConfMgrImpl) discardMistypedIngressBackends() {
 		}
 		b.logger.LogAttrs(
 			context.Background(), slog.LevelError,
-			"Ingress cr-backend references a HUG Backend CR, which is not allowed; backend set aside",
+			"Ingress cr-backend references a HUG Backend CR, which is not allowed; ignoring the reference",
 			logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
 			slog.String("backend", backendName),
 			slog.String("crBackend", namespace+"/"+crName),
 		)
-		delete(b.backendsImpactedInCycle.Upserted, backendName)
 	}
 }
 
@@ -1093,9 +1097,10 @@ func (b *HaproxyConfMgrImpl) ingressCRBackendReferencesHugCR(backendRef gatewayv
 func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 	var errs utils.Errors
 
-	// Set aside Ingress backends whose cr-backend references a HUG Backend CR
-	// (wrong type) before building anything, logging the misconfiguration.
-	b.discardMistypedIngressBackends()
+	// Surface Ingress backends whose cr-backend references a HUG Backend CR
+	// (wrong type). The reference is ignored while building, but the backend is
+	// still created, matching the Gateway API route behaviour.
+	b.warnMistypedIngressBackends()
 
 	for backendName, mapImpactedBEs := range b.backendsImpactedInCycle.Upserted {
 		routesInfo := make(map[string]metadata.RouteMetadaInfo)
