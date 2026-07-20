@@ -26,7 +26,6 @@ import (
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	apiv1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -872,7 +871,7 @@ func enqueueIngressesForService(ctrlclient client.Client, _ utilsk8s.ExtractGVK)
 			return nil
 		}
 		var requests []reconcile.Request
-		service, ok := o.(*v1.Service)
+		service, ok := o.(*apiv1.Service)
 		if !ok {
 			return nil
 		}
