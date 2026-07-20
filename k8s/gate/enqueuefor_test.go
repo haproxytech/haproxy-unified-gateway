@@ -407,6 +407,18 @@ func ingressToService(ns, name, svcName, crAnnotation string) *networkingv1.Ingr
 	return ing
 }
 
+func TestWithEnqueueForAccumulates(t *testing.T) {
+	// Several WithEnqueueFor calls (as the Ingress controller uses) must keep
+	// every edge, not just the last call's — otherwise the Service watch is
+	// silently dropped and annotation changes never re-enqueue the Ingress.
+	cfg := &recConfig{}
+	WithEnqueueFor([]enqueueForParams{{}})(cfg)
+	WithEnqueueFor([]enqueueForParams{{}, {}})(cfg)
+	if len(cfg.enqueueForList) != 3 {
+		t.Fatalf("expected WithEnqueueFor to accumulate 3 edges, got %d", len(cfg.enqueueForList))
+	}
+}
+
 func TestIngressUsesBackendCR(t *testing.T) {
 	noSvc := map[types.NamespacedName]struct{}{}
 
