@@ -117,6 +117,42 @@ func TestIngressCRBackendReferencesHugCR(t *testing.T) {
 	})
 }
 
+// TestWarnMistypedIngressBackendsKeepsBackend verifies that an Ingress-origin
+// backend whose cr-backend references a HUG Backend CR (wrong type) is NOT set
+// aside: the backend stays in Upserted (it is still built with defaults, the
+// reference merely does not resolve in the Ingress store), matching the Gateway
+// API route behaviour.
+func TestWarnMistypedIngressBackendsKeepsBackend(t *testing.T) {
+	const ns = "ingress"
+	const backendName = "hug_ingress_nginx-svc_80_abc"
+	crNsName := k8stypes.NamespacedName{Namespace: ns, Name: "be-ingress"}
+	// A synthetic (ingress-origin) owner route; the "ing:" prefix marks it synthetic.
+	syntheticOwner := client.ObjectKey{Namespace: ns, Name: "ing:web:0"}
+
+	mgr := newTestBackendMgr(
+		map[k8stypes.NamespacedName]*v3.Backend{crNsName: {}}, // HUG CR present
+		nil, // foreign Ingress Backend CR store empty -> type mismatch
+	)
+	mgr.backendOwners = BackendReferencedBy{
+		owners: map[string]map[BackendOwnerType]map[client.ObjectKey]int64{
+			backendName: {BackendOwnerTypeHTTPRoute: {syntheticOwner: 1}},
+		},
+	}
+	mgr.backendsImpactedInCycle = BackendsImpactedInCycle{
+		Upserted: map[string]map[client.ObjectKey]BackendImpactedInCycle{
+			backendName: {syntheticOwner: {BackendRef: crBackendRef("be-ingress")}},
+		},
+		Deleted:      map[string]struct{}{},
+		Unreferenced: map[string]struct{}{},
+	}
+
+	mgr.warnMistypedIngressBackends()
+
+	if _, ok := mgr.backendsImpactedInCycle.Upserted[backendName]; !ok {
+		t.Fatal("expected the mistyped Ingress backend to remain in Upserted (built with defaults), not set aside")
+	}
+}
+
 func TestResolveBackendCR(t *testing.T) {
 	nsName := k8stypes.NamespacedName{Namespace: "default", Name: "my-backend"}
 
