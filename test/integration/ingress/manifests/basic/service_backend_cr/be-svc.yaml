@@ -1,0 +1,8 @@
+apiVersion: gate.v3.haproxy.org/v3
+kind: Backend
+metadata:
+  name: be-svc
+spec:
+  # A distinctive, non-default value: newBackend defaults server_timeout to
+  # 50000, so 71000 in the built backend proves the Service-level CR was merged.
+  server_timeout: 71000

@@ -1,0 +1,14 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-echo
+  annotations:
+    gate.v3.haproxy.org/backend-cr: be-svc
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
+  selector:
+    app: http-echo

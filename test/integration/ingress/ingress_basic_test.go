@@ -75,3 +75,47 @@ func (s *IngressTestSuite) Test_Ingress_NamedServicePort() {
 	// Service port "web" resolves to 80, so the backend name uses 80.
 	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
 }
+
+// Deleting the IngressClass an Ingress depends on must re-evaluate the Ingress
+// and remove its backend, without a controller restart. Re-evaluation on an
+// IngressClass change is driven by the Ingress builder consuming
+// Updates.IngressClasses plus the IngressClass enqueue edge.
+func (s *IngressTestSuite) Test_Ingress_BackendRemovedWhenIngressClassDeleted() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "ok")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	// The IngressClass is deleted mid-test; only the rest is cleaned up at the end.
+	defer s.CleanupFixtures(fixturePath, []string{"http-echo.yaml", "ingress.yaml"})
+
+	const backendName = "hug_e2e-tests-ingress_http-echo_80__"
+	// Barrier: the Ingress is accepted and its backend is built.
+	s.expectBackendExists(backendName)
+
+	// Delete only the IngressClass: the Ingress becomes ineligible and its
+	// backend must be removed.
+	s.CleanupFixtures(fixturePath, []string{"ingressclass.yaml"})
+	s.ExpectBackendsDoNotExist(s.Test().Ctx, backendName)
+}
+
+// Adding the gate.v3.haproxy.org/backend-cr annotation to an Ingress's target
+// Service after the Ingress backend is already built must re-reconcile the
+// Ingress and merge the referenced Backend CR into its (ingress-origin) backend.
+// This exercises the Ingress controller's Service watch, which must stay
+// registered alongside its other secondary watches.
+func (s *IngressTestSuite) Test_Ingress_ServiceBackendCRAppliedWhenAnnotationAddedLater() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "service_backend_cr")
+	manifests := []string{"ingressclass.yaml", "be-svc.yaml", "deploy-service.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	const backendName = "hug_e2e-tests-ingress_http-echo_80__"
+	// Barrier: the backend exists with the default server timeout (the Service
+	// has no backend-cr annotation yet, so be-svc is not merged).
+	s.expectBackendExists(backendName)
+	s.expectBackendServerTimeout(backendName, 50000)
+
+	// Add the Service-level annotation: the Ingress must be re-reconciled and its
+	// backend merged with be-svc (server_timeout 71000).
+	s.CreateFixtures(fixturePath, []string{"service-annotated.yaml"})
+	s.expectBackendServerTimeout(backendName, 71000)
+}

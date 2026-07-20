@@ -58,3 +58,24 @@ func (s *IngressSuite) expectBackendExists(name string) {
 		s.T().Fatalf("expected backend %q to exist", name)
 	}
 }
+
+// expectBackendServerTimeout waits until the named backend exists and carries the
+// given server timeout. It is used to observe a Service-level Backend CR merge:
+// the built backend defaults server_timeout to 50000, so a distinct value proves
+// the CR was merged into the (ingress-origin) backend.
+func (s *IngressSuite) expectBackendServerTimeout(name string, want int64) {
+	if !utils.WaitFor(s.Test().Ctx, interval, timeout, func() bool {
+		backends, err := s.Test().HaproxyClient.BackendsGet()
+		if err != nil {
+			return false
+		}
+		for _, be := range backends {
+			if be.Name == name {
+				return be.ServerTimeout != nil && *be.ServerTimeout == want
+			}
+		}
+		return false
+	}) {
+		s.T().Fatalf("expected backend %q to have server timeout %d", name, want)
+	}
+}
