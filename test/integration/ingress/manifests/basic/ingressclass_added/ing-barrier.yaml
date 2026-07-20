@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-barrier
+spec:
+  ingressClassName: barrier
+  rules:
+    - host: barrier.ingress
+      http:
+        paths:
+          - path: /path1
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo-barrier
+                port:
+                  number: 80

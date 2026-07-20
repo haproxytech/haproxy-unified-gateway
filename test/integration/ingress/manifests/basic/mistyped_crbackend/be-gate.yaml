@@ -1,0 +1,10 @@
+apiVersion: gate.v3.haproxy.org/v3
+kind: Backend
+metadata:
+  name: be-gate
+spec:
+  # A HUG (gate) Backend CR. An Ingress may only reference a foreign
+  # ingress.v3.haproxy.org Backend, so this reference is a type error: it must be
+  # ignored (not merged), while the backend is still built with defaults. The
+  # distinctive value would surface (71000) if it were wrongly merged.
+  server_timeout: 71000

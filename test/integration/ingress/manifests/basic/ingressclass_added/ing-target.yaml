@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-target
+spec:
+  # The "target" IngressClass is added only later; until then this Ingress is
+  # ineligible and produces no backend.
+  ingressClassName: target
+  rules:
+    - host: target.ingress
+      http:
+        paths:
+          - path: /path1
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo-target
+                port:
+                  number: 80

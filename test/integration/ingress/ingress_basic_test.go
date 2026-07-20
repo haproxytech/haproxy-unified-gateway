@@ -119,3 +119,65 @@ func (s *IngressTestSuite) Test_Ingress_ServiceBackendCRAppliedWhenAnnotationAdd
 	s.CreateFixtures(fixturePath, []string{"service-annotated.yaml"})
 	s.expectBackendServerTimeout(backendName, 71000)
 }
+
+// An Ingress whose cr-backend annotation points to a HUG (gate) Backend CR uses
+// the wrong CR type: an Ingress may only reference a foreign
+// ingress.v3.haproxy.org Backend. The reference must be ignored (not merged),
+// but the backend must still be built with defaults — matching a Gateway API
+// route with a wrong-type cr-backend, rather than being set aside.
+func (s *IngressTestSuite) Test_Ingress_MistypedCRBackend_StillBuildsBackend() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "mistyped_crbackend")
+	manifests := []string{"ingressclass.yaml", "be-gate.yaml", "deploy-service.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// The backend name carries the ExtensionRef filter hash, so match by prefix.
+	be := s.expectBackendByPrefix("hug_e2e-tests-ingress_http-echo_80_")
+	// The gate CR was ignored (foreign-only for Ingress), so the server timeout
+	// is the default, not the CR's 71000.
+	s.Require().NotNil(be.ServerTimeout)
+	s.Require().Equal(int64(50000), *be.ServerTimeout,
+		"the mistyped gate Backend CR must be ignored, not merged")
+}
+
+// An Ingress created before its IngressClass is ineligible; adding the matching
+// IngressClass afterwards must re-evaluate the Ingress and create its backend
+// without a controller restart. A second, already-eligible Ingress is used as a
+// synchronisation barrier so the target Ingress is provably seen as ineligible
+// before its class is added.
+func (s *IngressTestSuite) Test_Ingress_BackendAppearsWhenIngressClassAddedLater() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "ingressclass_added")
+	initial := []string{
+		"ic-barrier.yaml", "svc-barrier.yaml", "ing-barrier.yaml",
+		"svc-target.yaml", "ing-target.yaml",
+	}
+	s.CreateFixtures(fixturePath, initial)
+	defer s.CleanupFixtures(fixturePath, append(initial, "ic-target.yaml"))
+
+	const barrierBackend = "hug_e2e-tests-ingress_http-echo-barrier_80__"
+	const targetBackend = "hug_e2e-tests-ingress_http-echo-target_80__"
+
+	// Barrier: the eligible Ingress backend exists, so the batch (including the
+	// ineligible target Ingress) has been processed.
+	s.expectBackendExists(barrierBackend)
+	s.ExpectBackendsDoNotExist(s.Test().Ctx, targetBackend)
+
+	// Add the target IngressClass: the target Ingress must be re-evaluated and
+	// its backend created.
+	s.CreateFixtures(fixturePath, []string{"ic-target.yaml"})
+	s.expectBackendExists(targetBackend)
+}
+
+// An Ingress with no TLS must not produce an empty-named frontend: the synthetic
+// https listener is dropped when it has no certificate, so no "hug_" maps
+// directory (LinkID + "_" + empty virtual listener name) is created.
+func (s *IngressTestSuite) Test_Ingress_NoEmptyNameFrontendWithoutTLS() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "ok")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Barrier: the Ingress is wired through, so the maps have been written.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+	s.expectMapDirAbsent("hug_")
+}

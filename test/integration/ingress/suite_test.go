@@ -15,8 +15,12 @@
 package ingress
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/haproxytech/client-native/v6/models"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/base"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 )
@@ -56,6 +60,39 @@ func (s *IngressSuite) expectBackendExists(name string) {
 		return false
 	}) {
 		s.T().Fatalf("expected backend %q to exist", name)
+	}
+}
+
+// expectBackendByPrefix waits until a backend whose name starts with prefix
+// exists and returns it. It is used when the backend name carries a filter hash
+// that cannot be predicted (e.g. an Ingress with a cr-backend ExtensionRef).
+func (s *IngressSuite) expectBackendByPrefix(prefix string) *models.Backend {
+	var found *models.Backend
+	if !utils.WaitFor(s.Test().Ctx, interval, timeout, func() bool {
+		backends, err := s.Test().HaproxyClient.BackendsGet()
+		if err != nil {
+			return false
+		}
+		for _, be := range backends {
+			if strings.HasPrefix(be.Name, prefix) {
+				found = be
+				return true
+			}
+		}
+		return false
+	}) {
+		s.T().Fatalf("expected a backend with prefix %q to exist", prefix)
+	}
+	return found
+}
+
+// expectMapDirAbsent asserts that no maps directory with the given name exists.
+// It guards against an empty-named frontend ("hug_"), which appeared when a
+// synthetic listener with no virtual listener name was written to.
+func (s *IngressSuite) expectMapDirAbsent(dirName string) {
+	dir := filepath.Join(s.Test().HaproxyCfgDir, "maps", dirName)
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		s.T().Fatalf("expected maps directory %q to be absent, stat err=%v", dir, err)
 	}
 }
 

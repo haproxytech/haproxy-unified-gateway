@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-echo
+  annotations:
+    # Points at a HUG (gate) Backend CR — the wrong type for an Ingress.
+    cr-backend: be-gate
+spec:
+  ingressClassName: hug
+  rules:
+    - host: example.ingress
+      http:
+        paths:
+          - path: /path1
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80
