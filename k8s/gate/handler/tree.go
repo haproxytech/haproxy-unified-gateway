@@ -101,14 +101,6 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 
 	referenceGrantBuilder := tree.NewReferenceGrantBuilder(controllerStore, referenceGrantManager)
 
-	// Ingress
-
-	ingressBuilder := tree.NewIngressBuilder(controllerStore)
-
-	// Synthetic ingress gateway: run as a pre-step (see buildGateTree), not in the
-	// builder loop, so it is injected before the secret-reference rebuild.
-	syntheticGatewayBuilder := tree.NewSyntheticGatewayBuilder(controllerStore)
-
 	treeBuilder := GateTreeBuilder{
 		cfg:              cfg,
 		referenceManager: referenceManager,
@@ -127,17 +119,23 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 		},
 	}
 
-	// Ingress support is opt-in. When disabled, neither the synthetic gateway nor
-	// the Ingress translation runs, so a pure Gateway API deployment is untouched.
-	// When enabled, the synthetic gateway is injected as a pre-builder (before the
-	// reference rebuild) and the Ingress builder runs first among the post-builders
-	// (referenceGrantBuilder must see its output).
-	if cfg.EnableIngress {
-		treeBuilder.preBuilders = append(treeBuilder.preBuilders, syntheticGatewayBuilder)
-		treeBuilder.postBuilders = append([]tree.Builder{ingressBuilder}, treeBuilder.postBuilders...)
-	}
+	treeBuilder.attachIngressBuilders(controllerStore)
 
 	return treeBuilder
+}
+
+// attachIngressBuilders wires the opt-in Ingress support onto the builder. When
+// disabled, neither the synthetic gateway nor the Ingress translation runs, so a
+// pure Gateway API deployment is untouched. When enabled, the synthetic gateway
+// is injected as a pre-builder (before the secret-reference rebuild) and the
+// Ingress builder runs first among the post-builders (referenceGrantBuilder must
+// see its output).
+func (b *GateTreeBuilder) attachIngressBuilders(controllerStore *tree.ControllerStore) {
+	if !b.cfg.EnableIngress {
+		return
+	}
+	b.preBuilders = append(b.preBuilders, tree.NewSyntheticGatewayBuilder(controllerStore))
+	b.postBuilders = append([]tree.Builder{tree.NewIngressBuilder(controllerStore)}, b.postBuilders...)
 }
 
 func (b *GateTreeBuilder) buildGateTree() {
