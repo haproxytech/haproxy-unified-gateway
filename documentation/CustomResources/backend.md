@@ -20,7 +20,7 @@ A `Backend` CR is never rendered on its own — it only takes effect once it is
 | Mechanism | Declared on | Applies to | Selects the backend by |
 |---|---|---|---|
 | **Route-level** | an `HTTPRoute` `backendRef` (`ExtensionRef` filter) | HTTPRoute **only** | the specific `backendRef` (its filter hash) |
-| **Service-level** | a `Service` annotation (`gate.v3.haproxy.org/backend-cr`) | HTTPRoute **and** TLSRoute | every backend built for that Service |
+| **Service-level** | a `Service` annotation (`gate.v3.haproxy.org/cr-backend`) | HTTPRoute **and** TLSRoute | every backend built for that Service |
 
 > **TLSRoute note:** TLSRoute rules have no filters, so the route-level mechanism
 > is not available for TLSRoutes. A TLSRoute can only receive a Backend CR through
@@ -129,7 +129,7 @@ value in the CR replaces the current one.
 
 ## Service-level attachment (HTTPRoute and TLSRoute)
 
-Annotate the target `Service` with `gate.v3.haproxy.org/backend-cr`. The CR is
+Annotate the target `Service` with `gate.v3.haproxy.org/cr-backend`. The CR is
 then merged into **every** backend HUG builds for that Service, no matter which
 route (HTTPRoute or TLSRoute) references it:
 
@@ -140,7 +140,7 @@ metadata:
   name: http-echo
   namespace: example
   annotations:
-    gate.v3.haproxy.org/backend-cr: backend-tuning
+    gate.v3.haproxy.org/cr-backend: backend-tuning
 spec:
   ports:
     - name: http
@@ -178,7 +178,7 @@ metadata:
   name: http-echo
   namespace: team-a
   annotations:
-    gate.v3.haproxy.org/backend-cr: infra/backend-tuning   # CR lives in "infra"
+    gate.v3.haproxy.org/cr-backend: infra/backend-tuning   # CR lives in "infra"
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
