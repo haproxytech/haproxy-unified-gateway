@@ -1,0 +1,13 @@
+# The HUG controller Service, identified by its label. Its address is what the
+# controller advertises on Gateway and Ingress LoadBalancer status. ExternalName
+# gives a deterministic hostname without needing a provisioned LoadBalancer or an
+# allocated ClusterIP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hug-controller
+  labels:
+    app.kubernetes.io/name: haproxy-unified-gateway
+spec:
+  type: ExternalName
+  externalName: hug.example.com

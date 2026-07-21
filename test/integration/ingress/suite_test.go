@@ -23,6 +23,8 @@ import (
 	"github.com/haproxytech/client-native/v6/models"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/base"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
+	networkingv1 "k8s.io/api/networking/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -84,6 +86,25 @@ func (s *IngressSuite) expectBackendByPrefix(prefix string) *models.Backend {
 		s.T().Fatalf("expected a backend with prefix %q to exist", prefix)
 	}
 	return found
+}
+
+// expectIngressLBHostname waits until the named Ingress's
+// status.loadBalancer.ingress advertises the given hostname.
+func (s *IngressSuite) expectIngressLBHostname(name, hostname string) {
+	if !utils.WaitFor(s.Test().Ctx, interval, timeout, func() bool {
+		var ing networkingv1.Ingress
+		if err := s.Test().Client.Get(s.Test().Ctx, client.ObjectKey{Namespace: s.Test().Namespace, Name: name}, &ing); err != nil {
+			return false
+		}
+		for _, lb := range ing.Status.LoadBalancer.Ingress {
+			if lb.Hostname == hostname {
+				return true
+			}
+		}
+		return false
+	}) {
+		s.T().Fatalf("expected Ingress %q LoadBalancer status to advertise hostname %q", name, hostname)
+	}
 }
 
 // expectMapDirAbsent asserts that no maps directory with the given name exists.

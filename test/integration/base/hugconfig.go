@@ -66,6 +66,10 @@ func hugConfig(test *IntTest, t *testing.T) hugconfig.HUGConfig {
 			logging.LogCategoryMapsStorage:   slog.LevelDebug,
 		},
 		EnableIngress: test.EnableIngress,
+		// Identify the HUG Kubernetes service so controller addresses can be
+		// resolved (used for Gateway and Ingress LoadBalancer status). Init does
+		// not apply this default, so set it explicitly here.
+		HugServiceLabel: hugconfig.LabelSelectorValue{Key: "app.kubernetes.io/name", Value: "haproxy-unified-gateway"},
 	}
 
 	_ = hconfig.Init(external)

@@ -168,6 +168,22 @@ func (s *IngressTestSuite) Test_Ingress_BackendAppearsWhenIngressClassAddedLater
 	s.expectBackendExists(targetBackend)
 }
 
+// A managed Ingress must have its LoadBalancer status populated with the
+// controller address. A HUG Service (identified by its label) of type
+// ExternalName provides a deterministic hostname, which must appear in the
+// Ingress status.loadBalancer.ingress.
+func (s *IngressTestSuite) Test_Ingress_LoadBalancerStatusAdvertisesControllerAddress() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "status_address")
+	manifests := []string{"hug-service.yaml", "ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Barrier: the Ingress is accepted and wired through.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+	// Its LoadBalancer status advertises the controller address.
+	s.expectIngressLBHostname("ingress-echo", "hug.example.com")
+}
+
 // An Ingress with no TLS must not produce an empty-named frontend: the synthetic
 // https listener is dropped when it has no certificate, so no "hug_" maps
 // directory (LinkID + "_" + empty virtual listener name) is created.
