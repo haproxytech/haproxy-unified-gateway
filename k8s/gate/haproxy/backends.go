@@ -758,7 +758,7 @@ func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBacken
 		}
 	}
 
-	// Finally, a Service-level Backend CR (gate.v3.haproxy.org/backend-cr) is
+	// Finally, a Service-level Backend CR (gate.v3.haproxy.org/cr-backend) is
 	// applied last, by override, so it takes precedence over the route-level
 	// cr-backend result (service > httproute).
 	if err := b.mergeServiceBackendCR(newBackend, backendRef, namespace); err != nil {

@@ -22,7 +22,7 @@ const (
 	// merged, by override, into every backend built for that Service (the Service
 	// wins over the route-level cr-backend). The value is "name" or
 	// "namespace/name".
-	ServiceBackendCRAnnotation = "gate.v3.haproxy.org/backend-cr"
+	ServiceBackendCRAnnotation = "gate.v3.haproxy.org/cr-backend"
 
 	// Stats Frontend name
 	StatsFrontendName = "stats"
