@@ -214,6 +214,7 @@ func Add(
 		IngressClass:               cfg.IngressClass,
 		EmptyIngressClass:          cfg.EmptyIngressClass,
 		EnableIngress:              cfg.EnableIngress,
+		DisableIngressStatusUpdate: cfg.DisableIngressStatusUpdate,
 		HTTPIngressFrontendPort:    cfg.HTTPIngressFrontendPort,
 		HTTPSIngressFrontendPort:   cfg.HTTPSIngressFrontendPort,
 	}

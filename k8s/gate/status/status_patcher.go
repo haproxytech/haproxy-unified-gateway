@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"slices"
 	"strings"
 
@@ -29,6 +30,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -468,4 +470,73 @@ func (sp *gatewayListenerFeedbackStatusPatcher) SetStatus(obj client.Object) err
 		}
 	}
 	return nil
+}
+
+// ---------------------------
+// Ingress (LoadBalancer status)
+
+// newIngressStatusPatcher builds a patcher that sets an Ingress's
+// status.loadBalancer.ingress to the given addresses. An address that parses as
+// an IP is set as an IP entry, otherwise as a Hostname entry. An empty address
+// list clears the LoadBalancer status.
+func newIngressStatusPatcher(addresses []string) StatusPatcher {
+	return &ingressStatusPatcher{lbIngress: ingressLBFromAddresses(addresses)}
+}
+
+var _ StatusPatcher = &ingressStatusPatcher{}
+
+type ingressStatusPatcher struct {
+	lbIngress []networkingv1.IngressLoadBalancerIngress
+}
+
+func (sp *ingressStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
+	ing, ok := obj.(*networkingv1.Ingress)
+	if !ok {
+		return false, fmt.Errorf("wrong type %T", obj)
+	}
+	return ingressLBEqual(sp.lbIngress, ing.Status.LoadBalancer.Ingress), nil
+}
+
+func (sp *ingressStatusPatcher) SetStatus(obj client.Object) error {
+	ing, ok := obj.(*networkingv1.Ingress)
+	if !ok {
+		return fmt.Errorf("wrong type %T", obj)
+	}
+	ing.Status = networkingv1.IngressStatus{
+		LoadBalancer: networkingv1.IngressLoadBalancerStatus{Ingress: sp.lbIngress},
+	}
+	return nil
+}
+
+func ingressLBFromAddresses(addresses []string) []networkingv1.IngressLoadBalancerIngress {
+	var lbi []networkingv1.IngressLoadBalancerIngress
+	for _, addr := range addresses {
+		if addr == "" {
+			continue
+		}
+		if net.ParseIP(addr) == nil {
+			lbi = append(lbi, networkingv1.IngressLoadBalancerIngress{Hostname: addr})
+		} else {
+			lbi = append(lbi, networkingv1.IngressLoadBalancerIngress{IP: addr})
+		}
+	}
+	return lbi
+}
+
+// ingressLBEqual compares two LoadBalancer ingress lists regardless of order.
+func ingressLBEqual(a, b []networkingv1.IngressLoadBalancerIngress) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	key := func(x networkingv1.IngressLoadBalancerIngress) string { return x.IP + "|" + x.Hostname }
+	sortedA := slices.Clone(a)
+	sortedB := slices.Clone(b)
+	slices.SortFunc(sortedA, func(x, y networkingv1.IngressLoadBalancerIngress) int { return strings.Compare(key(x), key(y)) })
+	slices.SortFunc(sortedB, func(x, y networkingv1.IngressLoadBalancerIngress) int { return strings.Compare(key(x), key(y)) })
+	for i := range sortedA {
+		if sortedA[i].IP != sortedB[i].IP || sortedA[i].Hostname != sortedB[i].Hostname {
+			return false
+		}
+	}
+	return true
 }

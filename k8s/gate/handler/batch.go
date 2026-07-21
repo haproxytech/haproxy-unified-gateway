@@ -78,6 +78,9 @@ type GateTreeConfig struct {
 	EmptyIngressClass bool
 	// EnableIngress turns on the Ingress and synthetic-gateway tree builders.
 	EnableIngress bool
+	// DisableIngressStatusUpdate turns off writing the LoadBalancer status
+	// (status.loadBalancer.ingress) back onto managed Ingresses.
+	DisableIngressStatusUpdate bool
 	// StoreCertificatesOnDisk is a flag that indicates to the gate library to store certificates on disk
 	StoreCertificateOnDisk bool
 	// StoreMapsOnDisk is a flag that indicates to the gate library to store maps on disk
@@ -172,6 +175,7 @@ func NewEventHandlerImpl(
 			gateTreeConfig.BaseLogger,
 			gateTreeConfig.DisableIPv4,
 			gateTreeConfig.DisableIPv6,
+			gateTreeConfig.DisableIngressStatusUpdate,
 		)),
 		logger: gateTreeConfig.BaseLogger.With(logging.LogAttrCategory(logging.LogCategoryBatch)),
 	}
@@ -235,6 +239,13 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 	// Now process them
 	h.statusUpdater.UpdateStatus(ctx, statusUpdates)
 
+	// Ingress LoadBalancer status: advertise the controller addresses on managed
+	// Ingresses (Ingresses have no tree node, so they are handled separately).
+	if h.config.EnableIngress {
+		ingressUpdates := h.statusUpdater.PrepareIngressStatusUpdate(ctx, h.ingressStatusItems())
+		h.statusUpdater.UpdateStatus(ctx, ingressUpdates)
+	}
+
 	if !haproxyConfDiffs.IsEmpty() || haproxyConfDiffs.ReloadNeed {
 		if h.config.TransferHaproxyConfChannel != nil {
 			h.logger.LogAttrs(context.Background(), slog.LevelInfo, "[sending] CONTROLLER => HUG: DIFFS")
@@ -253,6 +264,24 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 
 	// Reconcile Hug service Ports
 	h.hugServiceReconciler.ReconcilePorts(ctx, gatetree.VirtualListeners)
+}
+
+// ingressStatusItems snapshots the watched Ingresses with their current
+// eligibility, for the LoadBalancer status update. Ingresses are not tree nodes,
+// so they are read straight from the cluster store.
+func (h *eventHandlerImpl) ingressStatusItems() []status.IngressStatus {
+	ingresses := h.treeBuilder.ClusterStore.Ingresses
+	items := make([]status.IngressStatus, 0, len(ingresses))
+	for _, ing := range ingresses {
+		if ing == nil {
+			continue
+		}
+		items = append(items, status.IngressStatus{
+			Ingress:  ing,
+			Eligible: h.treeBuilder.IsIngressEligible(ing),
+		})
+	}
+	return items
 }
 
 func (h *eventHandlerImpl) processBatch(batch events.EventBatch) bool {

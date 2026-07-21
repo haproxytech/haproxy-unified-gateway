@@ -27,6 +27,7 @@ Available options:
 | DefaultsSectionName | `name`(string) |
 | DisableIPv4 |  |
 | DisableIPv6 |  |
+| DisableIngressStatusUpdate | `disable`(bool) |
 | EmptyIngressClass | `empty`(bool) |
 | EnableIngress | `enable`(bool) |
 | FrontendNameTemplate | `template`(string) |
@@ -142,6 +143,19 @@ import (
 )
 
 controller, err := controller.New(opt.DisableIPv6())
+```
+
+### DisableIngressStatusUpdate
+
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.DisableIngressStatusUpdate(disable))
 ```
 
 ### EmptyIngressClass

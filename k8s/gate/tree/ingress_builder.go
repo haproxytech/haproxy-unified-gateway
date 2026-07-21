@@ -451,6 +451,18 @@ func (b *ControllerStore) isIngressClassSupported(ingressClassFromIngress, contr
 	return supported
 }
 
+// IsIngressEligible reports whether this controller instance handles the Ingress,
+// following the IngressClass eligibility rules. It is exported so consumers
+// outside the tree package (e.g. the Ingress LoadBalancer status update) can
+// decide which Ingresses to advertise controller addresses on.
+func (b *ControllerStore) IsIngressEligible(ingress *networkingv1.Ingress) bool {
+	if ingress == nil {
+		return false
+	}
+	className := utils.PointerDefaultValueIfNil(ingress.Spec.IngressClassName)
+	return b.isIngressClassSupported(className, b.IngressClass, b.EmptyIngressClass)
+}
+
 func (b *IngressBuilderImpl) deleteRoutesForIngress(ingKey types.NamespacedName) {
 	for key, treeRoute := range b.GateTree.HTTPRoutes {
 		if src, _, ok := utils.ParseSyntheticRoute(key.Namespace, key.Name); ok && src == ingKey {

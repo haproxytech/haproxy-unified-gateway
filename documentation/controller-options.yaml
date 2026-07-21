@@ -36,6 +36,12 @@ DisableIPv6:
     name: DisableIPv6
     comment: ""
     args: []
+DisableIngressStatusUpdate:
+    name: DisableIngressStatusUpdate
+    comment: ""
+    args:
+        - name: disable
+          type: bool
 EmptyIngressClass:
     name: EmptyIngressClass
     comment: ""

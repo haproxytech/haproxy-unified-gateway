@@ -111,6 +111,9 @@ type Configuration struct {
 	// controllers and the synthetic-gateway/Ingress tree builders. Disabled by
 	// default so a pure Gateway API deployment is unaffected.
 	EnableIngress bool
+	// DisableIngressStatusUpdate turns off writing the LoadBalancer status
+	// (status.loadBalancer.ingress) back onto managed Ingresses.
+	DisableIngressStatusUpdate bool
 }
 
 // ControllerPodConfig contains information about this Pod.

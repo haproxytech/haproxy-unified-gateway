@@ -63,17 +63,23 @@ type StatusUpdater interface {
 	// updated by UpdateListenerProgrammedCondition). Only gateways present in
 	// result.GatewayObservedGenerations are updated.
 	PrepareFeedbackStatusUpdate(result diffs.HaproxyConfResult, gateways map[types.NamespacedName]*tree.Gateway) PreparedStatusUpdates
+	// PrepareIngressStatusUpdate builds status writes that set each eligible
+	// Ingress's status.loadBalancer.ingress to the controller addresses, and
+	// clears it for ineligible ones. It is a no-op when Ingress status updates
+	// are disabled.
+	PrepareIngressStatusUpdate(ctx context.Context, ingresses []IngressStatus) PreparedStatusUpdates
 }
 
 type StatusUpdaterConf struct {
-	logger             *slog.Logger
-	client             client.Client
-	extractGVK         utilsk8s.ExtractGVK
-	controllerName     string
-	hugServiceLabelKey string
-	hugServiceLabelVal string
-	disableIPv4        bool
-	disableIPv6        bool
+	logger                     *slog.Logger
+	client                     client.Client
+	extractGVK                 utilsk8s.ExtractGVK
+	controllerName             string
+	hugServiceLabelKey         string
+	hugServiceLabelVal         string
+	disableIPv4                bool
+	disableIPv6                bool
+	disableIngressStatusUpdate bool
 }
 
 type StatusUpdaterImpl struct {
@@ -98,16 +104,18 @@ func NewStatusUpdaterConf(
 	logger *slog.Logger,
 	disableIPv4 bool,
 	disableIPv6 bool,
+	disableIngressStatusUpdate bool,
 ) StatusUpdaterConf {
 	return StatusUpdaterConf{
-		logger:             logger,
-		extractGVK:         extractGVK,
-		client:             k8sClient,
-		controllerName:     controllerName,
-		hugServiceLabelKey: hugServiceLabelKey,
-		hugServiceLabelVal: hugServiceLabelVal,
-		disableIPv4:        disableIPv4,
-		disableIPv6:        disableIPv6,
+		logger:                     logger,
+		extractGVK:                 extractGVK,
+		client:                     k8sClient,
+		controllerName:             controllerName,
+		hugServiceLabelKey:         hugServiceLabelKey,
+		hugServiceLabelVal:         hugServiceLabelVal,
+		disableIPv4:                disableIPv4,
+		disableIPv6:                disableIPv6,
+		disableIngressStatusUpdate: disableIngressStatusUpdate,
 	}
 }
 

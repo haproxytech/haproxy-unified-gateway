@@ -71,6 +71,7 @@ type HUGConfig struct {
 	JobCheckCRD                  bool `ff:"          long: job-check-crd,                   usage: 'run CRD refresh job and exit'"`
 	EmptyIngressClass            bool `ff:"          long: empty-ingress-class,                        usage: 'when ingress-class is set, also handle Ingresses that have no ingressClassName'"`
 	EnableIngress                bool `ff:"          long: enable-ingress,                             usage: 'enable Kubernetes Ingress support: watch Ingress/IngressClass and translate them onto a synthetic Gateway (disabled by default)'"`
+	DisableIngressStatusUpdate   bool `ff:"          long: disable-ingress-status-update,              usage: 'do not write the LoadBalancer status (status.loadBalancer.ingress) back onto managed Ingresses'"`
 }
 
 //revive:enable:line-length-limit
