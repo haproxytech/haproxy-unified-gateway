@@ -379,6 +379,28 @@ func TestComputeTreeUpdatesReevaluatesOnIngressClassChange(t *testing.T) {
 	})
 }
 
+func TestIsIngressEligible(t *testing.T) {
+	cs := &ControllerStore{ClusterStore: &store.ClusterStore{
+		IngressClasses: map[types.NamespacedName]*networkingv1.IngressClass{
+			{Name: "hug"}: mkIngressClass(ingressClassFixture{name: "hug", controller: CONTROLLER}),
+		},
+	}}
+
+	className := "hug"
+	if !cs.IsIngressEligible(&networkingv1.Ingress{Spec: networkingv1.IngressSpec{IngressClassName: &className}}) {
+		t.Error("expected an Ingress referencing a matching class to be eligible")
+	}
+
+	other := "other"
+	if cs.IsIngressEligible(&networkingv1.Ingress{Spec: networkingv1.IngressSpec{IngressClassName: &other}}) {
+		t.Error("expected an Ingress referencing an unknown class to be ineligible")
+	}
+
+	if cs.IsIngressEligible(nil) {
+		t.Error("expected a nil Ingress to be ineligible")
+	}
+}
+
 func TestResolveServicePort(t *testing.T) {
 	const ns = "app"
 
