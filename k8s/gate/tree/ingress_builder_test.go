@@ -453,6 +453,56 @@ func TestIngressClassEligibilityParityWithKIC(t *testing.T) {
 	}
 }
 
+func TestConvertIngressDefaultBackend(t *testing.T) {
+	b := &IngressBuilderImpl{ControllerStore: &ControllerStore{
+		ClusterStore: &store.ClusterStore{},
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}}
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "app", Name: "ing"},
+		Spec: networkingv1.IngressSpec{
+			DefaultBackend: &networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{
+					Name: "fallback",
+					Port: networkingv1.ServiceBackendPort{Number: 80},
+				},
+			},
+		},
+	}
+
+	routes := b.convertIngressToHTTPRoutes(ingress)
+	key := types.NamespacedName{Namespace: "app", Name: utils.MangleIngressName(ingress, "default")}
+	route, ok := routes[key]
+	if !ok {
+		t.Fatalf("expected a default-backend synthetic route, got %v", routes)
+	}
+	if len(route.Spec.Hostnames) != 0 {
+		t.Errorf("default-backend route must be hostless, got hostnames %v", route.Spec.Hostnames)
+	}
+	if len(route.Spec.Rules) != 1 || len(route.Spec.Rules[0].Matches) != 1 {
+		t.Fatalf("expected one rule with one match, got %+v", route.Spec.Rules)
+	}
+	m := route.Spec.Rules[0].Matches[0]
+	if m.Path == nil || m.Path.Type == nil || *m.Path.Type != gatewayv1.PathMatchPathPrefix || *m.Path.Value != "/" {
+		t.Errorf("expected a catch-all PathPrefix / match, got %+v", m.Path)
+	}
+	if len(route.Spec.Rules[0].BackendRefs) != 1 ||
+		route.Spec.Rules[0].BackendRefs[0].Name != "fallback" {
+		t.Errorf("expected the backendRef to target the default backend Service, got %+v", route.Spec.Rules[0].BackendRefs)
+	}
+}
+
+func TestConvertIngressNoDefaultBackend(t *testing.T) {
+	b := &IngressBuilderImpl{ControllerStore: &ControllerStore{
+		ClusterStore: &store.ClusterStore{},
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}}
+	ingress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: "app", Name: "ing"}}
+	if routes := b.convertIngressToHTTPRoutes(ingress); len(routes) != 0 {
+		t.Errorf("expected no synthetic routes without rules or a default backend, got %v", routes)
+	}
+}
+
 func TestIsIngressEligible(t *testing.T) {
 	cs := &ControllerStore{ClusterStore: &store.ClusterStore{
 		IngressClasses: map[types.NamespacedName]*networkingv1.IngressClass{

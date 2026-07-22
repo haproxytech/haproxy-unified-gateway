@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-echo
+spec:
+  ingressClassName: hug
+  # No rules: only a default backend, which must still produce a backend.
+  defaultBackend:
+    service:
+      name: http-echo
+      port:
+        number: 80

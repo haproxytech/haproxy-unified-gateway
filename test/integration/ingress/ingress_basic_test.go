@@ -168,6 +168,18 @@ func (s *IngressTestSuite) Test_Ingress_BackendAppearsWhenIngressClassAddedLater
 	s.expectBackendExists(targetBackend)
 }
 
+// An Ingress with only a default backend (no rules) must still produce a
+// backend for the referenced Service, mirroring kubernetes-ingress. Before
+// default-backend support this Ingress translated to nothing.
+func (s *IngressTestSuite) Test_Ingress_DefaultBackendBuildsBackend() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "default_backend")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+}
+
 // Ingress pathType must route to the matching HAProxy map: an Exact path lands
 // in the exact-match map and a Prefix path in the prefix-match map, never
 // swapped. Both paths target the same Service, so they share one backend and
