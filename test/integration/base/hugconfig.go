@@ -70,6 +70,14 @@ func hugConfig(test *IntTest, t *testing.T) hugconfig.HUGConfig {
 		// resolved (used for Gateway and Ingress LoadBalancer status). Init does
 		// not apply this default, so set it explicitly here.
 		HugServiceLabel: hugconfig.LabelSelectorValue{Key: "app.kubernetes.io/name", Value: "haproxy-unified-gateway"},
+		// The synthetic ingress gateway's frontend ports come from config, not
+		// from a (port-substituted) manifest, so they would otherwise stay at the
+		// fixed 8080/8443 defaults. Remap them through the test PortMap like every
+		// other port, so per-package runs stay isolated and the map/crt-list paths
+		// the assertions look up (which substitute 8080/8443) resolve to the
+		// directories HUG actually writes (hug_http_<remapped>/…).
+		HTTPIngressFrontendPort:  test.PortMap[8080],
+		HTTPSIngressFrontendPort: test.PortMap[8443],
 	}
 
 	_ = hconfig.Init(external)
