@@ -213,13 +213,13 @@ func (s *IngressTestSuite) Test_Ingress_PathTypeRoutesToCorrectMap() {
 	const exactMap = "hug_http_8080/path_exact.map"
 	const prefixMap = "hug_http_8080/path_prefix.map"
 
-	s.expectMapFileContainsPath(exactMap, "/exact")
-	s.expectMapFileContainsPath(prefixMap, "/prefix")
+	s.expectMapFileContains(exactMap, "/exact")
+	s.expectMapFileContains(prefixMap, "/prefix")
 
 	// The pathTypes must not be swapped.
-	s.Require().False(s.mapFileContainsPath(prefixMap, "/exact"),
+	s.Require().False(s.mapFileContains(prefixMap, "/exact"),
 		"the Exact path must not appear in the prefix-match map")
-	s.Require().False(s.mapFileContainsPath(exactMap, "/prefix"),
+	s.Require().False(s.mapFileContains(exactMap, "/prefix"),
 		"the Prefix path must not appear in the exact-match map")
 }
 
@@ -251,4 +251,32 @@ func (s *IngressTestSuite) Test_Ingress_NoEmptyNameFrontendWithoutTLS() {
 	// Barrier: the Ingress is wired through, so the maps have been written.
 	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
 	s.expectMapDirAbsent("hug_")
+}
+
+// A multi-host Ingress declares several rules, each with its own host. Every
+// rule becomes an independent synthetic HTTPRoute carrying a single hostname, so
+// both hosts must appear as separate entries in the listener route exact-match
+// map and each rule's path in the path-prefix map. This mirrors kubernetes-ingress
+// serving distinct virtual hosts from one Ingress. The two rules target the same
+// Service, so they share one backend and differ only by host and path.
+func (s *IngressTestSuite) Test_Ingress_MultiHostRoutesPerHost() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "multihost")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Barrier: the Ingress is accepted and its (shared) backend built.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+
+	const exactMap = "hug_http_8080/listener_route_exact_match.map"
+	const prefixMap = "hug_http_8080/path_prefix.map"
+
+	// Each host is routed independently: both appear in the listener route
+	// exact-match map (exact, non-wildcard hosts).
+	s.expectMapFileContains(exactMap, "a.ingress")
+	s.expectMapFileContains(exactMap, "b.ingress")
+
+	// Each rule's path is programmed in the prefix-match map.
+	s.expectMapFileContains(prefixMap, "/a")
+	s.expectMapFileContains(prefixMap, "/b")
 }

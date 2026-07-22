@@ -107,29 +107,30 @@ func (s *IngressSuite) expectIngressLBHostname(name, hostname string) {
 	}
 }
 
-// mapFileContainsPath reports whether any line of the given map file contains
-// the path value. It matches on the path substring rather than the full "key
-// value" line so it does not depend on the backend's filter-hash name.
-func (s *IngressSuite) mapFileContainsPath(mapRelPath, pathValue string) bool {
+// mapFileContains reports whether any line of the given map file contains the
+// value (a path or a host). It matches on the value as a line substring rather
+// than the full "key value" line, so it does not depend on the backend's
+// filter-hash name.
+func (s *IngressSuite) mapFileContains(mapRelPath, value string) bool {
 	lines, err := s.GetMapFileFrom(mapRelPath)
 	if err != nil {
 		return false
 	}
 	for _, l := range lines {
-		if strings.Contains(l, pathValue) {
+		if strings.Contains(l, value) {
 			return true
 		}
 	}
 	return false
 }
 
-// expectMapFileContainsPath waits until the given map file has an entry for the
-// path value.
-func (s *IngressSuite) expectMapFileContainsPath(mapRelPath, pathValue string) {
+// expectMapFileContains waits until the given map file has a line containing the
+// value.
+func (s *IngressSuite) expectMapFileContains(mapRelPath, value string) {
 	if !utils.WaitFor(s.Test().Ctx, interval, timeout, func() bool {
-		return s.mapFileContainsPath(mapRelPath, pathValue)
+		return s.mapFileContains(mapRelPath, value)
 	}) {
-		s.T().Fatalf("expected map %q to contain path %q", mapRelPath, pathValue)
+		s.T().Fatalf("expected map %q to contain %q", mapRelPath, value)
 	}
 }
 

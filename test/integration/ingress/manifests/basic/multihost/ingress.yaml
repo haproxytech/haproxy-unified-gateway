@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-multihost
+spec:
+  ingressClassName: hug
+  # Two rules with distinct hosts. Each host becomes its own synthetic HTTPRoute
+  # (one hostname per route), so both must appear as independent entries in the
+  # listener route exact-match map and both paths in the path-prefix map.
+  rules:
+    - host: a.ingress
+      http:
+        paths:
+          - path: /a
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80
+    - host: b.ingress
+      http:
+        paths:
+          - path: /b
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80
