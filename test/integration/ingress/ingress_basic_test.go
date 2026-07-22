@@ -168,6 +168,23 @@ func (s *IngressTestSuite) Test_Ingress_BackendAppearsWhenIngressClassAddedLater
 	s.expectBackendExists(targetBackend)
 }
 
+// An Ingress with spec.tls must bring up the synthetic https listener: its
+// TLS secret is loaded as the listener certificate, so the https frontend is
+// programmed and its route maps exist. Without a certificate the https listener
+// would be invalid and dropped.
+func (s *IngressTestSuite) Test_Ingress_TLSBringsUpHTTPSListener() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "tls")
+	manifests := []string{"ingressclass.yaml", "secret.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Barrier: the Ingress is accepted and its backend built.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+	// The https frontend is programmed (its maps exist) because the TLS secret
+	// provides a certificate for the synthetic https listener.
+	s.expectMapFileExists("hug_https_8443/path_prefix.map")
+}
+
 // An Ingress with only a default backend (no rules) must still produce a
 // backend for the referenced Service, mirroring kubernetes-ingress. Before
 // default-backend support this Ingress translated to nothing.

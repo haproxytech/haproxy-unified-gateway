@@ -133,6 +133,17 @@ func (s *IngressSuite) expectMapFileContainsPath(mapRelPath, pathValue string) {
 	}
 }
 
+// expectMapFileExists waits until the given map file exists (readable), which
+// implies its frontend has been programmed.
+func (s *IngressSuite) expectMapFileExists(mapRelPath string) {
+	if !utils.WaitFor(s.Test().Ctx, interval, timeout, func() bool {
+		_, err := s.GetMapFileFrom(mapRelPath)
+		return err == nil
+	}) {
+		s.T().Fatalf("expected map file %q to exist", mapRelPath)
+	}
+}
+
 // expectMapDirAbsent asserts that no maps directory with the given name exists.
 // It guards against an empty-named frontend ("hug_"), which appeared when a
 // synthetic listener with no virtual listener name was written to.

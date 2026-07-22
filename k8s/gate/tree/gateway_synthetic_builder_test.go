@@ -27,6 +27,70 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 )
 
+// TestIngressTLSCertificateRefs checks that the synthetic https listener's
+// certificateRefs are collected only from eligible Ingresses' spec.tls, in the
+// Ingress namespace, deduplicated by secret, mirroring how kubernetes-ingress
+// loads Ingress TLS secrets.
+func TestIngressTLSCertificateRefs(t *testing.T) {
+	const ns = "app"
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	ingWithTLS := func(name, className string, secrets ...string) *networkingv1.Ingress {
+		ing := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+		if className != "" {
+			ing.Spec.IngressClassName = &className
+		}
+		for _, sec := range secrets {
+			ing.Spec.TLS = append(ing.Spec.TLS, networkingv1.IngressTLS{SecretName: sec})
+		}
+		return ing
+	}
+
+	byKey := map[types.NamespacedName]*networkingv1.Ingress{}
+	for _, ing := range []*networkingv1.Ingress{
+		ingWithTLS("web", "hug", "web-tls", "web-tls"), // eligible, duplicate secret name
+		ingWithTLS("extra", "hug", "extra-tls"),        // eligible
+		ingWithTLS("foreign", "nginx", "foreign-tls"),  // ineligible (unknown class) -> excluded
+		ingWithTLS("plain", "hug"),                     // eligible but no TLS -> contributes nothing
+	} {
+		byKey[types.NamespacedName{Namespace: ing.Namespace, Name: ing.Name}] = ing
+	}
+
+	b := &SyntheticGatewayBuilderImpl{ControllerStore: &ControllerStore{
+		ClusterStore: &store.ClusterStore{
+			Ingresses: byKey,
+			IngressClasses: map[types.NamespacedName]*networkingv1.IngressClass{
+				{Name: "hug"}: {ObjectMeta: metav1.ObjectMeta{Name: "hug"}, Spec: networkingv1.IngressClassSpec{Controller: CONTROLLER}},
+			},
+		},
+		Logger:            discard,
+		IngressClass:      "",
+		EmptyIngressClass: false,
+	}}
+
+	refs := b.ingressTLSCertificateRefs()
+
+	got := map[string]bool{}
+	for _, r := range refs {
+		if r.Group == nil || *r.Group != "" {
+			t.Errorf("expected empty group, got %v", r.Group)
+		}
+		if r.Kind == nil || *r.Kind != "Secret" {
+			t.Errorf("expected Secret kind, got %v", r.Kind)
+		}
+		if r.Namespace == nil || string(*r.Namespace) != ns {
+			t.Errorf("expected namespace %q, got %v", ns, r.Namespace)
+		}
+		got[string(r.Name)] = true
+	}
+	if len(refs) != 2 || !got["web-tls"] || !got["extra-tls"] {
+		t.Fatalf("expected deduped eligible-only refs {web-tls, extra-tls}, got %d: %v", len(refs), got)
+	}
+	if got["foreign-tls"] {
+		t.Error("the TLS secret of an ineligible Ingress must be excluded")
+	}
+}
+
 // TestSyntheticGatewayBuilderHTTPSListener verifies that the synthetic ingress
 // gateway declares the https listener only when at least one managed Ingress
 // carries a TLS secret. An HTTPS/Terminate listener with no certificateRefs is
