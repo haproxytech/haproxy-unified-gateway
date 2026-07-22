@@ -379,6 +379,80 @@ func TestComputeTreeUpdatesReevaluatesOnIngressClassChange(t *testing.T) {
 	})
 }
 
+// kicIsIngressClassSupported is a faithful re-implementation of
+// kubernetes-ingress' store.K8s.IsIngressClassSupported (pkg/store/store.go). It
+// is the reference behaviour HUG's isIngressClassSupported must match. Kept as an
+// independent copy so a divergence in HUG's logic is caught (differential test).
+func kicIsIngressClassSupported(classes map[types.NamespacedName]*networkingv1.IngressClass, ingressClass, controllerClass string, allowEmptyClass bool) bool {
+	var ctrlFromSpec string
+	if ic := classes[types.NamespacedName{Name: ingressClass}]; ic != nil {
+		ctrlFromSpec = ic.Spec.Controller
+	}
+	if ingressClass == "" {
+		for _, ic := range classes {
+			if ic.Annotations[isDefaultClassAnnotation] == "true" {
+				ctrlFromSpec = ic.Spec.Controller
+				break
+			}
+		}
+	}
+	switch controllerClass {
+	case "":
+		return (ingressClass == "" && ctrlFromSpec == "") || ctrlFromSpec == CONTROLLER
+	default:
+		return ingressClass == "" && allowEmptyClass || ctrlFromSpec == path.Join(CONTROLLER, controllerClass)
+	}
+}
+
+// TestIngressClassEligibilityParityWithKIC asserts, over an exhaustive matrix,
+// that HUG's isIngressClassSupported yields exactly the same accept/reject
+// decision as kubernetes-ingress' IsIngressClassSupported for every combination
+// of Ingress class name, --ingress-class parameter, --empty-ingress-class flag
+// and IngressClass set in the cluster.
+func TestIngressClassEligibilityParityWithKIC(t *testing.T) {
+	const suffixCtrl = CONTROLLER + "/prod" // == path.Join(CONTROLLER, "prod")
+	const foreignCtrl = "k8s.io/ingress-nginx"
+
+	// Each fixture is a set of IngressClasses present in the cluster. Fixtures use
+	// at most one default class so the "first default in the map" scan is
+	// deterministic on both sides.
+	fixtures := map[string][]ingressClassFixture{
+		"empty":           {},
+		"match":           {{name: "hug", controller: CONTROLLER}},
+		"suffix":          {{name: "hug", controller: suffixCtrl}},
+		"foreign":         {{name: "nginx", controller: foreignCtrl}},
+		"default-match":   {{name: "hug", controller: CONTROLLER, isDefault: true}},
+		"default-suffix":  {{name: "hug", controller: suffixCtrl, isDefault: true}},
+		"default-foreign": {{name: "nginx", controller: foreignCtrl, isDefault: true}},
+		"mixed":           {{name: "hug", controller: CONTROLLER}, {name: "nginx", controller: foreignCtrl}},
+	}
+
+	ingressClasses := []string{"", "hug", "nginx", "absent"}
+	controllerClasses := []string{"", "prod"}
+	allowEmptyValues := []bool{false, true}
+
+	for fixName, fix := range fixtures {
+		classes := make(map[types.NamespacedName]*networkingv1.IngressClass, len(fix))
+		for _, f := range fix {
+			classes[types.NamespacedName{Name: f.name}] = mkIngressClass(f)
+		}
+		cs := &ControllerStore{ClusterStore: &store.ClusterStore{IngressClasses: classes}}
+
+		for _, ingressClass := range ingressClasses {
+			for _, controllerClass := range controllerClasses {
+				for _, allowEmpty := range allowEmptyValues {
+					want := kicIsIngressClassSupported(classes, ingressClass, controllerClass, allowEmpty)
+					got := cs.isIngressClassSupported(ingressClass, controllerClass, allowEmpty)
+					if got != want {
+						t.Errorf("parity mismatch [fixture=%s class=%q param=%q allowEmpty=%v]: HUG=%v KIC=%v",
+							fixName, ingressClass, controllerClass, allowEmpty, got, want)
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestIsIngressEligible(t *testing.T) {
 	cs := &ControllerStore{ClusterStore: &store.ClusterStore{
 		IngressClasses: map[types.NamespacedName]*networkingv1.IngressClass{
