@@ -200,6 +200,25 @@ func (b *IngressBuilderImpl) convertIngressToHTTPRoutes(
 		routes[key] = newSyntheticHTTPRoute(ingress, name, rule.Host, rules)
 	}
 
+	// spec.defaultBackend serves requests matching no rule. Model it as a
+	// hostless synthetic route with a "/" PathPrefix match (the lowest routing
+	// precedence), so it is the fallback, mirroring an Ingress default backend.
+	if db := ingress.Spec.DefaultBackend; db != nil {
+		if backendRef, ok := b.ingressBackendToRef(ingress, db, backendCRFilters); ok {
+			prefix := gatewayv1.PathMatchPathPrefix
+			slash := "/"
+			rule := gatewayv1.HTTPRouteRule{
+				Matches: []gatewayv1.HTTPRouteMatch{{
+					Path: &gatewayv1.HTTPPathMatch{Type: &prefix, Value: &slash},
+				}},
+				BackendRefs: []gatewayv1.HTTPBackendRef{backendRef},
+			}
+			name := utils.MangleIngressName(ingress, "default")
+			key := types.NamespacedName{Namespace: ingress.Namespace, Name: name}
+			routes[key] = newSyntheticHTTPRoute(ingress, name, "", []gatewayv1.HTTPRouteRule{rule})
+		}
+	}
+
 	return routes
 }
 
