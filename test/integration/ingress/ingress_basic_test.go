@@ -168,6 +168,32 @@ func (s *IngressTestSuite) Test_Ingress_BackendAppearsWhenIngressClassAddedLater
 	s.expectBackendExists(targetBackend)
 }
 
+// Ingress pathType must route to the matching HAProxy map: an Exact path lands
+// in the exact-match map and a Prefix path in the prefix-match map, never
+// swapped. Both paths target the same Service, so they share one backend and
+// differ only by their routing map entry.
+func (s *IngressTestSuite) Test_Ingress_PathTypeRoutesToCorrectMap() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "pathtype")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Barrier: the Ingress is accepted and its backend built.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+
+	const exactMap = "hug_http_8080/path_exact.map"
+	const prefixMap = "hug_http_8080/path_prefix.map"
+
+	s.expectMapFileContainsPath(exactMap, "/exact")
+	s.expectMapFileContainsPath(prefixMap, "/prefix")
+
+	// The pathTypes must not be swapped.
+	s.Require().False(s.mapFileContainsPath(prefixMap, "/exact"),
+		"the Exact path must not appear in the prefix-match map")
+	s.Require().False(s.mapFileContainsPath(exactMap, "/prefix"),
+		"the Prefix path must not appear in the exact-match map")
+}
+
 // A managed Ingress must have its LoadBalancer status populated with the
 // controller address. A HUG Service (identified by its label) of type
 // ExternalName provides a deterministic hostname, which must appear in the

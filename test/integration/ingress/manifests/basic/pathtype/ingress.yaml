@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-echo
+spec:
+  ingressClassName: hug
+  rules:
+    - host: example.ingress
+      http:
+        paths:
+          # Exact pathType must land in the exact-match map.
+          - path: /exact
+            pathType: Exact
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80
+          # Prefix pathType must land in the prefix-match map.
+          - path: /prefix
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80

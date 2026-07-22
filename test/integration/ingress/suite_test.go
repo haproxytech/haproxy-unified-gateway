@@ -107,6 +107,32 @@ func (s *IngressSuite) expectIngressLBHostname(name, hostname string) {
 	}
 }
 
+// mapFileContainsPath reports whether any line of the given map file contains
+// the path value. It matches on the path substring rather than the full "key
+// value" line so it does not depend on the backend's filter-hash name.
+func (s *IngressSuite) mapFileContainsPath(mapRelPath, pathValue string) bool {
+	lines, err := s.GetMapFileFrom(mapRelPath)
+	if err != nil {
+		return false
+	}
+	for _, l := range lines {
+		if strings.Contains(l, pathValue) {
+			return true
+		}
+	}
+	return false
+}
+
+// expectMapFileContainsPath waits until the given map file has an entry for the
+// path value.
+func (s *IngressSuite) expectMapFileContainsPath(mapRelPath, pathValue string) {
+	if !utils.WaitFor(s.Test().Ctx, interval, timeout, func() bool {
+		return s.mapFileContainsPath(mapRelPath, pathValue)
+	}) {
+		s.T().Fatalf("expected map %q to contain path %q", mapRelPath, pathValue)
+	}
+}
+
 // expectMapDirAbsent asserts that no maps directory with the given name exists.
 // It guards against an empty-named frontend ("hug_"), which appeared when a
 // synthetic listener with no virtual listener name was written to.
