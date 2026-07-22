@@ -18,6 +18,8 @@ import (
 	"path"
 	"testing"
 
+	"github.com/haproxytech/client-native/v6/models"
+	futils "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/fileutils"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 	"github.com/stretchr/testify/suite"
 )
@@ -279,4 +281,73 @@ func (s *IngressTestSuite) Test_Ingress_MultiHostRoutesPerHost() {
 	// Each rule's path is programmed in the prefix-match map.
 	s.expectMapFileContains(prefixMap, "/a")
 	s.expectMapFileContains(prefixMap, "/b")
+}
+
+// A wildcard host ("*.<suffix>") must be routed through the listener route
+// wildcard-match map, never the exact-match map. The Ingress builder passes the
+// rule host verbatim as the synthetic route's hostname, and the route manager
+// classifies "*."-prefixed hostnames as wildcards, mirroring kubernetes-ingress
+// serving a whole subdomain from one rule.
+func (s *IngressTestSuite) Test_Ingress_WildcardHostRoutesToWildcardMap() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "wildcard")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Barrier: the Ingress is accepted and its backend built.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+
+	const exactMap = "hug_http_8080/listener_route_exact_match.map"
+	const wildcardMap = "hug_http_8080/listener_route_wildcard_match.map"
+
+	// The wildcard host lands in the wildcard-match map (as a reversed suffix)...
+	s.expectMapFileContains(wildcardMap, "wildcard")
+	// ...and never in the exact-match map.
+	s.Require().False(s.mapFileContains(exactMap, "wildcard"),
+		"a wildcard host must not appear in the exact-match map")
+}
+
+// An Ingress may pair several hosts with their own TLS certificates. HUG loads
+// every referenced secret into the single https listener crt-list, so HAProxy
+// can select the right certificate per connection by SNI. This asserts both
+// certificates are present in the crt-list, mirroring kubernetes-ingress serving
+// multiple hosts, each with its own certificate, from one https bind.
+func (s *IngressTestSuite) Test_Ingress_TLSMultipleCertsInCrtList() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "sni")
+	manifests := []string{
+		"ingressclass.yaml", "offload-secret.yaml", "offload2-secret.yaml",
+		"http-echo.yaml", "ingress.yaml",
+	}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	// Barrier: the Ingress is accepted and its backend built.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+
+	// Both certificates are loaded into the https listener's crt-list, so HAProxy
+	// can offload either host by SNI.
+	ns := s.Test().Namespace
+	expectedCrtLists := map[futils.FilePath][]string{
+		{
+			Dir:      path.Join(s.Test().HaproxyCfgDir, "certlists"),
+			FileName: "/hug_https_8443.list",
+		}: {
+			path.Join(s.Test().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload.pem"),
+			path.Join(s.Test().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload2.pem"),
+		},
+	}
+	s.ExpectCrtLists(s.Test().Ctx, expectedCrtLists)
+
+	// The per-host certificates are usable, identified by their subject CN.
+	expectedCerts := []*models.SslCertificate{
+		{
+			StorageName: path.Join(s.Test().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload.pem"),
+			Subject:     "/CN=offload.haproxy",
+		},
+		{
+			StorageName: path.Join(s.Test().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload2.pem"),
+			Subject:     "/CN=offload2.haproxy",
+		},
+	}
+	s.ExpectCertificates(s.Test().Ctx, expectedCerts)
 }

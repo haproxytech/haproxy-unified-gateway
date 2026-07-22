@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-wildcard
+spec:
+  ingressClassName: hug
+  # A wildcard host ("*.<suffix>") must be routed via the listener route
+  # wildcard-match map, not the exact-match map, mirroring kubernetes-ingress
+  # serving a whole subdomain from one rule.
+  rules:
+    - host: "*.wildcard.ingress"
+      http:
+        paths:
+          - path: /w
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80

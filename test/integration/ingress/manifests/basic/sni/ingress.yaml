@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-sni
+spec:
+  ingressClassName: hug
+  # Two TLS blocks, each pairing a host with its own certificate secret. HUG
+  # loads every referenced certificate into the https listener's crt-list;
+  # HAProxy then selects the matching certificate per connection by SNI. This
+  # mirrors kubernetes-ingress serving several hosts, each with its own cert,
+  # from a single https bind.
+  tls:
+    - hosts:
+        - offload.haproxy
+      secretName: offload
+    - hosts:
+        - offload2.haproxy
+      secretName: offload2
+  rules:
+    - host: offload.haproxy
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80
+    - host: offload2.haproxy
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80
