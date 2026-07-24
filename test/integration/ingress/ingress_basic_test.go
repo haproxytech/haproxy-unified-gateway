@@ -283,6 +283,30 @@ func (s *IngressTestSuite) Test_Ingress_MultiHostRoutesPerHost() {
 	s.expectMapFileContains(prefixMap, "/b")
 }
 
+// DIAGNOSTIC: deleting an Ingress must purge its host->route entry from the
+// shared listener route map, not just its backend. A lingering entry on the
+// shared synthetic-gateway frontend would shadow another Ingress that later
+// claims the same host, routing it to a now-absent backend.
+func (s *IngressTestSuite) Test_Ingress_MapClearedWhenIngressDeleted() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "ok")
+	manifests := []string{"ingressclass.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, []string{"ingressclass.yaml", "http-echo.yaml"})
+
+	const exactMap = "hug_http_8080/listener_route_exact_match.map"
+	// ok/ingress.yaml routes host example.ingress.
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+	s.expectMapFileContains(exactMap, "example.ingress")
+
+	// Delete only the Ingress: its listener route entry must disappear.
+	s.CleanupFixtures(fixturePath, []string{"ingress.yaml"})
+	if !utils.WaitFor(s.Test().Ctx, interval, timeout, func() bool {
+		return !s.mapFileContains(exactMap, "example.ingress")
+	}) {
+		s.T().Fatalf("listener route map still contains example.ingress after Ingress deletion")
+	}
+}
+
 // A wildcard host ("*.<suffix>") must be routed through the listener route
 // wildcard-match map, never the exact-match map. The Ingress builder passes the
 // rule host verbatim as the synthetic route's hostname, and the route manager
