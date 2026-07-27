@@ -99,7 +99,7 @@ func (s *IngressTestSuite) Test_Ingress_BackendRemovedWhenIngressClassDeleted() 
 	s.ExpectBackendsDoNotExist(s.Test().Ctx, backendName)
 }
 
-// Adding the gate.v3.haproxy.org/backend-cr annotation to an Ingress's target
+// Adding the gate.v3.haproxy.org/cr-backend annotation to an Ingress's target
 // Service after the Ingress backend is already built must re-reconcile the
 // Ingress and merge the referenced Backend CR into its (ingress-origin) backend.
 // This exercises the Ingress controller's Service watch, which must stay

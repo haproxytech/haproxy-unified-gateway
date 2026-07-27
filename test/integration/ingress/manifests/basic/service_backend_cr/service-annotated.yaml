@@ -3,7 +3,7 @@ apiVersion: v1
 metadata:
   name: http-echo
   annotations:
-    gate.v3.haproxy.org/backend-cr: be-svc
+    gate.v3.haproxy.org/cr-backend: be-svc
 spec:
   ports:
     - name: http
