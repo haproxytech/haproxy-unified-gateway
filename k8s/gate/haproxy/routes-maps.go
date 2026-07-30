@@ -527,7 +527,7 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 				routeValue := mapData.BuildValue(entryValue.DesiredValue)
 				// if routeValue is empty, delete the entry
 				if routeValue == "" {
-					b.topManager.logger.LogAttrs(context.Background(), slog.LevelInfo, "Deleting map [runtime] entry", slog.String("map", mapData.Path.FileName), slog.String("key", key))
+					b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "Deleting map [runtime] entry", slog.String("map", mapData.Path.FileName), slog.String("key", key))
 					err := runtimeClient.DeleteMapEntry(mapID, key)
 					if err != nil {
 						metrics.MapStorageOperations.WithLabelValues("runtime_delete", "error").Inc()
