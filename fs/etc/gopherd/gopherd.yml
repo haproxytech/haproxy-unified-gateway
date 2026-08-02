@@ -1,0 +1,52 @@
+# Copyright 2026 HAProxy Technologies LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# 	http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+processes:
+  - name: haproxy
+    command: /usr/local/sbin/haproxy_wrapper
+    args: ["-W", "-db", "-m", "{{mem 66%}}", "-S", "/var/run/haproxy-master.sock,level,admin", "-f", "/usr/local/hug/haproxy.cfg", "-f", "/usr/local/hug/aux"]
+    stop-signal: SIGUSR1
+    kill-delay: 30s
+    on-success: restart
+    on-failure: restart
+    environment:
+      LD_PRELOAD: /usr/local/lib/libblock_secrets.so
+    on-check-failure:
+      haproxy-health: restart
+
+  - name: hug
+    command: /usr/local/sbin/hug
+    args: ["--with-gopherd"]
+    use-entrypoint-args: true
+    pass-env: true
+    after: [haproxy]
+    ready-check: haproxy-health
+    ready-timeout: 30s
+    on-success: shutdown
+    on-failure: restart
+    environment:
+      GOMEMLIMIT: "{{mem 33%}}MiB"
+
+checks:
+  haproxy-health:
+    http:
+      url: http://localhost/healthz
+      socket: /var/run/haproxy/health.sock
+    period: 5s
+    timeout: 2s
+    threshold: 3
+    initial-delay: 10s
+
+control:
+  socket: /run/gopherd.sock

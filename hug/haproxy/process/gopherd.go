@@ -15,7 +15,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 )
 
-type s6Control struct {
+type goInitControl struct {
 	API               hapi.HAProxyClient
 	masterSocket      runtime.Runtime
 	logger            *slog.Logger
@@ -23,14 +23,17 @@ type s6Control struct {
 	masterSocketValid bool
 }
 
-func newS6Control(api hapi.HAProxyClient, param params.Params, logger *slog.Logger) *s6Control {
-	sc := s6Control{
+// test seam: unit tests shrink this to avoid the 60s socket retry
+var masterSocketRetryBudget = time.Minute
+
+func newGoInitControl(api hapi.HAProxyClient, param params.Params, logger *slog.Logger) *goInitControl {
+	sc := goInitControl{
 		API:    api,
 		Params: param,
 		logger: logger,
 	}
 
-	masterSocket, err := runtime.New(context.Background(), options.MasterSocket(MASTER_SOCKET_PATH), options.AllowDelayedStart(time.Minute, time.Second))
+	masterSocket, err := runtime.New(context.Background(), options.MasterSocket(MASTER_SOCKET_PATH), options.AllowDelayedStart(masterSocketRetryBudget, time.Second))
 	if err != nil {
 		sc.logger.LogAttrs(context.Background(), slog.LevelError,
 			"failed to initialize master socket",
@@ -43,20 +46,21 @@ func newS6Control(api hapi.HAProxyClient, param params.Params, logger *slog.Logg
 	return &sc
 }
 
-func (c *s6Control) Service(action string) (string, error) {
+func (c *goInitControl) Service(action string) (string, error) {
 	if c.Params.Test {
-		c.logger.LogAttrs(context.Background(), slog.LevelError,
-			"HAProxy would be %sed now")
+		c.logger.LogAttrs(context.Background(), slog.LevelInfo,
+			"test mode: skipping HAProxy service action",
+			slog.String("action", action))
 		return "", nil
 	}
 	var cmd *exec.Cmd
 
 	switch action { //revive:disable:identical-switch-branches
 	case "start":
-		// no need to start it is up already (s6)
+		// gopherd already started it
 		return "", nil
 	case "stop":
-		// no need to stop it (s6)
+		// gopherd owns the stop
 		return "", nil
 	case "reload":
 		if c.masterSocketValid {
@@ -70,7 +74,7 @@ func (c *s6Control) Service(action string) (string, error) {
 				logging.LogAttrError(err))
 		}
 
-		cmd = exec.Command("s6-svc", "-2", "/run/service/haproxy")
+		cmd = exec.Command("/usr/local/sbin/gopherd", "haproxy", "restart")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		return "", cmd.Run()
@@ -79,10 +83,10 @@ func (c *s6Control) Service(action string) (string, error) {
 	}
 }
 
-func (*s6Control) UseAuxFile(_ bool) {
+func (*goInitControl) UseAuxFile(_ bool) {
 	// do nothing we always have it
 }
 
-func (c *s6Control) SetAPI(api hapi.HAProxyClient) {
+func (c *goInitControl) SetAPI(api hapi.HAProxyClient) {
 	c.API = api
 }

@@ -264,11 +264,10 @@ func (test *IntTest) StartTestEnv(t *testing.T) { //revive:disable:function-leng
 		panic(err)
 	}
 	params := haproxyparams.Params{
-		Test:             hugConfig.Test,
-		UseWiths6Overlay: hugConfig.UseWiths6Overlay,
-		UseWithPebble:    hugConfig.UseWithPebble,
-		HaproxyDirs:      hugConfig.HaproxyDirs,
-		ForceRestart:     true,
+		Test:           hugConfig.Test,
+		UseWithGopherd: hugConfig.UseWithGopherd,
+		HaproxyDirs:    hugConfig.HaproxyDirs,
+		ForceRestart:   true,
 	}
 	p := process.New(params, haproxyClient, gateconfig.Logger)
 	p.SetAPI(haproxyClient)
