@@ -18,6 +18,8 @@ tasks:
 
   conformance-create-ci:
     desc: "create a Kind cluster for conformance testing in Docker-in-Docker CI"
+    deps:
+      - task: check-kubectl
     vars:
       kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
     cmds:
@@ -184,6 +186,28 @@ tasks:
         fi
 
         exit ${JOB_STATUS}
+
+  conformance-dump-controller-debug:
+    desc: "dump default controller pods, logs and GatewayClass status for CI debugging"
+    deps:
+      - task: check-kubectl
+    vars:
+      kubectl: "{{.TMP}}/kubectl/{{.KUBECTL_VERSION}}/kubectl"
+      DEBUG_DIR: '{{default "debug-hug" .DEBUG_DIR}}'
+      HUG_NS: "haproxy-unified-gateway"
+      # STAGE distinguishes dumps taken before and after the conformance run.
+      STAGE: '{{default "pre-run" .STAGE}}'
+    cmds:
+      - mkdir -p "{{.DEBUG_DIR}}"
+      - |
+        OUT="{{.DEBUG_DIR}}/controller-{{.STAGE}}"
+        /{{.kubectl}} get pods -n {{.HUG_NS}} -o wide > "${OUT}-pods.txt" 2>&1 || true
+        /{{.kubectl}} describe pods -n {{.HUG_NS}} -l run=haproxy-unified-gateway > "${OUT}-describe.txt" 2>&1 || true
+        /{{.kubectl}} logs -n {{.HUG_NS}} deploy/haproxy-unified-gateway --all-containers --tail=-1 > "${OUT}-logs.txt" 2>&1 || true
+        /{{.kubectl}} logs -n {{.HUG_NS}} deploy/haproxy-unified-gateway --all-containers --previous > "${OUT}-logs-previous.txt" 2>&1 || true
+        /{{.kubectl}} get gatewayclass haproxy -o yaml > "${OUT}-gatewayclass.yaml" 2>&1 || true
+        /{{.kubectl}} get events -n {{.HUG_NS}} --sort-by=.lastTimestamp > "${OUT}-events.txt" 2>&1 || true
+        echo "Controller debug dump ({{.STAGE}}) written to {{.DEBUG_DIR}}"
 
   conformance-collect-debug-mr:
     desc: "collect HUG pod logs and HAProxy config/maps for post-mortem debugging (MR CI job)"

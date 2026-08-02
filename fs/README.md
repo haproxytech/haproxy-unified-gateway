@@ -1,7 +1,5 @@
 # Filesystem Overlay
 
-This directory contains files that are copied into the container image at build time. The directory structure mirrors the container filesystem.
-
 ## gopherd — Init System
 
 [gopherd](https://github.com/haproxytech/gopherd) is the PID 1 init process that manages all services inside the container. It handles process lifecycle, dependency ordering, health checks, signal forwarding, zombie reaping, and graceful shutdown.

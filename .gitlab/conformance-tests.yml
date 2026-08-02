@@ -101,8 +101,11 @@ conformance-MR-GW-API-1_5_0:
   script:
     - task conformance-create-ci
     - task conformance-build-test-image
+    # Controller had ~2 min since deploy; dump its state before the suite scales it down.
+    - task conformance-dump-controller-debug || true
     - task conformance-run-job
   after_script:
+    - task conformance-dump-controller-debug STAGE=post-run || true
     - task conformance-collect-debug-mr || true
     - task kind-delete
   artifacts:
