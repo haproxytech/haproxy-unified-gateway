@@ -11,7 +11,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/hug/haproxy/params"
 )
 
-// MUST be the same as in fs/etc/s6-overlay/s6-rc.d/haproxy/run
+// MUST be the same as in fs/etc/gopherd/gopherd.yml
 const MASTER_SOCKET_PATH = "/var/run/haproxy-master.sock" // revive:disable:var-naming
 
 type Process interface {
@@ -21,16 +21,12 @@ type Process interface {
 }
 
 func New(param params.Params, api hapi.HAProxyClient, logger *slog.Logger) (p Process) {
-	switch {
-	case param.UseWithPebble:
-		p = newpebbleControl(api, param, logger)
-	case param.UseWiths6Overlay:
-		p = newS6Control(api, param, logger)
-	default:
-		p = newDirectControl(api, param, logger)
-		if _, err := os.Stat(param.AuxDir); err == nil {
-			p.UseAuxFile(true)
-		}
+	if param.UseWithGopherd {
+		return newGoInitControl(api, param, logger)
+	}
+	p = newDirectControl(api, param, logger)
+	if _, err := os.Stat(param.AuxDir); err == nil {
+		p.UseAuxFile(true)
 	}
 	return p
 }

@@ -20,11 +20,8 @@ COPY /go.mod /src/go.mod
 COPY /go.sum /src/go.sum
 RUN cd /src && go mod download
 
-# https://github.com/canonical/pebble/issues/719
-# RUN go install github.com/canonical/pebble/cmd/pebble@v1.25.0
 WORKDIR /src
-RUN git clone --branch stop-signal --single-branch https://github.com/haproxytech/pebble.git
-RUN cd pebble/cmd/pebble && go build -buildvcs=true -o /go/bin/pebble
+RUN go install -trimpath -ldflags="-s" github.com/haproxytech/gopherd@v1.0.1
 COPY / /src
 
 RUN mkdir -p /var/run/vars && \
@@ -62,14 +59,8 @@ FROM haproxytech/haproxy-alpine:3.2
 
 ARG TARGETPLATFORM
 
-ARG S6_OVERLAY_VERSION=3.1.6.2
-ENV S6_OVERLAY_VERSION=$S6_OVERLAY_VERSION
-ENV S6_READ_ONLY_ROOT=1
-ENV S6_USER=haproxy
-ENV S6_GROUP=haproxy
-
 COPY /fs /
-COPY --from=builder /go/bin/pebble /usr/local/bin
+COPY --from=builder /go/bin/gopherd /usr/local/sbin
 COPY --from=builder-c /src/libblock_secrets.so /usr/local/lib/libblock_secrets.so
 COPY --from=builder-c /src/haproxy_wrapper /usr/local/sbin/haproxy_wrapper
 
@@ -84,6 +75,7 @@ RUN apk --no-cache add socat openssl util-linux htop tzdata curl libcap && \
     chmod -R ug+rwx /usr/local/hug && \
     chown -R "haproxy:haproxy" /usr/local/etc/haproxy /run /var && \
     chmod -R ug+rwx /usr/local/etc/haproxy /run /var && \
+    chmod 644 /etc/gopherd/gopherd.yml && \
     chmod u+rx /usr/local/sbin/haproxy_wrapper && \
     setcap 'cap_net_bind_service=+ep' /usr/local/sbin/haproxy_wrapper
 
@@ -91,4 +83,4 @@ COPY --from=builder /src/fs/kubernetes-controller /usr/local/sbin/hug
 
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["/start.sh"]
+ENTRYPOINT ["/usr/local/sbin/gopherd"]
