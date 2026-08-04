@@ -236,3 +236,129 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_OK_Multiple_Listeners_One_Gateway() 
 	// For FE https
 	s.ExpectMapContents(mapFilePath2, expectedMapsPath)
 }
+
+// Test_HTTPRoute_OK_No_reload_When_Modification_Only_Affect_Maps check that if we change a route and it's only affects
+// maps (e.g. Path Prefix) it does not reload.
+//
+// the test scenario is the following:
+//   - create a route with no endpoints and PathPrefix = /path1
+//   - edit the route's path prefix to /path2 and check configuration is updated without reload and  route condition is updated. updating route w/o endpoints allows testing conner cases
+//   - scale up to 3 endpoints and check configuration is updated without reload.
+//   - scale down to 1 endpoints and check configuration is updated without reload.
+//   - update route path's PathPrefix = /path1 and check configuration is updated without reload and route condition is updated.
+func (s *HTTPRouteTestSuite) Test_HTTPRoute_OK_No_reload_When_Modification_Only_Affect_Maps() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "basic"
+
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "ok_no_reload_when_modification_only_affect_maps")
+	s.CreateFixtures(fixturePath, []string{"gatewayclass.yaml", "gateway.yaml", "http-echo.yaml", "route-path-prefix-1.yaml"})
+	mapFilePath1 := "hug_http_8080"
+	mapFilePath2 := "hug_http_8088"
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, []string{"gatewayclass.yaml", "gateway.yaml", "http-echo.yaml", "route-path-prefix-1.yaml"}, []string{mapFilePath1, mapFilePath2})
+
+	// Expected Conditions
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "route-gen-1-conditions.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+
+	httpRouteName := "route-echo"
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+
+	// Check AttachedRoutes on Gateway status
+	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http2", 1)
+
+	// haproxy.cfg Backends
+	const backendName = "hug_e2e-tests-httproute_http-echo_80__"
+	expectedBackends := []string{backendName}
+	s.ExpectBackends(s.Test().Ctx, path.Join(expectationsPath, "backends-gen-1"), expectedBackends)
+
+	// Check Maps for route-prefix-1 (ie pathPrefix = /path1)
+	expectedMapsPathV1 := path.Join(expectationsPath, "maps-path-prefix-1")
+	s.ExpectListenerRouteMapContents(expectedMapsPathV1)
+	s.ExpectMapContents(mapFilePath1, expectedMapsPathV1) // For FE http
+	s.ExpectMapContents(mapFilePath2, expectedMapsPathV1) // For FE https
+
+	// check Server
+	s.ExpectServers(backendName, []string{})
+
+	// From now we should not have any reloads
+	oldPid := s.WaitForNoReloadsAnyMore(10*time.Second, 2*time.Second)
+
+	s.T().Logf("====================================== Edit route to update Path Prefix (no endpoints) ======================================")
+	s.CreateFixtures(fixturePath, []string{"route-path-prefix-2.yaml"}) // no need to clean up it the same obj as route-path-prefix-1.yaml
+
+	expectedConditionsV2 := s.YamlToRouteConditions(path.Join(expectationsPath, "route-gen-2-conditions.yaml"))
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditionsV2)
+
+	// haproxy.cfg Backends
+	s.ExpectBackends(s.Test().Ctx, path.Join(expectationsPath, "backends-gen-2-ep-0"), expectedBackends)
+
+	// Check Maps-prefix-2
+	expectedMapsPathV2 := path.Join(expectationsPath, "maps-path-prefix-2")
+	s.ExpectListenerRouteMapContents(expectedMapsPathV2)
+	s.ExpectMapContents(mapFilePath1, expectedMapsPathV2) // For FE http
+	s.ExpectMapContents(mapFilePath2, expectedMapsPathV2) // For FE https
+
+	// check Server
+	s.ExpectServers(backendName, []string{})
+
+	s.ConsistentlyNoReload(oldPid, 4*time.Second)
+
+	s.T().Logf("====================================== scale up endpoints to 3 ======================================")
+
+	// scale deploy to 3 pods
+	s.CreateFixtures(fixturePath, []string{"echo-endpoints-1.yaml"})
+	defer s.CleanupFixtures(fixturePath, []string{"echo-endpoints-1.yaml"})
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditionsV2)
+
+	// haproxy.cfg Backends
+	s.ExpectBackends(s.Test().Ctx, path.Join(expectationsPath, "backends-gen-2-ep-3"), expectedBackends)
+
+	// Check Maps-prefix-2 (should be the same)
+	s.ExpectListenerRouteMapContents(expectedMapsPathV2)
+	s.ExpectMapContents(mapFilePath1, expectedMapsPathV2) // For FE http
+	s.ExpectMapContents(mapFilePath2, expectedMapsPathV2) // For FE https
+
+	// check Server
+	s.ExpectServers(backendName, []string{"SRV_4827409c6115096b8dde5db0092cea2f54213123", "SRV_8ec3713870978506a7ecded834e9907edcf2e619", "SRV_fe3f9ea252b531060fe66a137b37d38263502132"})
+
+	s.ConsistentlyNoReload(oldPid, 4*time.Second)
+
+	s.T().Logf("====================================== scale down endpoint to 1 ======================================")
+
+	// scale deploy to 1 pods
+	s.CreateFixtures(fixturePath, []string{"echo-endpoints-2.yaml"}) // no need to clean up it's the same obj as scale=3
+
+	// haproxy.cfg Backends
+	s.ExpectBackends(s.Test().Ctx, path.Join(expectationsPath, "backends-gen-2-ep-1"), expectedBackends)
+
+	// Check Maps-prefix-2 (should be the same)
+	s.ExpectListenerRouteMapContents(expectedMapsPathV2)
+	s.ExpectMapContents(mapFilePath1, expectedMapsPathV2) // For FE http
+	s.ExpectMapContents(mapFilePath2, expectedMapsPathV2) // For FE https
+
+	// check Server
+	s.ExpectServers(backendName, []string{"SRV_4827409c6115096b8dde5db0092cea2f54213123"})
+	s.ConsistentlyNoReload(oldPid, 4*time.Second)
+
+	s.T().Logf("====================================== edit PathPrefix = path1 ======================================")
+	s.CreateFixtures(fixturePath, []string{"route-path-prefix-1.yaml"}) // no need to clean up it the same obj as route-path-prefix-1.yaml
+	expectedConditionsV3 := s.YamlToRouteConditions(path.Join(expectationsPath, "route-gen-3-conditions.yaml"))
+	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditionsV3)
+
+	// Check AttachedRoutes on Gateway status
+	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http2", 1)
+
+	// haproxy.cfg Backends
+	s.ExpectBackends(s.Test().Ctx, path.Join(expectationsPath, "backends-gen-3"), expectedBackends)
+
+	// Check Maps for route-path-prefix-1 (ie pathPrefix = /path1)
+	s.ExpectListenerRouteMapContents(expectedMapsPathV1)
+	s.ExpectMapContents(mapFilePath1, expectedMapsPathV1) // For FE http
+	s.ExpectMapContents(mapFilePath2, expectedMapsPathV1) // For FE https
+
+	s.ExpectServers(backendName, []string{"SRV_4827409c6115096b8dde5db0092cea2f54213123"})
+	s.ConsistentlyNoReload(oldPid, 4*time.Second)
+}

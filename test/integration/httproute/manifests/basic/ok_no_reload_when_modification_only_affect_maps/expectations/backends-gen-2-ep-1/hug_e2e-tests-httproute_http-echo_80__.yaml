@@ -1,0 +1,23 @@
+from: haproxytech
+metadata:
+  hug:
+    HTTPRoute:
+      e2e-tests-httproute/route-echo:
+        Generation: 2
+        LinkID: hug
+mode: http
+name: hug_e2e-tests-httproute_http-echo_80__
+abortonclose: disabled
+balance:
+  algorithm: roundrobin
+default_server:
+  check: enabled
+forwardfor:
+  enabled: enabled
+server_timeout: 50000
+Servers:
+  SRV_4827409c6115096b8dde5db0092cea2f54213123:
+    Address:      "10.0.0.1"
+    Name:         "SRV_4827409c6115096b8dde5db0092cea2f54213123"
+    Port:         8888
+    Maintenance: "disabled"
