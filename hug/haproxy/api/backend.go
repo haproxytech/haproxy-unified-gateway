@@ -17,7 +17,6 @@ import (
 	"context"
 	"log/slog"
 
-	parser "github.com/haproxytech/client-native/v6/config-parser"
 	"github.com/haproxytech/client-native/v6/models"
 	"github.com/haproxytech/haproxy-unified-gateway/hug/reload"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
@@ -90,15 +89,19 @@ func (c *clientNative) BackendEdit(backend models.Backend) error {
 		return err
 	}
 
-	// Check if only Servers were updated
-	onlyServersUpdated := false
-	if cmp.Equal(previousBackend, backend, cmpopts.IgnoreFields(models.Backend{}, "Servers")) {
-		c.logger.LogAttrs(
-			context.Background(), slog.LevelInfo, "Only Servers are updated",
-			slog.String("backend", backend.Name),
-		)
-		onlyServersUpdated = true
-	}
+	serverChanged := !cmp.Equal(previousBackend.Servers, backend.Servers, cmpopts.EquateEmpty())
+	// ignoring metadata because it contains the generation of the route which changes every time the route's spec is updated.
+	// but some changes on the routes (ie PathPrefix) only affect maps.
+	backendChanged := !cmp.Equal(previousBackend, backend, cmpopts.IgnoreFields(models.Backend{}, "Servers", "BackendBase.Metadata"))
+	onlyServersUpdated := serverChanged && !backendChanged
+
+	c.logger.LogAttrs(
+		context.Background(), slog.LevelDebug, "Backend update received",
+		slog.String("backend", backend.Name),
+		slog.Bool("serverChanged", serverChanged),
+		slog.Bool("backendChangedOmitMetadata", backendChanged),
+		slog.Bool("onlyServersUpdated", onlyServersUpdated),
+	)
 
 	if err := configuration.EditStructuredBackend(backend.Name, &backend, c.activeTransaction, 0); err != nil {
 		c.logger.LogAttrs(
@@ -110,7 +113,7 @@ func (c *clientNative) BackendEdit(backend models.Backend) error {
 	}
 
 	// Servers only updated
-	// Did we try runtime updates ? (server state update)
+	// Did we try runtime updates? (server state update)
 	if onlyServersUpdated {
 		if reload.Instance().DynamicUpdateServerStateAttempted() {
 			// Yes we did perform runtime update of server states
@@ -127,10 +130,9 @@ func (c *clientNative) BackendEdit(backend models.Backend) error {
 			// We did not try runtime update (server create, for now is NOT done through runtime, it needs a reload)
 			reload.Instance().SetReload("[onlyServersUpdated] [reload needed] - backend %s", backend.Name)
 		}
-	} else {
+	} else if backendChanged { //  backendChanged = false => only metadata changed. no need to reload.
 		reload.Instance().SetReload("Backend upserted %s", backend.Name)
 	}
-	// Servers
-	err = c.ServerReplaceAll(parser.Backends, backend.Name, backend.Servers)
-	return err
+
+	return nil
 }
