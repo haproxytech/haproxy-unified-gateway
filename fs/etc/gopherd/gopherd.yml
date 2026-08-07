@@ -23,7 +23,7 @@ processes:
     environment:
       LD_PRELOAD: /usr/local/lib/libblock_secrets.so
     on-check-failure:
-      haproxy-health: restart
+      haproxy-alive: restart
 
   - name: hug
     command: /usr/local/sbin/hug
@@ -31,7 +31,7 @@ processes:
     use-entrypoint-args: true
     pass-env: true
     after: [haproxy]
-    ready-check: haproxy-health
+    ready-check: haproxy-ready
     ready-timeout: 30s
     on-success: shutdown
     on-failure: restart
@@ -39,7 +39,18 @@ processes:
       GOMEMLIMIT: "{{mem 33%}}MiB"
 
 checks:
-  haproxy-health:
+  # Liveness via runtime CLI: exempt from maxconn, so overload never triggers restarts.
+  haproxy-alive:
+    exec:
+      command: /bin/sh
+      args: ["-c", "echo 'show info' | socat stdio /var/run/haproxy-runtime-api.sock | grep -q Uptime"]
+    period: 5s
+    timeout: 2s
+    threshold: 3
+    initial-delay: 10s
+
+  # Readiness: proves the worker accepts connections; gates hug startup only.
+  haproxy-ready:
     http:
       url: http://localhost/healthz
       socket: /var/run/haproxy/health.sock
