@@ -23,7 +23,7 @@ The gopherd config.
   environment:
     LD_PRELOAD: /usr/local/lib/libblock_secrets.so
   on-check-failure:
-    haproxy-health: restart
+    haproxy-alive: restart
 ```
 
 Key options explained:
@@ -36,7 +36,7 @@ Key options explained:
 | `on-failure: restart` | | Restart on crash |
 | `{{mem 66%}}` | | HAProxy gets 66% of available memory (auto-detects system RAM and cgroup limits) |
 | `LD_PRELOAD` | | Loads the secrets-blocking library before HAProxy starts |
-| `on-check-failure: haproxy-health: restart` | | Restart HAProxy if the health check fails 3 times |
+| `on-check-failure: haproxy-alive: restart` | | Restart HAProxy if the liveness check fails 3 times |
 
 **hug** — The HAProxy Unified Gateway controller. Manages HAProxy configuration.
 
@@ -47,7 +47,7 @@ Key options explained:
   use-entrypoint-args: true
   pass-env: true
   after: [haproxy]
-  ready-check: haproxy-health
+  ready-check: haproxy-ready
   ready-timeout: 30s
   on-success: shutdown
   on-failure: restart
@@ -58,7 +58,7 @@ Key options explained:
 | Option | Value | Purpose |
 |--------|-------|---------|
 | `after: [haproxy]` | | Starts only after HAProxy has been spawned |
-| `ready-check: haproxy-health` | | Blocks HUG from starting until HAProxy is healthy |
+| `ready-check: haproxy-ready` | | Blocks HUG from starting until HAProxy accepts connections |
 | `ready-timeout: 30s` | | Fail startup if HAProxy doesn't become healthy within 30s |
 | `use-entrypoint-args: true` | | Docker CMD / Kubernetes args are appended to HUG's args |
 | `pass-env: true` | | HUG inherits the container environment (POD_IP, KUBERNETES_*, …) |
@@ -75,11 +75,29 @@ Memory is split between the two main services using `{{mem}}` templates:
 
 gopherd auto-detects available memory from `/proc/meminfo` and cgroup limits (v1 and v2), taking the lower of the two. This replaces the previous `setup-env` shell script approach.
 
-#### Health Check
+#### Health Checks
+
+Two checks with distinct roles: liveness (restart trigger) and readiness (startup gate).
 
 ```yaml
 checks:
-  haproxy-health:
+  haproxy-alive:
+    exec:
+      command: /bin/sh
+      args: ["-c", "echo 'show info' | socat stdio /var/run/haproxy-runtime-api.sock | grep -q Uptime"]
+    period: 5s
+    timeout: 2s
+    threshold: 3
+    initial-delay: 10s
+```
+
+- Probes the worker's runtime CLI; proves the event loop is responsive
+- CLI listeners are exempt from global `maxconn`, so overload cannot trigger a restart —
+  only a genuinely wedged worker can (a restart at peak load would drop every connection)
+- Triggers HAProxy restart after 3 consecutive failures (`on-check-failure: haproxy-alive`)
+
+```yaml
+  haproxy-ready:
     http:
       url: http://localhost/healthz
       socket: /var/run/haproxy/health.sock
@@ -89,11 +107,11 @@ checks:
     initial-delay: 10s
 ```
 
-- HTTP health check over a Unix socket (bypasses the network stack)
-- Checks every 5s, marks unhealthy after 3 consecutive failures
-- Waits 10s before the first check (gives HAProxy time to initialize)
-- Used as a readiness gate for HUG (`ready-check: haproxy-health`)
-- Triggers HAProxy restart on sustained failure (`on-check-failure`)
+- HTTP check over a Unix socket; proves the worker accepts and serves requests
+- Used only as a readiness gate for HUG (`ready-check: haproxy-ready`)
+- Subject to `maxconn`, which is why it must not drive restarts
+
+Both wait 10s before the first check and mark unhealthy after 3 consecutive failures.
 
 #### Control Socket
 
@@ -137,7 +155,7 @@ kubectl exec <pod> -- gopherd list       # control CLI against the live daemon
 ### Service Startup Order
 
 ```
-haproxy → hug (gated by the haproxy-health ready-check)
+haproxy → hug (gated by the haproxy-ready check)
 ```
 
 ### Shutdown Order
