@@ -35,9 +35,14 @@ var (
 	procSysctl = "/proc/sys/net/ipv4/ip_unprivileged_port_start"
 )
 
-// Detect reads /proc to determine the effective bind capabilities of the
-// current process. On read errors it falls back to the conservative defaults
-// (minUnprivPort=1024, hasNetBind=false) and logs the failure.
+// Detect reads /proc to determine the bind capabilities available to HAProxy.
+// HAProxy is launched via haproxy_wrapper, which carries a file capability
+// (setcap cap_net_bind_service=+ep), so it gains NET_BIND_SERVICE at exec time
+// regardless of the controller's effective set. The file capability is bounded
+// only by the container-wide bounding set, which the controller shares, so we
+// read CapBnd (not CapEff) to predict whether HAProxy can bind privileged ports.
+// On read errors it falls back to the conservative defaults (minUnprivPort=1024,
+// hasNetBind=false) and logs the failure.
 func Detect(ctx context.Context, logger *slog.Logger) PortBinder {
 	minPort, errMin := readUnprivPortStart(procSysctl)
 	if errMin != nil {
@@ -56,7 +61,7 @@ func Detect(ctx context.Context, logger *slog.Logger) PortBinder {
 		if logger != nil {
 			logger.LogAttrs(
 				ctx, slog.LevelWarn,
-				"caps: could not read CapEff, assuming no NET_BIND_SERVICE",
+				"caps: could not read CapBnd, assuming no NET_BIND_SERVICE",
 				slog.String("error", errCap.Error()),
 			)
 		}
@@ -86,6 +91,10 @@ func readUnprivPortStart(path string) (uint16, error) {
 	return uint16(v), nil
 }
 
+// readNetBindService reports whether CAP_NET_BIND_SERVICE is in the bounding
+// set (CapBnd). The bounding set caps what a file capability (the +ep on
+// haproxy_wrapper) can raise into HAProxy's effective set, so it predicts
+// HAProxy's reach better than the controller's CapEff.
 func readNetBindService(path string) (bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -96,18 +105,18 @@ func readNetBindService(path string) (bool, error) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		rest, ok := strings.CutPrefix(line, "CapEff:")
+		rest, ok := strings.CutPrefix(line, "CapBnd:")
 		if !ok {
 			continue
 		}
 		bits, err := strconv.ParseUint(strings.TrimSpace(rest), 16, 64)
 		if err != nil {
-			return false, fmt.Errorf("parse CapEff: %w", err)
+			return false, fmt.Errorf("parse CapBnd: %w", err)
 		}
 		return bits&(1<<unix.CAP_NET_BIND_SERVICE) != 0, nil
 	}
 	if err := scanner.Err(); err != nil {
 		return false, err
 	}
-	return false, errors.New("CapEff line not found")
+	return false, errors.New("CapBnd line not found")
 }

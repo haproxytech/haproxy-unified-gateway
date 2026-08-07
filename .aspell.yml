@@ -139,3 +139,7 @@ allowed:
   - statx
   - patref
   - ccae
+  - CapBnd
+  - Bnd
+  - capbnd
+  - setcap

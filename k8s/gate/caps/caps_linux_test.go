@@ -78,26 +78,26 @@ func TestReadNetBindService(t *testing.T) {
 		{
 			name: "only NET_BIND_SERVICE",
 			content: `Name:	hug
-CapEff:	0000000000000400
+CapBnd:	0000000000000400
 `,
 			want: true,
 		},
 		{
 			name: "no caps",
 			content: `Name:	hug
-CapEff:	0000000000000000
+CapBnd:	0000000000000000
 `,
 			want: false,
 		},
 		{
 			name: "full caps incl NET_BIND_SERVICE",
 			content: `Name:	hug
-CapEff:	00000000a80425fb
+CapBnd:	00000000a80425fb
 `,
 			want: true,
 		},
 		{
-			name: "missing CapEff",
+			name: "missing CapBnd",
 			content: `Name:	hug
 CapPrm:	0000000000000400
 `,
@@ -105,7 +105,7 @@ CapPrm:	0000000000000400
 		},
 		{
 			name:    "malformed hex",
-			content: "CapEff:\tzzzz\n",
+			content: "CapBnd:\tzzzz\n",
 			wantErr: true,
 		},
 	}
@@ -151,7 +151,7 @@ func TestDetect_FromFiles(t *testing.T) {
 	orig1, orig2 := procStatus, procSysctl
 	t.Cleanup(func() { procStatus, procSysctl = orig1, orig2 })
 
-	procStatus = writeFile(t, dir, "status", "CapEff:\t0000000000000400\n")
+	procStatus = writeFile(t, dir, "status", "CapBnd:\t0000000000000400\n")
 	procSysctl = writeFile(t, dir, "sysctl", "1024\n")
 
 	b := Detect(context.Background(), nil)
