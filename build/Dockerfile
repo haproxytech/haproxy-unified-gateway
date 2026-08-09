@@ -21,7 +21,7 @@ COPY /go.sum /src/go.sum
 RUN cd /src && go mod download
 
 WORKDIR /src
-RUN go install -trimpath -ldflags="-s" github.com/haproxytech/gopherd@v1.0.1
+RUN go install -trimpath -ldflags="-s" github.com/haproxytech/gopherd@v1.0.2
 COPY / /src
 
 RUN mkdir -p /var/run/vars && \
