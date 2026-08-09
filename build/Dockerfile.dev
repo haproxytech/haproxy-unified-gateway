@@ -15,7 +15,7 @@ FROM golang:1.26-alpine AS builder
 
 RUN apk --no-cache add git openssh
 WORKDIR /src
-RUN go install -trimpath -ldflags="-s" github.com/haproxytech/gopherd@v1.0.1
+RUN go install -trimpath -ldflags="-s" github.com/haproxytech/gopherd@v1.0.2
 
 FROM haproxytech/haproxy-alpine:3.2 AS builder-c
 RUN apk add --no-cache build-base gcc musl-dev
