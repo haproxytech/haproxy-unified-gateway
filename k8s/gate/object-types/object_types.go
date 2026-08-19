@@ -37,6 +37,7 @@ var (
 	ObjectTypeRefGrant     = &gatewayv1beta1.ReferenceGrant{}
 	ObjectTypeIngress      = &networkingv1.Ingress{}
 	ObjectTypeIngressClass = &networkingv1.IngressClass{}
+	ObjectTypeListenerSet  = &gatewayv1.ListenerSet{}
 
 	// ObjectTypeIngressBackendCR is a generic (unstructured) handle on the
 	// foreign kubernetes-ingress Backend CR. It is watched and stored

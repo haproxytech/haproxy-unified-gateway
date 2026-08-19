@@ -182,6 +182,7 @@ func Add(
 		Ingresses:         map[types.NamespacedName]*networkingv1.Ingress{},
 		IngressClasses:    map[types.NamespacedName]*networkingv1.IngressClass{},
 		IngressBackendCRs: map[types.NamespacedName]*unstructured.Unstructured{},
+		ListenerSets:      map[types.NamespacedName]*gatewayv1.ListenerSet{},
 	}
 
 	var certificateStorage storage.CertificateStorage
@@ -741,9 +742,32 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 						predicate.NewNamespacePredicate(cfg.Namespaces),
 					),
 				),
-				// No WithEnqueueFor: ReferenceGrant has no secondary dependencies.
-				// The inverse direction is correct, HTTPRoute and TLSRoute controllers
-				// watch ReferenceGrant to re-enqueue affected routes when a grant changes.
+				// No WithEnqueueFor yet. A ListenerSet does have secondary
+				// dependencies -- the Secrets of its certificateRefs, the
+				// ReferenceGrants permitting them, and the Gateway it attaches to --
+				// and it also has to enqueue that Gateway, since a ListenerSet alone
+				// produces no configuration. Those edges are added with the builder
+				// that consumes them; registering them before there is anything to
+				// rebuild would only cost cycles.
+			},
+		},
+		{
+			name:       "ListenerSet",
+			objectType: objtypes.ObjectTypeListenerSet,
+			options: []Option{
+				WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.GenerationChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				),
+				// No WithEnqueueFor yet. A ListenerSet does have secondary
+				// dependencies -- the Secrets of its certificateRefs, the
+				// ReferenceGrants permitting them, and the Gateway it attaches to --
+				// and it also has to enqueue that Gateway, since a ListenerSet alone
+				// produces no configuration. Those edges are added with the builder
+				// that consumes them; registering them before there is anything to
+				// rebuild would only cost cycles.
 			},
 		},
 	}

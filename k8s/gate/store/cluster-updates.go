@@ -71,6 +71,7 @@ type ClusterUpdates struct {
 	Ingresses         map[types.NamespacedName]Update[*networkingv1.Ingress]
 	IngressClasses    map[types.NamespacedName]Update[*networkingv1.IngressClass]
 	IngressBackendCRs map[types.NamespacedName]Update[*unstructured.Unstructured]
+	ListenerSets      map[types.NamespacedName]Update[*gatewayv1.ListenerSet]
 }
 
 func NewClusterUpdates() ClusterUpdates {
@@ -94,5 +95,6 @@ func NewClusterUpdates() ClusterUpdates {
 		Ingresses:         make(map[types.NamespacedName]Update[*networkingv1.Ingress]),
 		IngressClasses:    make(map[types.NamespacedName]Update[*networkingv1.IngressClass]),
 		IngressBackendCRs: make(map[types.NamespacedName]Update[*unstructured.Unstructured]),
+		ListenerSets:      make(map[types.NamespacedName]Update[*gatewayv1.ListenerSet]),
 	}
 }

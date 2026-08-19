@@ -55,6 +55,7 @@ type ClusterStore struct {
 	Ingresses         map[types.NamespacedName]*networkingv1.Ingress
 	IngressClasses    map[types.NamespacedName]*networkingv1.IngressClass
 	IngressBackendCRs map[types.NamespacedName]*unstructured.Unstructured
+	ListenerSets      map[types.NamespacedName]*gatewayv1.ListenerSet
 	Updates           ClusterUpdates
 }
 
@@ -103,6 +104,7 @@ func NewClusterStoreUpdaterImpl(
 				extractGVK(&networkingv1.Ingress{}):             newObjectStoreImpl(clusterStore.Ingresses, clusterStore.Updates.Ingresses, logger),
 				extractGVK(&networkingv1.IngressClass{}):        newObjectStoreImpl(clusterStore.IngressClasses, clusterStore.Updates.IngressClasses, logger),
 				extractGVK(objtypes.ObjectTypeIngressBackendCR): newObjectStoreImpl(clusterStore.IngressBackendCRs, clusterStore.Updates.IngressBackendCRs, logger),
+				extractGVK(&gatewayv1.ListenerSet{}):            newObjectStoreImpl(clusterStore.ListenerSets, clusterStore.Updates.ListenerSets, logger),
 			},
 		},
 		extractGVK: extractGVK,
