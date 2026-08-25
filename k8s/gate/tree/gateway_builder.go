@@ -202,24 +202,29 @@ func (b *GatewayBuilderImpl) resetListenerConflicts() {
 	b.ControllerStore.mapPort2Listeners = make(map[gatewayv1.PortNumber]listenerConflict)
 }
 
-// checkListenerConflicts checks the conflicts between all Gateway listeners
-// See computeListenerConflicts to see how the conflicts are detected
-// For now, as there are only a few number of Gateways, we do this check on all Gateway/ all listeners
+// checkListenerConflicts recomputes the listener conflict table, then re-upserts
+// the Gateways whose conflict verdict changed since the previous cycle.
+//
+// A conflict is a relational property: it depends on the listeners of the other
+// Gateways, so a Gateway can enter or leave the conflict set without any event of
+// its own — adding a listener to an older Gateway silently invalidates a younger
+// Gateway's listener on the same port. The conflict table is rebuilt for the whole
+// tree on every cycle, but the transfer of a verdict onto a listener
+// (listener.checkConflict -> CheckConflict -> BuildConditions) only runs for
+// Gateways marked StatusUpserted. Re-upserting is what routes an untouched Gateway
+// through that single transfer point.
+//
+// Only Gateways whose verdict actually changed are re-upserted. Selecting every
+// Gateway that merely *has* a conflict would re-run all five listener checks — down
+// to re-reading the Secrets and PEM-decoding the certificates in
+// checkCertificateRefs — on every single cycle for as long as a misconfiguration
+// lasts, whatever the event that triggered the cycle.
 func (b *GatewayBuilderImpl) checkListenerConflicts() {
-	oldGwWithPortConflicts := b.previousGatewaysWithPortConflicts()
-
-	// Detect new conflicts
+	// Detect conflicts. The table is rebuilt from scratch and holds an entry for
+	// every listener of the tree, conflicting or not.
 	b.computeListenerConflicts()
 
-	newGwWithPortConflict := b.gatewaysWithPortConflicts()
-	oldAndNewGwWithPortConflicts := map[client.ObjectKey]struct{}{}
-	for gwKey := range newGwWithPortConflict {
-		oldAndNewGwWithPortConflicts[gwKey] = struct{}{}
-	}
-	for gwKey := range oldGwWithPortConflicts {
-		oldAndNewGwWithPortConflicts[gwKey] = struct{}{}
-	}
-	for gwKey := range oldAndNewGwWithPortConflicts {
+	for gwKey := range b.gatewaysWithChangedConflictVerdict() {
 		treeGw, ok := b.ControllerStore.GateTree.Gateways[gwKey]
 		if !ok {
 			continue
@@ -232,29 +237,53 @@ func (b *GatewayBuilderImpl) checkListenerConflicts() {
 	}
 }
 
-// gatewaysWithPortConflicts returns a map of Gateway keys which have a conflict
-func (b *GatewayBuilderImpl) gatewaysWithPortConflicts() map[client.ObjectKey]struct{} {
-	return gatewaysWithPortConflicts(b.ControllerStore.mapPort2Listeners)
+// gatewaysWithChangedConflictVerdict returns the Gateway keys whose conflict
+// verdict changed between the previous and the current cycle.
+func (b *GatewayBuilderImpl) gatewaysWithChangedConflictVerdict() map[client.ObjectKey]struct{} {
+	return gatewaysWithChangedConflictVerdict(
+		b.ControllerStore.previousMapPort2Listeners,
+		b.ControllerStore.mapPort2Listeners,
+	)
 }
 
-// previousGatewaysWithPortConflicts returns a map of Gateway keys which have a conflict
-func (b *GatewayBuilderImpl) previousGatewaysWithPortConflicts() map[client.ObjectKey]struct{} {
-	return gatewaysWithPortConflicts(b.ControllerStore.previousMapPort2Listeners)
-}
-
-// gatewaysWithPortConflicts returns a set of Gateway keys that have at least one listener with a conflict.
-func gatewaysWithPortConflicts(mapPort2ListenerConflict map[gatewayv1.PortNumber]listenerConflict) map[client.ObjectKey]struct{} {
+// gatewaysWithChangedConflictVerdict returns the set of Gateway keys owning at
+// least one listener whose conflict verdict differs between the previous and the
+// current conflict table.
+//
+// The comparison is by value, not by membership of the conflicting set, so it also
+// catches a listener that stays conflicted while its reason changes (e.g.
+// ProtocolConflict becoming HostnameConflict). Both tables hold an entry for every
+// listener, so an absent verdict is a real difference and not a gap: a listener
+// that appeared or disappeared belongs to a Gateway that was created, deleted or
+// edited, hence already present in ClusterStore.Updates — selecting it is a no-op
+// filtered out by the StatusUpserted guard in checkListenerConflicts.
+func gatewaysWithChangedConflictVerdict(
+	previous, current map[gatewayv1.PortNumber]listenerConflict,
+) map[client.ObjectKey]struct{} {
 	gwKeys := map[client.ObjectKey]struct{}{}
-	for _, conflictMap := range mapPort2ListenerConflict {
-		for glk, v := range conflictMap {
-			// If there is a conflict for this listener
-			if v.hasConflict {
-				// Compute the Gw key from the listener key
-				gwKey := ConvertListenerKeyToGatewayKey(glk)
-				gwKeys[gwKey] = struct{}{}
+
+	for port, currentConflicts := range current {
+		previousConflicts := previous[port]
+		for listenerKey, currentCondition := range currentConflicts {
+			previousCondition, existed := previousConflicts[listenerKey]
+			if existed && previousCondition == currentCondition {
+				continue
 			}
+			gwKeys[ConvertListenerKeyToGatewayKey(listenerKey)] = struct{}{}
 		}
 	}
+
+	// Listeners that were in the previous table and are gone from the current one.
+	for port, previousConflicts := range previous {
+		currentConflicts := current[port]
+		for listenerKey := range previousConflicts {
+			if _, stillPresent := currentConflicts[listenerKey]; stillPresent {
+				continue
+			}
+			gwKeys[ConvertListenerKeyToGatewayKey(listenerKey)] = struct{}{}
+		}
+	}
+
 	return gwKeys
 }
 

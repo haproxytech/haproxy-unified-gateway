@@ -111,6 +111,7 @@ allowed:
   - misconfiguration
   - upsert
   - upserted
+  - upserting
   - CEL
   - httpfilters
   - allowlist
