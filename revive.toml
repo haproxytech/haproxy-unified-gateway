@@ -56,3 +56,6 @@ enableAllRules = true
 
 [rule.var-naming]
   arguments = [[], [], [{skipPackageNameChecks = true}]]
+
+[rule.multiline-if-init]
+  disabled = true

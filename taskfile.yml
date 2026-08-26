@@ -21,12 +21,12 @@ vars:
   CLOUD_PROVIDER_KIND: sigs.k8s.io/cloud-provider-kind@v0.11.1
   CONTROLLER_GEN: sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
   CHECK_COMMIT: github.com/haproxytech/check-commit/v5@v5.8.1
-  BETTERALIGN: github.com/dkorunic/betteralign/cmd/betteralign@v0.14.3
-  STATICCHECK: honnef.co/go/tools/cmd/staticcheck@v0.7.0
+  BETTERALIGN: github.com/dkorunic/betteralign/cmd/betteralign@v0.15.0
+  STATICCHECK: honnef.co/go/tools/cmd/staticcheck@v0.8.1
   GO_LICENSES: github.com/google/go-licenses@v1.6.0
   GOVULNCHECK: golang.org/x/vuln/cmd/govulncheck@v1.1.4
   GOFUMPT: mvdan.cc/gofumpt@v0.11.0
-  REVIVE: github.com/mgechev/revive@v1.15.0
+  REVIVE: github.com/mgechev/revive@v1.16.0
   GOTESTSUM: gotest.tools/gotestsum@v1.13.0
 
 dotenv:
