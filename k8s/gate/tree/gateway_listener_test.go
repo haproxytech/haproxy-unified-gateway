@@ -37,9 +37,10 @@ func exampleSupportedKinds() managedRouteGroupKindsByProtocol {
 
 func TestPartitionRouteKinds(t *testing.T) {
 	tests := []struct {
-		name          string
-		listener      gatewayv1.Listener
-		expectedKinds []gatewayv1.RouteGroupKind
+		name             string
+		listener         gatewayv1.Listener
+		expectedKinds    []gatewayv1.RouteGroupKind
+		expectedRejected []gatewayv1.RouteGroupKind
 	}{
 		{
 			name: "HTTP protocol, no allowed kinds specified",
@@ -86,7 +87,8 @@ func TestPartitionRouteKinds(t *testing.T) {
 					},
 				},
 			},
-			expectedKinds: []gatewayv1.RouteGroupKind{objtypes.RouteKindHTTP},
+			expectedKinds:    []gatewayv1.RouteGroupKind{objtypes.RouteKindHTTP},
+			expectedRejected: []gatewayv1.RouteGroupKind{objtypes.RouteKindTCP},
 		},
 		{
 			name: "HTTP protocol, with allowed kinds, none supported",
@@ -98,7 +100,26 @@ func TestPartitionRouteKinds(t *testing.T) {
 					},
 				},
 			},
-			expectedKinds: []gatewayv1.RouteGroupKind{},
+			expectedKinds:    []gatewayv1.RouteGroupKind{},
+			expectedRejected: []gatewayv1.RouteGroupKind{objtypes.RouteKindTLS},
+		},
+		{
+			// Every rejected kind must be reported, not just one of them: the
+			// message names them all so a user does not fix them one round-trip
+			// at a time.
+			name: "HTTP protocol, several unsupported kinds are all rejected",
+			listener: gatewayv1.Listener{
+				Protocol: gatewayv1.HTTPProtocolType,
+				AllowedRoutes: &gatewayv1.AllowedRoutes{
+					Kinds: []gatewayv1.RouteGroupKind{
+						objtypes.RouteKindTLS,
+						objtypes.RouteKindHTTP,
+						objtypes.RouteKindUDP,
+					},
+				},
+			},
+			expectedKinds:    []gatewayv1.RouteGroupKind{objtypes.RouteKindHTTP},
+			expectedRejected: []gatewayv1.RouteGroupKind{objtypes.RouteKindTLS, objtypes.RouteKindUDP},
 		},
 		{
 			name: "Unsupported protocol",
@@ -111,8 +132,9 @@ func TestPartitionRouteKinds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			kept, _ := partitionRouteKinds(tt.listener.Protocol, tt.listener.AllowedRoutes, exampleSupportedKinds())
-			assert.Equal(t, tt.expectedKinds, kept)
+			kept, rejected := partitionRouteKinds(tt.listener.Protocol, tt.listener.AllowedRoutes, exampleSupportedKinds())
+			assert.Equal(t, tt.expectedKinds, kept, "kept kinds")
+			assert.Equal(t, tt.expectedRejected, rejected, "rejected kinds")
 		})
 	}
 }
