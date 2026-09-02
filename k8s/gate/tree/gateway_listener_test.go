@@ -329,3 +329,74 @@ func TestCheckPort_SkipsWhenEarlierCheckFailed(t *testing.T) {
 
 	assert.Empty(t, l.CheckPort.Conditions, "checkPort should be a no-op when an earlier check already rejected the listener")
 }
+
+// The accessors are the only place that knows where a listener's attributes come
+// from. They must read the ListenerSet entry when the listener was contributed by
+// one, the Gateway listener otherwise, and never panic on a Listener with no
+// source attached — the field they replaced was a value, so reading it from a
+// zero-value Listener could not crash.
+func TestListenerAccessors(t *testing.T) {
+	hostname := gatewayv1.Hostname("gw.example.com")
+	entryHostname := gatewayv1.Hostname("ls.example.com")
+	terminate := gatewayv1.TLSModeTerminate
+
+	t.Run("reads the Gateway listener", func(t *testing.T) {
+		l := &Listener{K8sGatewayListener: &gatewayv1.Listener{
+			Name:          "gw-http",
+			Port:          80,
+			Protocol:      gatewayv1.HTTPProtocolType,
+			Hostname:      &hostname,
+			AllowedRoutes: &gatewayv1.AllowedRoutes{},
+		}}
+
+		assert.False(t, l.FromListenerSet())
+		assert.Equal(t, gatewayv1.SectionName("gw-http"), l.Name())
+		assert.Equal(t, gatewayv1.PortNumber(80), l.Port())
+		assert.Equal(t, gatewayv1.HTTPProtocolType, l.Protocol())
+		assert.Equal(t, &hostname, l.Hostname())
+		assert.Nil(t, l.TLS())
+		assert.NotNil(t, l.AllowedRoutes())
+	})
+
+	t.Run("reads the ListenerSet entry", func(t *testing.T) {
+		l := &Listener{K8sListenerSetListenerEntry: &gatewayv1.ListenerEntry{
+			Name:     "ls-https",
+			Port:     443,
+			Protocol: gatewayv1.HTTPSProtocolType,
+			Hostname: &entryHostname,
+			TLS:      &gatewayv1.ListenerTLSConfig{Mode: &terminate},
+		}}
+
+		assert.True(t, l.FromListenerSet())
+		assert.Equal(t, gatewayv1.SectionName("ls-https"), l.Name())
+		assert.Equal(t, gatewayv1.PortNumber(443), l.Port())
+		assert.Equal(t, gatewayv1.HTTPSProtocolType, l.Protocol())
+		assert.Equal(t, &entryHostname, l.Hostname())
+		assert.NotNil(t, l.TLS())
+		assert.Nil(t, l.AllowedRoutes())
+	})
+
+	t.Run("no source attached returns zero values without panicking", func(t *testing.T) {
+		l := &Listener{}
+
+		assert.False(t, l.FromListenerSet())
+		assert.Empty(t, l.Name())
+		assert.Zero(t, l.Port())
+		assert.Empty(t, l.Protocol())
+		assert.Nil(t, l.Hostname())
+		assert.Nil(t, l.TLS())
+		assert.Nil(t, l.AllowedRoutes())
+	})
+
+	t.Run("the ListenerSet entry wins when both are set", func(t *testing.T) {
+		// Not a state the builders may produce, but the accessors must still be
+		// total rather than depend on an unenforced invariant.
+		l := &Listener{
+			K8sGatewayListener:          &gatewayv1.Listener{Name: "from-gateway", Port: 80},
+			K8sListenerSetListenerEntry: &gatewayv1.ListenerEntry{Name: "from-listenerset", Port: 443},
+		}
+
+		assert.Equal(t, gatewayv1.SectionName("from-listenerset"), l.Name())
+		assert.Equal(t, gatewayv1.PortNumber(443), l.Port())
+	})
+}
