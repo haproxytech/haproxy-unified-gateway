@@ -284,7 +284,7 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 		}
 
 		// Check hostname
-		if !matchHostname(r.K8sResource.Spec.Hostnames, listener.K8sResource.Hostname) {
+		if !matchHostname(r.K8sResource.Spec.Hostnames, listener.Hostname()) {
 			conds.MergeOverrideConditions(rc.ConditionNotAcceptedNoMatchingHostname())
 			continue
 		}

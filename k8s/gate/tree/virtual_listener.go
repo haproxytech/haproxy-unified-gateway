@@ -103,7 +103,8 @@ func (vl *VirtualListener) Equal(other *VirtualListener) bool {
 
 	// Compare each Listener's K8sResource
 	for i := range vl.Listeners {
-		if !cmp.Equal(vl.Listeners[i].K8sResource, other.Listeners[i].K8sResource) {
+		if !cmp.Equal(vl.Listeners[i].K8sGatewayListener, other.Listeners[i].K8sGatewayListener) ||
+			!cmp.Equal(vl.Listeners[i].K8sListenerSetListenerEntry, other.Listeners[i].K8sListenerSetListenerEntry) {
 			return false
 		}
 	}

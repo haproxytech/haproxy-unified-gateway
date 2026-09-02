@@ -30,7 +30,7 @@ func makeListener(from *gatewayv1.FromNamespaces, selector *metav1.LabelSelector
 		if selector != nil {
 			ns.Selector = selector
 		}
-		l.K8sResource = gatewayv1.Listener{
+		l.K8sGatewayListener = &gatewayv1.Listener{
 			AllowedRoutes: &gatewayv1.AllowedRoutes{Namespaces: ns},
 		}
 	}

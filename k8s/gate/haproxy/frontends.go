@@ -146,7 +146,7 @@ func (b *HaproxyConfMgrImpl) fillListenerMaps(vListenerName string, vListener *t
 	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile(frontendName)
 
 	for _, l := range vListener.Listeners {
-		hostname := l.K8sResource.Hostname
+		hostname := l.Hostname()
 		hostnameStr := ""
 		if hostname != nil {
 			hostnameStr = string(*hostname)

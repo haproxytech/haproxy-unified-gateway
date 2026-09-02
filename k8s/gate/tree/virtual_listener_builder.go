@@ -75,7 +75,7 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 				b.Logger.LogAttrs(
 					context.Background(), slog.LevelInfo, "Skipping invalid listener",
 					logging.LogAttrKey(listener.Owner),
-					slog.String("listener", string(listener.K8sResource.Name)),
+					slog.String("listener", string(listener.Name())),
 				)
 				continue
 			}
@@ -87,7 +87,7 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 				b.Logger.LogAttrs(
 					context.Background(), slog.LevelInfo, "Skipping invalid listener as invalid Gateway",
 					logging.LogAttrKey(listener.Owner),
-					slog.String("listener", string(listener.K8sResource.Name)),
+					slog.String("listener", string(listener.Name())),
 				)
 				continue
 			}
@@ -105,7 +105,7 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 	// Sort the listeners in each VirtualListener for consistent ordering
 	for _, vl := range b.GateTree.VirtualListeners {
 		slices.SortStableFunc(vl.Listeners, func(a, b *Listener) int {
-			return cmp.Compare(a.K8sResource.Name, b.K8sResource.Name)
+			return cmp.Compare(a.Name(), b.Name())
 		})
 	}
 

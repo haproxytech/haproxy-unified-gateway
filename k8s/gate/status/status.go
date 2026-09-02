@@ -216,7 +216,7 @@ func (s *StatusUpdaterImpl) prepareGatewayUpdates(ctx context.Context, gateways 
 
 		for _, lc := range gw.Listeners {
 			s.config.logger.LogAttrs(ctx, slog.LevelDebug, "[PREPARE] conditions",
-				slog.Any("listener", lc.K8sResource.Name),
+				slog.Any("listener", lc.Name()),
 				slog.Any("conditions", lc.Conditions))
 		}
 

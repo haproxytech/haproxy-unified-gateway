@@ -183,11 +183,11 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 	for _, listener := range treeGw.K8sResource.Spec.Listeners {
 		kinds := supportedKinds(listener, gateSupportedRouteKindsByProtocol)
 		processedListener := Listener{
-			Owner:             client.ObjectKeyFromObject(treeGw.K8sResource),
-			K8sResource:       listener,
-			AllowedRouteKinds: kinds,
-			AttachedRoutes:    make(map[client.ObjectKey]struct{}),
-			Conditions:        make(generic.Conditions),
+			Owner:              client.ObjectKeyFromObject(treeGw.K8sResource),
+			K8sGatewayListener: &listener,
+			AllowedRouteKinds:  kinds,
+			AttachedRoutes:     make(map[client.ObjectKey]struct{}),
+			Conditions:         make(generic.Conditions),
 		}
 		processedListeners[string(listener.Name)] = &processedListener
 	}
@@ -196,7 +196,7 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 	// Performs all needed checks
 	for _, listener := range treeGw.Listeners {
 		listener.resetChecks()
-		switch listener.K8sResource.Protocol {
+		switch listener.Protocol() {
 		// This switch will be completed with all needed checks per protocol
 		case gatewayv1.HTTPProtocolType, gatewayv1.TLSProtocolType:
 			listener.checkRouteGroupKind(treeGw, gateSupportedRouteKindsByProtocol)

@@ -273,10 +273,10 @@ func (b *CertificateBuilderImpl) previousSecretsPerVirtualListener() map[string]
 	result := make(map[string]map[client.ObjectKey]struct{})
 	for vlName, vl := range b.GateTree.PreviousVirtualListeners {
 		for _, listener := range vl.Listeners {
-			if listener.K8sResource.TLS == nil {
+			if listener.TLS() == nil {
 				continue
 			}
-			for _, certRef := range listener.K8sResource.TLS.CertificateRefs {
+			for _, certRef := range listener.TLS().CertificateRefs {
 				if !utilsk8s.IsSecretGroupKindSupported(certRef) {
 					continue
 				}

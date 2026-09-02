@@ -218,7 +218,7 @@ func newListenerForPortTest(port int32) (*Listener, *Gateway) {
 		},
 	}
 	l := &Listener{
-		K8sResource: gatewayv1.Listener{
+		K8sGatewayListener: &gatewayv1.Listener{
 			Name:     "http",
 			Port:     gatewayv1.PortNumber(port),
 			Protocol: gatewayv1.HTTPProtocolType,

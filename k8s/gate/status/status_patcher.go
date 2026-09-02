@@ -97,7 +97,7 @@ func newGatewayStatusPatcher(gw *tree.Gateway, addresses []gatewayv1.GatewayStat
 				kinds = nil
 			}
 			listenerStatuses = append(listenerStatuses, gatewayv1.ListenerStatus{
-				Name:           listener.K8sResource.Name,
+				Name:           listener.Name(),
 				Conditions:     conds,
 				SupportedKinds: kinds,
 				AttachedRoutes: int32(len(listener.AttachedRoutes)), // To be changed with the correct value
@@ -396,9 +396,9 @@ func newGatewayListenerFeedbackStatusPatcher(gw *tree.Gateway, logger *slog.Logg
 		logging.LogAttrObjectKey(gw.K8sResource))
 	for _, listener := range gw.Listeners {
 		if cond, ok := listener.Conditions.GetCondition(condType); ok {
-			snapshot[listener.K8sResource.Name] = cond
+			snapshot[listener.Name()] = cond
 			logger.LogAttrs(context.Background(), slog.LevelDebug, "[feedback] listener",
-				slog.String("listener ", string(listener.K8sResource.Name)),
+				slog.String("listener ", string(listener.Name())),
 				slog.Any("cond", cond))
 		}
 	}

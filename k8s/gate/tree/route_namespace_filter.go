@@ -36,7 +36,7 @@ func isRouteNamespaceAllowed(
 	gatewayNamespace string,
 	namespaces map[types.NamespacedName]*v1.Namespace,
 ) bool {
-	allowedRoutes := listener.K8sResource.AllowedRoutes
+	allowedRoutes := listener.AllowedRoutes()
 	if allowedRoutes == nil || allowedRoutes.Namespaces == nil || allowedRoutes.Namespaces.From == nil {
 		return routeNamespace == gatewayNamespace
 	}

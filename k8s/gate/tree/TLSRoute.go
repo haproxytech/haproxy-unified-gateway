@@ -211,7 +211,7 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 				Conditions: rc.ConditionNotAcceptedNoMatchingParent(),
 			}
 		}
-		tlsMode := utils.PointerDefaultValueIfNil(listener.K8sResource.TLS).Mode
+		tlsMode := utils.PointerDefaultValueIfNil(listener.TLS()).Mode
 		if tlsMode == nil || *tlsMode != gatewayv1.TLSModePassthrough {
 			return checkParentRefResult{
 				Managed:    true,
@@ -248,7 +248,7 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 		}
 
 		// Vérifie le hostname
-		if !matchHostname(r.K8sResource.Spec.Hostnames, listener.K8sResource.Hostname) {
+		if !matchHostname(r.K8sResource.Spec.Hostnames, listener.Hostname()) {
 			conds.MergeOverrideConditions(rc.ConditionNotAcceptedNoMatchingHostname())
 			continue
 		}

@@ -37,9 +37,33 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// Listener is a listener of the merged list of a Gateway: either one declared in
+// the Gateway's own spec, or one contributed by an attached ListenerSet.
+//
+// The source object is kept as-is rather than converted, in one of two mutually
+// exclusive fields. gatewayv1.Listener and gatewayv1.ListenerEntry happen to have
+// identical fields today, so a conversion would compile — but relying on that
+// coincidence would silently absorb any future divergence, and the two types
+// already have distinct condition vocabularies. Which field is set also *is* the
+// origin of the listener: there is no separate flag that could drift away from
+// the payload.
+//
+// Read the shared attributes through the accessors (Name, Port, Protocol,
+// Hostname, TLS, AllowedRoutes) so that the branch exists once per attribute
+// rather than once per call site.
+//
+// The source object and everything it points at are borrowed from the store and
+// must be treated as read-only, like everything else the tree holds: the store
+// owns the per-event deep copy the controller-runtime cache returns on Get, and
+// several tree nodes alias it.
 type Listener struct {
-	// K8sResource is the source resource.
-	K8sResource gatewayv1.Listener
+	// K8sGatewayListener is the source resource when the listener comes from the
+	// Gateway's own spec. Exactly one of K8sGatewayListener and
+	// K8sListenerSetListenerEntry is set.
+	K8sGatewayListener *gatewayv1.Listener
+	// K8sListenerSetListenerEntry is the source resource when the listener is
+	// contributed by a ListenerSet.
+	K8sListenerSetListenerEntry *gatewayv1.ListenerEntry
 	// Final Conditions
 	Conditions     generic.Conditions
 	AttachedRoutes AttachedRoutes
@@ -60,6 +84,89 @@ type Listener struct {
 	// Accepted indicates the listener configuration is accepted (valid protocol, no conflicts).
 	// Routes can attach to an accepted listener even if refs are unresolved.
 	Accepted bool
+}
+
+// FromListenerSet reports whether this listener was contributed by a ListenerSet
+// rather than declared in the Gateway's own spec.
+func (l *Listener) FromListenerSet() bool {
+	return l != nil && l.K8sListenerSetListenerEntry != nil
+}
+
+// The accessors below are nil-safe and return the zero value when no source
+// object is attached. The field they replaced was a value rather than a pointer,
+// so reading it from a zero-value Listener could not panic; keeping that property
+// avoids turning a construction mistake into a crash of the whole reconcile loop.
+
+// Name returns the listener name. It is unique within the resource that declares
+// it, but NOT across a Gateway and its ListenerSets: the Gateway API explicitly
+// allows the same name on both sides, and on sibling ListenerSets.
+func (l *Listener) Name() gatewayv1.SectionName {
+	switch {
+	case l.FromListenerSet():
+		return l.K8sListenerSetListenerEntry.Name
+	case l != nil && l.K8sGatewayListener != nil:
+		return l.K8sGatewayListener.Name
+	}
+	return ""
+}
+
+// Port returns the listener port.
+func (l *Listener) Port() gatewayv1.PortNumber {
+	switch {
+	case l.FromListenerSet():
+		return l.K8sListenerSetListenerEntry.Port
+	case l != nil && l.K8sGatewayListener != nil:
+		return l.K8sGatewayListener.Port
+	}
+	return 0
+}
+
+// Protocol returns the listener protocol.
+func (l *Listener) Protocol() gatewayv1.ProtocolType {
+	switch {
+	case l.FromListenerSet():
+		return l.K8sListenerSetListenerEntry.Protocol
+	case l != nil && l.K8sGatewayListener != nil:
+		return l.K8sGatewayListener.Protocol
+	}
+	return ""
+}
+
+// Hostname returns the listener hostname, nil when unset. An unset hostname is a
+// catch-all, and it is a value like any other for conflict purposes: two
+// catch-all listeners on the same port are indistinguishable.
+func (l *Listener) Hostname() *gatewayv1.Hostname {
+	switch {
+	case l.FromListenerSet():
+		return l.K8sListenerSetListenerEntry.Hostname
+	case l != nil && l.K8sGatewayListener != nil:
+		return l.K8sGatewayListener.Hostname
+	}
+	return nil
+}
+
+// TLS returns the listener TLS configuration, nil when unset. Note that an HTTPS
+// listener without a TLS section passes the CRD validation, so nil must be
+// handled rather than assumed away.
+func (l *Listener) TLS() *gatewayv1.ListenerTLSConfig {
+	switch {
+	case l.FromListenerSet():
+		return l.K8sListenerSetListenerEntry.TLS
+	case l != nil && l.K8sGatewayListener != nil:
+		return l.K8sGatewayListener.TLS
+	}
+	return nil
+}
+
+// AllowedRoutes returns the listener route-attachment policy, nil when unset.
+func (l *Listener) AllowedRoutes() *gatewayv1.AllowedRoutes {
+	switch {
+	case l.FromListenerSet():
+		return l.K8sListenerSetListenerEntry.AllowedRoutes
+	case l != nil && l.K8sGatewayListener != nil:
+		return l.K8sGatewayListener.AllowedRoutes
+	}
+	return nil
 }
 
 // DeepCopy creates a deep copy of the Listener.
@@ -157,12 +264,12 @@ func (l *Listener) checkRouteGroupKind(treeGw *Gateway, gateSupportedRouteKinds 
 		return
 	}
 
-	listener := l.K8sResource
-	gateSupportedRouteKindsForProtocol := gateSupportedRouteKinds[listener.Protocol]
+	allowedRoutes := l.AllowedRoutes()
+	gateSupportedRouteKindsForProtocol := gateSupportedRouteKinds[l.Protocol()]
 
 	// If the listener does not have allowedRoutes.Kinds defined, then list of supported routes types only depends
 	// on the listener protocol and is what is supported by the gateway.
-	if listener.AllowedRoutes == nil || len(listener.AllowedRoutes.Kinds) == 0 {
+	if allowedRoutes == nil || len(allowedRoutes.Kinds) == 0 {
 		l.CheckRouteGroupKind = CheckResult{
 			Valid: true,
 		}
@@ -172,8 +279,8 @@ func (l *Listener) checkRouteGroupKind(treeGw *Gateway, gateSupportedRouteKinds 
 	// If the listener has some allowedRoutes.Kinds, we take the intersection
 	// of what the listener allows and what the gateway supports for the protocol.
 	unsupportedRoute := ""
-	if listener.AllowedRoutes != nil {
-		for _, listenerAllowedKind := range listener.AllowedRoutes.Kinds {
+	{
+		for _, listenerAllowedKind := range allowedRoutes.Kinds {
 			if ok := isSupportedProtocolRouteKind(listenerAllowedKind, gateSupportedRouteKindsForProtocol); !ok {
 				unsupportedRoute = string(listenerAllowedKind.Kind)
 			}
@@ -200,19 +307,19 @@ func (l *Listener) checkRouteGroupKind(treeGw *Gateway, gateSupportedRouteKinds 
 }
 
 func (l *Listener) checkProtocol(gateSupportedRouteKinds map[gatewayv1.ProtocolType][]gatewayv1.RouteGroupKind) {
-	listener := l.K8sResource
 	// UnsupportedProtocol
 	if !l.checkSupportedProtocol(gateSupportedRouteKinds) {
 		return
 	}
 
-	if listener.Protocol == gatewayv1.TLSProtocolType &&
-		listener.TLS != nil &&
-		listener.TLS.Mode != nil &&
-		*listener.TLS.Mode == gatewayv1.TLSModeTerminate {
+	tls := l.TLS()
+	if l.Protocol() == gatewayv1.TLSProtocolType &&
+		tls != nil &&
+		tls.Mode != nil &&
+		*tls.Mode == gatewayv1.TLSModeTerminate {
 		valErr := field.NotSupported(
 			field.NewPath("protocol"),
-			listener.Protocol,
+			l.Protocol(),
 			[]string{"TLS/Passthrough"},
 		)
 		l.CheckProtocol = CheckResult{
@@ -231,8 +338,7 @@ func (l *Listener) checkProtocol(gateSupportedRouteKinds map[gatewayv1.ProtocolT
 // it is not, it records the UnsupportedProtocol condition on CheckProtocol and
 // returns false so the caller stops and keeps that invalid verdict.
 func (l *Listener) checkSupportedProtocol(gateSupportedRouteKinds map[gatewayv1.ProtocolType][]gatewayv1.RouteGroupKind) bool {
-	listener := l.K8sResource
-	gateSupportedRouteKindsForProtocol := gateSupportedRouteKinds[listener.Protocol]
+	gateSupportedRouteKindsForProtocol := gateSupportedRouteKinds[l.Protocol()]
 	if len(gateSupportedRouteKindsForProtocol) == 0 {
 		supportedProtocols := make([]string, 0, len(gateSupportedRouteKinds))
 
@@ -243,7 +349,7 @@ func (l *Listener) checkSupportedProtocol(gateSupportedRouteKinds map[gatewayv1.
 
 		valErr := field.NotSupported(
 			field.NewPath("protocol"),
-			listener.Protocol,
+			l.Protocol(),
 			supportedProtocols,
 		)
 		l.CheckProtocol = CheckResult{
@@ -261,12 +367,12 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 		return
 	}
 
-	listener := l.K8sResource
+	tls := l.TLS()
 
 	// Check if we miss the TLS section for HTTPS protocol
-	if listener.Protocol == gatewayv1.HTTPSProtocolType {
-		if listener.TLS == nil || len(listener.TLS.CertificateRefs) == 0 {
-			msg := fmt.Sprintf("listener %s has protocol HTTPS but no TLS section", listener.Name)
+	if l.Protocol() == gatewayv1.HTTPSProtocolType {
+		if tls == nil || len(tls.CertificateRefs) == 0 {
+			msg := fmt.Sprintf("listener %s has protocol HTTPS but no TLS section", l.Name())
 			l.CheckSecret = CheckResult{
 				Valid:      false,
 				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
@@ -275,10 +381,17 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 		}
 	}
 
+	// A listener of another protocol has no TLS section to check. The caller only
+	// reaches this check for HTTPS today, and the HTTPS case above already returned
+	// on a missing section, so this is a safety net rather than a live branch.
+	if tls == nil {
+		return
+	}
+
 	// Check is the secret exists
 	// We only accept Secret as CertificateRefs
 	// We only accept v1.Secret
-	for _, certRef := range listener.TLS.CertificateRefs {
+	for _, certRef := range tls.CertificateRefs {
 		if !l.isSupportedCertKindGroup(certRef) {
 			msg := "Listener CertificateRefs must be of Group/Kind Secret"
 			l.CheckSecret = CheckResult{
@@ -360,7 +473,7 @@ func (l *Listener) checkPort(portBinder caps.PortBinder) {
 		len(l.CheckConflict.Conditions) > 0 {
 		return
 	}
-	port := uint16(l.K8sResource.Port)
+	port := uint16(l.Port())
 	if portBinder.CanBind(port) {
 		return
 	}
@@ -384,15 +497,14 @@ func (l *Listener) checkConflict(treeGw *Gateway, listenersPerPort map[gatewayv1
 		l.CheckConflict = CheckResult{}
 		return
 	}
-	listener := l.K8sResource
-	listenersOnPort, ok := listenersPerPort[listener.Port]
+	listenersOnPort, ok := listenersPerPort[l.Port()]
 	if !ok {
 		// Should not happen
 		return
 	}
 
 	conflictingKeys := make([]string, 0)
-	lk := NewListenerKey(treeGw.K8sResource, listener)
+	lk := ListenerKeyFromListenerName(treeGw.K8sResource, l.Name())
 	if _, ok := listenersOnPort[lk]; !ok {
 		// should not happen
 		return
@@ -408,7 +520,7 @@ func (l *Listener) checkConflict(treeGw *Gateway, listenersPerPort map[gatewayv1
 	// 2- Conflicts
 	for glk := range listenersOnPort {
 		// if the listener is itself, just continue
-		if glk.String() == NewListenerKey(treeGw.K8sResource, listener).String() {
+		if glk == lk {
 			continue
 		}
 		_, listenerName, err := ConvertListenerKeyToGatewayKeyAndListenerName(glk)
@@ -496,7 +608,7 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 		// Probable cause is a startup phase where HAProxy is already programmed.
 		existingProgrammed := false
 		for _, listenerStatus := range treeGw.K8sResource.Status.Listeners {
-			if listenerStatus.Name != l.K8sResource.Name {
+			if listenerStatus.Name != l.Name() {
 				continue
 			}
 			for _, cond := range listenerStatus.Conditions {
@@ -570,7 +682,7 @@ func (l Listener) Key() client.ObjectKey {
 		Name: fmt.Sprintf(
 			"%s_%s",
 			l.Owner.Name,
-			l.K8sResource.Name,
+			l.Name(),
 		),
 	}
 }
