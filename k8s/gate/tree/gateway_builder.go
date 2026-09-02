@@ -181,11 +181,9 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 	processedListeners := make(map[string]*Listener)
 
 	for _, listener := range treeGw.K8sResource.Spec.Listeners {
-		kinds := supportedKinds(listener, gateSupportedRouteKindsByProtocol)
 		processedListener := Listener{
 			Owner:              client.ObjectKeyFromObject(treeGw.K8sResource),
 			K8sGatewayListener: &listener,
-			AllowedRouteKinds:  kinds,
 			AttachedRoutes:     make(map[client.ObjectKey]struct{}),
 			Conditions:         make(generic.Conditions),
 		}
@@ -196,14 +194,26 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 	// Performs all needed checks
 	for _, listener := range treeGw.Listeners {
 		listener.resetChecks()
+
+		// The route kinds a listener can serve are a property of the listener alone,
+		// so they are computed for every one of them and whatever the parent's state:
+		// only the condition derived from the rejected half depends on the Gateway
+		// being valid. status.supportedKinds must be reported even for a listener
+		// whose Gateway is not accepted, and even when nothing can be served on it --
+		// an empty list says that, an absent one says nothing.
+		kept, rejectedRouteKinds := partitionRouteKinds(
+			listener.Protocol(), listener.AllowedRoutes(), gateSupportedRouteKindsByProtocol,
+		)
+		listener.AllowedRouteKinds = kept
+
 		switch listener.Protocol() {
 		// This switch will be completed with all needed checks per protocol
 		case gatewayv1.HTTPProtocolType, gatewayv1.TLSProtocolType:
-			listener.checkRouteGroupKind(treeGw, gateSupportedRouteKindsByProtocol)
+			listener.checkRouteGroupKind(treeGw, rejectedRouteKinds, gateSupportedRouteKindsByProtocol)
 			listener.checkProtocol(gateSupportedRouteKindsByProtocol)
 			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
 		case gatewayv1.HTTPSProtocolType:
-			listener.checkRouteGroupKind(treeGw, gateSupportedRouteKindsByProtocol)
+			listener.checkRouteGroupKind(treeGw, rejectedRouteKinds, gateSupportedRouteKindsByProtocol)
 			listener.checkCertificateRefs(treeGw, b.GateTree.Secrets, b.referenceGrantManager)
 			listener.checkProtocol(gateSupportedRouteKindsByProtocol)
 			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)

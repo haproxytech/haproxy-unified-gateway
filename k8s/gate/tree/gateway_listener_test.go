@@ -25,8 +25,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func exampleSupportedKinds() map[gatewayv1.ProtocolType][]gatewayv1.RouteGroupKind {
-	return map[gatewayv1.ProtocolType][]gatewayv1.RouteGroupKind{
+func exampleSupportedKinds() managedRouteGroupKindsByProtocol {
+	return managedRouteGroupKindsByProtocol{
 		gatewayv1.HTTPProtocolType:  {objtypes.RouteKindHTTP, objtypes.RouteKindGRPC},
 		gatewayv1.HTTPSProtocolType: {objtypes.RouteKindHTTP, objtypes.RouteKindGRPC},
 		gatewayv1.TLSProtocolType:   {objtypes.RouteKindTLS, objtypes.RouteKindTCP},
@@ -35,7 +35,7 @@ func exampleSupportedKinds() map[gatewayv1.ProtocolType][]gatewayv1.RouteGroupKi
 	}
 }
 
-func TestSupportedKinds(t *testing.T) {
+func TestPartitionRouteKinds(t *testing.T) {
 	tests := []struct {
 		name          string
 		listener      gatewayv1.Listener
@@ -111,8 +111,8 @@ func TestSupportedKinds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := supportedKinds(tt.listener, exampleSupportedKinds())
-			assert.Equal(t, tt.expectedKinds, result)
+			kept, _ := partitionRouteKinds(tt.listener.Protocol, tt.listener.AllowedRoutes, exampleSupportedKinds())
+			assert.Equal(t, tt.expectedKinds, kept)
 		})
 	}
 }

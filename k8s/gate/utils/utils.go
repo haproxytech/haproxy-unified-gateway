@@ -152,10 +152,21 @@ func ObjectKeyFromNamespacedName(s string) (client.ObjectKey, error) {
 	}, nil
 }
 
+// RouteGroupKindsToString renders Route kinds group-qualified, as "group/Kind".
+//
+// The group is not decoration: a kind is most often unsupported *because* of it,
+// and rendering the kind alone yields messages that contradict themselves, such
+// as "HTTPRoute is not supported. Supported Route Kinds [HTTPRoute]" for a kind
+// taken from a foreign group. A nil group defaults to the Gateway API group, as
+// everywhere else.
 func RouteGroupKindsToString(routesGK []gatewayv1.RouteGroupKind) string {
 	kinds := make([]string, 0, len(routesGK))
 	for _, kind := range routesGK {
-		kinds = append(kinds, string(kind.Kind))
+		group := gatewayv1.GroupName
+		if kind.Group != nil {
+			group = string(*kind.Group)
+		}
+		kinds = append(kinds, group+"/"+string(kind.Kind))
 	}
 	return fmt.Sprintf("[%s]", strings.Join(kinds, ", "))
 }
