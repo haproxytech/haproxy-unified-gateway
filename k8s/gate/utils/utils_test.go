@@ -85,6 +85,78 @@ func TestSortByCreationTimestamp_Gateways_SameTimestamp(t *testing.T) {
 	}
 }
 
+// Helper to create a Gateway in a given namespace, all with the same timestamp.
+func newGatewayInNamespace(namespace, name string, now metav1.Time) *gatewayv1.Gateway {
+	return &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         namespace,
+			Name:              name,
+			CreationTimestamp: now,
+		},
+	}
+}
+
+// Homonymous objects in different namespaces, created within the same second,
+// must have a specified order. metav1.Time has a one-second granularity, so this
+// is the common case when a manifest is applied in one go, and the name alone
+// cannot separate them.
+func TestSortByCreationTimestamp_SameTimestampAndName_DifferentNamespaces(t *testing.T) {
+	now := metav1.Now()
+
+	gateways := []client.Object{
+		newGatewayInNamespace("ns-c", "tenant", now),
+		newGatewayInNamespace("ns-a", "tenant", now),
+		newGatewayInNamespace("ns-b", "tenant", now),
+	}
+
+	SortByCreationTimestamp(gateways)
+
+	expectedOrder := []string{"ns-a", "ns-b", "ns-c"}
+	for i, gateway := range gateways {
+		if gateway.GetNamespace() != expectedOrder[i] {
+			t.Errorf("Expected namespace %s at index %d, but got %s",
+				expectedOrder[i], i, gateway.GetNamespace())
+		}
+	}
+}
+
+// The namespace is compared before the name, so that the order follows the
+// "{namespace}/{name}" precedence the Gateway API prescribes for ListenerSets.
+func TestSortByCreationTimestamp_NamespaceBeforeName(t *testing.T) {
+	now := metav1.Now()
+
+	gateways := []client.Object{
+		newGatewayInNamespace("ns-b", "aaa", now),
+		newGatewayInNamespace("ns-a", "zzz", now),
+	}
+
+	SortByCreationTimestamp(gateways)
+
+	if gateways[0].GetNamespace() != "ns-a" {
+		t.Errorf("Expected ns-a/zzz first (namespace wins over name), got %s/%s",
+			gateways[0].GetNamespace(), gateways[0].GetName())
+	}
+}
+
+// Objects equal on timestamp, namespace and name keep their input order: the
+// sort must be stable, so that an unrelated element being added or removed
+// cannot permute the others.
+func TestSortByCreationTimestamp_IsStable(t *testing.T) {
+	now := metav1.Now()
+
+	first := newGatewayInNamespace("ns", "same", now)
+	second := newGatewayInNamespace("ns", "same", now)
+	third := newGatewayInNamespace("ns", "same", now)
+
+	gateways := []client.Object{first, second, third}
+
+	SortByCreationTimestamp(gateways)
+
+	if gateways[0] != client.Object(first) || gateways[1] != client.Object(second) || gateways[2] != client.Object(third) {
+		t.Error("Expected fully equal objects to keep their input order")
+	}
+}
+
 func TestGetHostnamesForRouteWithListener(t *testing.T) {
 	hostname := "test.example.com"
 	hostnameWildCard := "*.example.com"
