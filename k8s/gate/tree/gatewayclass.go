@@ -111,6 +111,16 @@ func (g *GatewayClass) GetName() string {
 	return ""
 }
 
+// GetNamespace satisfies utils.ObjectWithTimestamp. A GatewayClass is
+// cluster-scoped, so this is always empty; it is defined so that the sort
+// tie-break has a uniform key across resource kinds.
+func (g *GatewayClass) GetNamespace() string {
+	if g.K8sResource != nil {
+		return g.K8sResource.GetNamespace()
+	}
+	return ""
+}
+
 func (g *GatewayClass) checkParametersRef(controllerStore ControllerStore) {
 	if g == nil {
 		return

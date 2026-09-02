@@ -85,6 +85,16 @@ func (g *Gateway) GetName() string {
 	return ""
 }
 
+// GetNamespace returns the namespace of the Gateway Kubernetes resource.
+// If the K8sResource is nil (for example a DELETED Gateway), it returns an empty string.
+// Note that an empty namespace is legitimate here: the synthetic Ingress Gateway has one.
+func (g *Gateway) GetNamespace() string {
+	if g.K8sResource != nil {
+		return g.K8sResource.GetNamespace()
+	}
+	return ""
+}
+
 func (g *Gateway) GetK8sResource() *gatewayv1.Gateway {
 	if g.K8sResource != nil {
 		return g.K8sResource

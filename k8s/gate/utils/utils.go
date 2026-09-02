@@ -41,11 +41,24 @@ const syntheticRouteNamePrefix = "ing:"
 
 type ObjectWithTimestamp interface {
 	GetCreationTimestamp() metav1.Time
+	GetNamespace() string
 	GetName() string
 }
 
+// SortByCreationTimestamp orders objects oldest first, breaking ties on
+// namespace then name.
+//
+// The tie-break is not decoration: metav1.Time has a one-second granularity, so
+// equal timestamps are the norm as soon as several objects are applied in one go.
+// Comparing the name alone is not enough either, since names are only unique
+// within a namespace. Without the full key the order of equal elements is
+// unspecified, and any decision derived from it — such as which listener wins a
+// port — becomes irreproducible across runs.
+//
+// The sort is stable so that objects comparing equal on all three keep their
+// input order rather than being permuted.
 func SortByCreationTimestamp[T ObjectWithTimestamp](objects []T) {
-	slices.SortFunc(objects, func(a, b T) int {
+	slices.SortStableFunc(objects, func(a, b T) int {
 		// Handle nil cases - nil values sort before non-nil values
 		aIsNil := isNilInterface(a)
 		bIsNil := isNilInterface(b)
@@ -63,6 +76,9 @@ func SortByCreationTimestamp[T ObjectWithTimestamp](objects []T) {
 		aTime := a.GetCreationTimestamp()
 		bTime := b.GetCreationTimestamp()
 		if c := aTime.Time.Compare(bTime.Time); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.GetNamespace(), b.GetNamespace()); c != 0 {
 			return c
 		}
 		return cmp.Compare(a.GetName(), b.GetName())
