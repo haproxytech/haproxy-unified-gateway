@@ -470,7 +470,12 @@ func DeepCopyFrontend(original *models.Frontend) (*models.Frontend, error) {
 }
 
 func (b *HaproxyConfMgrImpl) bindParams(_, vListenerName string, vListener *tree.VirtualListener) models.BindParams {
-	params := models.BindParams{}
+	params := models.BindParams{
+		// The PROXY protocol header comes from the load balancer in front of
+		// HAProxy, which every listener bind sits behind whatever its protocol,
+		// so the option applies to all of them (see opt.AcceptProxy).
+		AcceptProxy: b.params.AcceptProxy,
+	}
 
 	// If no TLS
 	if vListener.ProtocolCategory == protocols.ProtocolCategoryInsecure || vListener.ProtocolCategory == protocols.ProtocolCategoryTLS {

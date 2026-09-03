@@ -90,5 +90,8 @@ func SetupGateConfig(hugConfig hugconfig.HUGConfig) gateconfig.GateConfigOptions
 	if hugConfig.DisableIPv6 {
 		opts = append(opts, opt.DisableIPv6())
 	}
+	if hugConfig.AcceptProxy {
+		opts = append(opts, opt.AcceptProxy())
+	}
 	return opts
 }
