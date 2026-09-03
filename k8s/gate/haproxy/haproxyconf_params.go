@@ -59,6 +59,10 @@ type HaproxyConfParams struct {
 	StoreCertificateOnDisk bool
 	// StoreMapsOnDisk is a flag that indicates to the gate library to store maps on disk
 	StoreMapsOnDisk bool
+	// AcceptProxy adds accept-proxy to the binds of the frontends generated from
+	// Gateway listeners: the client address is read from the PROXY protocol
+	// header sent by the load balancer in front of HAProxy.
+	AcceptProxy bool
 }
 
 type HaproxyDirs struct {
