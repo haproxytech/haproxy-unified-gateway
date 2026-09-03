@@ -1,0 +1,29 @@
+// Copyright 2025 HAProxy Technologies LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+package opt
+
+import "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/config"
+
+// AcceptProxy sets accept-proxy on the binds of every frontend generated from a
+// Gateway listener (HTTP, HTTPS and TLS passthrough alike). Use it when the load
+// balancer in front of HAProxy sends the PROXY protocol header, so that the
+// client address HAProxy sees, logs and evaluates is the real one rather than
+// the load balancer's. Every connection to those binds must then carry the
+// header: HAProxy rejects the ones that do not.
+func AcceptProxy() func(o *config.Configuration) error {
+	return func(o *config.Configuration) error {
+		o.HaproxyParams.AcceptProxy = true
+		return nil
+	}
+}
