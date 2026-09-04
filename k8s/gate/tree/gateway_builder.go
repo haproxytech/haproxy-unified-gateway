@@ -204,23 +204,23 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 		// whose Gateway is not accepted, and even when nothing can be served on it --
 		// an empty list says that, an absent one says nothing.
 		kept, rejectedRouteKinds := partitionRouteKinds(
-			listener.Protocol(), listener.AllowedRoutes(), gateSupportedRouteKindsByProtocol,
+			listener.Protocol(), listener.AllowedRoutes(), gateManagedRouteGroupKindsByProtocol,
 		)
 		listener.AllowedRouteKinds = kept
 
 		switch listener.Protocol() {
 		// This switch will be completed with all needed checks per protocol
 		case gatewayv1.HTTPProtocolType, gatewayv1.TLSProtocolType:
-			listener.checkRouteGroupKind(treeGw, rejectedRouteKinds, gateSupportedRouteKindsByProtocol)
-			listener.checkProtocol(gateSupportedRouteKindsByProtocol)
+			listener.checkRouteGroupKind(treeGw, rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
+			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
 			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
 		case gatewayv1.HTTPSProtocolType:
-			listener.checkRouteGroupKind(treeGw, rejectedRouteKinds, gateSupportedRouteKindsByProtocol)
+			listener.checkRouteGroupKind(treeGw, rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
 			listener.checkCertificateRefs(treeGw, b.GateTree.Secrets, b.referenceGrantManager)
-			listener.checkProtocol(gateSupportedRouteKindsByProtocol)
+			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
 			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
 		default:
-			listener.checkProtocol(gateSupportedRouteKindsByProtocol)
+			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
 			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
 		}
 		listener.checkPort(b.ControllerStore.PortBinder)

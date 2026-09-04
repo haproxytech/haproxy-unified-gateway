@@ -211,18 +211,18 @@ type RouteGroupKind struct {
 // test can inject a different one without mutating shared state.
 type managedRouteGroupKindsByProtocol map[gatewayv1.ProtocolType][]gatewayv1.RouteGroupKind
 
-var gateSupportedRouteKindsByProtocol = managedRouteGroupKindsByProtocol{
+var gateManagedRouteGroupKindsByProtocol = managedRouteGroupKindsByProtocol{
 	gatewayv1.HTTPProtocolType:  {objtypes.RouteKindHTTP},
 	gatewayv1.HTTPSProtocolType: {objtypes.RouteKindHTTP},
 	gatewayv1.TLSProtocolType:   {objtypes.RouteKindTLS},
 }
 
 // supports reports whether the protocol can carry any Route kind at all.
-func (t managedRouteGroupKindsByProtocol) supports(protocol gatewayv1.ProtocolType) bool {
+func (t managedRouteGroupKindsByProtocol) manages(protocol gatewayv1.ProtocolType) bool {
 	return len(t[protocol]) > 0
 }
 
-// sortedFor returns the kinds supported on a protocol, as a sorted *copy*.
+// sortedFor returns the kinds managed on a protocol, as a sorted *copy*.
 //
 // The copy is not defensive verbosity: the slices are shared with the package
 // variable, and slices.SortFunc sorts in place, so sorting the stored slice would
@@ -231,9 +231,9 @@ func (t managedRouteGroupKindsByProtocol) supports(protocol gatewayv1.ProtocolTy
 // Concentrating that in one place is what keeps the invariant from depending on
 // each caller remembering it.
 func (t managedRouteGroupKindsByProtocol) sortedFor(protocol gatewayv1.ProtocolType) []gatewayv1.RouteGroupKind {
-	supported := t[protocol]
-	sorted := make([]gatewayv1.RouteGroupKind, 0, len(supported))
-	sorted = append(sorted, supported...)
+	managed := t[protocol]
+	sorted := make([]gatewayv1.RouteGroupKind, 0, len(managed))
+	sorted = append(sorted, managed...)
 	slices.SortStableFunc(sorted, sortRouteKinds)
 	return sorted
 }
@@ -253,7 +253,7 @@ func (t managedRouteGroupKindsByProtocol) protocolNames() []string {
 // controller can serve on that protocol and those it cannot.
 //
 // A single pass produces both halves. They were computed twice before, by two
-// loops with inverted tests: one keeping the supported kinds for
+// loops with inverted tests: one keeping the managed kinds for
 // status.supportedKinds, the other looking for an unsupported one to build a
 // condition.
 //
@@ -276,10 +276,10 @@ func partitionRouteKinds(
 		return managedKinds.sortedFor(protocol), nil
 	}
 
-	supported := managedKinds[protocol]
+	managed := managedKinds[protocol]
 	kept = make([]gatewayv1.RouteGroupKind, 0, len(allowedRoutes.Kinds))
 	for _, allowedKind := range allowedRoutes.Kinds {
-		if isSupportedProtocolRouteKind(allowedKind, supported) {
+		if isManagedRouteGroupKind(allowedKind, managed) {
 			kept = append(kept, allowedKind)
 			continue
 		}
@@ -308,11 +308,11 @@ func sortRouteKinds(a, b gatewayv1.RouteGroupKind) int {
 	return cmp.Compare(string(a.Kind), string(b.Kind))
 }
 
-func isSupportedProtocolRouteKind(kind gatewayv1.RouteGroupKind, supportedRouteKinds []gatewayv1.RouteGroupKind) bool {
+func isManagedRouteGroupKind(kind gatewayv1.RouteGroupKind, managedKinds []gatewayv1.RouteGroupKind) bool {
 	if kind.Group != nil && *kind.Group != gatewayv1.GroupName {
 		return false
 	}
-	for _, k := range supportedRouteKinds {
+	for _, k := range managedKinds {
 		if k.Kind == kind.Kind {
 			return true
 		}
@@ -325,7 +325,7 @@ func isSupportedProtocolRouteKind(kind gatewayv1.RouteGroupKind, supportedRouteK
 // cannot be served on its protocol.
 //
 // It takes the rejected half of the partition rather than recomputing it: the
-// caller needs the supported half anyway, to record it as the listener's
+// caller needs the managed half anyway, to record it as the listener's
 // AllowedRouteKinds, and that must happen whatever the parent's state -- whereas
 // the condition below only makes sense for a valid Gateway.
 func (l *Listener) checkRouteGroupKind(treeGw *Gateway, rejected []gatewayv1.RouteGroupKind, managedKinds managedRouteGroupKindsByProtocol) {
@@ -358,7 +358,7 @@ func (l *Listener) checkRouteGroupKind(treeGw *Gateway, rejected []gatewayv1.Rou
 
 func (l *Listener) checkProtocol(managedKinds managedRouteGroupKindsByProtocol) {
 	// UnsupportedProtocol
-	if !l.checkSupportedProtocol(managedKinds) {
+	if !l.checkManagedProtocol(managedKinds) {
 		return
 	}
 
@@ -384,17 +384,20 @@ func (l *Listener) checkProtocol(managedKinds managedRouteGroupKindsByProtocol) 
 	}
 }
 
-// checkSupportedProtocol reports whether the listener protocol is supported. When
-// it is not, it records the UnsupportedProtocol condition on CheckProtocol and
-// returns false so the caller stops and keeps that invalid verdict.
-func (l *Listener) checkSupportedProtocol(managedKinds managedRouteGroupKindsByProtocol) bool {
-	if !managedKinds.supports(l.Protocol()) {
-		supportedProtocols := managedKinds.protocolNames()
+// checkManagedProtocol reports whether the listener protocol is one this controller
+// manages. When it is not, it records the condition on CheckProtocol and returns
+// false so the caller stops and keeps that invalid verdict.
+//
+// "Managed" is our term; the condition it produces uses the Gateway API's, whose
+// reason for this case is UnsupportedProtocol.
+func (l *Listener) checkManagedProtocol(managedKinds managedRouteGroupKindsByProtocol) bool {
+	if !managedKinds.manages(l.Protocol()) {
+		managedProtocols := managedKinds.protocolNames()
 
 		valErr := field.NotSupported(
 			field.NewPath("protocol"),
 			l.Protocol(),
-			supportedProtocols,
+			managedProtocols,
 		)
 		l.CheckProtocol = CheckResult{
 			Valid:      false,
