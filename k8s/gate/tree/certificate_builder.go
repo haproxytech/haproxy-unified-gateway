@@ -128,7 +128,7 @@ func (*CertificateBuilderImpl) runtimeUpdates() {
 // -----------
 // cert
 
-func (b *CertificateBuilderImpl) handleNewReferencedSecretsStorage(previousRefSecrets, newRefSecrets map[client.ObjectKey]map[client.ObjectKey]struct{}) {
+func (b *CertificateBuilderImpl) handleNewReferencedSecretsStorage(previousRefSecrets, newRefSecrets map[client.ObjectKey]map[listenerKey]struct{}) {
 	newlyReferenced := utils.SetDifference(newRefSecrets, previousRefSecrets)
 	// -----------
 	// Compute new CertificateData
@@ -154,7 +154,7 @@ func (b *CertificateBuilderImpl) handleNewReferencedSecretsStorage(previousRefSe
 	}
 }
 
-func (b *CertificateBuilderImpl) handleDeReferencedSecretsStorage(previousRefSecrets, newRefSecrets map[client.ObjectKey]map[client.ObjectKey]struct{}) {
+func (b *CertificateBuilderImpl) handleDeReferencedSecretsStorage(previousRefSecrets, newRefSecrets map[client.ObjectKey]map[listenerKey]struct{}) {
 	deReferenced := utils.SetDifference(previousRefSecrets, newRefSecrets)
 	for nsName := range deReferenced {
 		certPath := b.certStorage.CertPath(nsName)
@@ -164,7 +164,7 @@ func (b *CertificateBuilderImpl) handleDeReferencedSecretsStorage(previousRefSec
 	}
 }
 
-func (b *CertificateBuilderImpl) handleUpdatedSecretsStorage(previousRefSecrets, newRefSecrets map[client.ObjectKey]map[client.ObjectKey]struct{}) {
+func (b *CertificateBuilderImpl) handleUpdatedSecretsStorage(previousRefSecrets, newRefSecrets map[client.ObjectKey]map[listenerKey]struct{}) {
 	secretsIntersection := utils.SetIntersection(previousRefSecrets, newRefSecrets)
 	for secretKey := range secretsIntersection {
 		// Is secret updated ?
@@ -209,9 +209,9 @@ func (b *CertificateBuilderImpl) handleUpdatedSecretsStorage(previousRefSecrets,
 //		newRefSecrets =
 //	     map[client.ObjectKey{
 //		  Namespace: "example", Name: "offload"}]   ===> SecretKey
-//		      map[client.ObjectKey{Namespace: "example", Name: hug-gateway_https"}]struct{}{}  ====> Set of GatewayListenerKey referencing this Secret
+//		      map[listenerKey{GatewayKey: example/hug-gateway, ListenerName: https}]struct{}{}  ====> Set of listeners referencing this Secret
 //		}
-func (b *CertificateBuilderImpl) handleCrtList(newRefSecrets map[client.ObjectKey]map[client.ObjectKey]struct{}) {
+func (b *CertificateBuilderImpl) handleCrtList(newRefSecrets map[client.ObjectKey]map[listenerKey]struct{}) {
 	previousSecretsByGatewayListener := b.previousSecretsPerVirtualListener()
 	newSecretsByGatewayListener := b.secretsPerVirtualListener(newRefSecrets)
 
@@ -230,26 +230,22 @@ func (b *CertificateBuilderImpl) handleCrtList(newRefSecrets map[client.ObjectKe
 //		newRefSecrets =
 //	     map[client.ObjectKey{
 //		  Namespace: "example", Name: "offload"}]   ===> SecretKey
-//		      map[client.ObjectKey{Namespace: "example", Name: hug-gateway_https"}]struct{}{}  ====> Set of GatewayListenerKey referencing this Secret
+//		      map[listenerKey{GatewayKey: example/hug-gateway, ListenerName: https}]struct{}{}  ====> Set of listeners referencing this Secret
 //		}
 //
 // It returns a map[VirtualListenerName]map[SecretKey]struct{}
-func (b *CertificateBuilderImpl) secretsPerVirtualListener(mapSecret2Listeners map[client.ObjectKey]map[client.ObjectKey]struct{}) map[string]map[client.ObjectKey]struct{} {
+func (b *CertificateBuilderImpl) secretsPerVirtualListener(mapSecret2Listeners map[client.ObjectKey]map[listenerKey]struct{}) map[string]map[client.ObjectKey]struct{} {
 	secretsPerVirtualListener := make(map[string]map[client.ObjectKey]struct{})
 	for secretKey, listenerKeys := range mapSecret2Listeners {
-		for listenerKey := range listenerKeys {
-			listener := b.GetListenerForKey(listenerKey)
-			if listener == nil {
+		for key := range listenerKeys {
+			listener := b.listenerFor(key)
+			if listener == nil || listener.VirtualListenerName == "" {
 				continue
 			}
-			virtualListenerName := listener.VirtualListenerName
-			if virtualListenerName == "" {
-				continue
+			if _, ok := secretsPerVirtualListener[listener.VirtualListenerName]; !ok {
+				secretsPerVirtualListener[listener.VirtualListenerName] = make(map[client.ObjectKey]struct{})
 			}
-			if _, ok := secretsPerVirtualListener[virtualListenerName]; !ok {
-				secretsPerVirtualListener[virtualListenerName] = make(map[client.ObjectKey]struct{})
-			}
-			secretsPerVirtualListener[virtualListenerName][secretKey] = struct{}{}
+			secretsPerVirtualListener[listener.VirtualListenerName][secretKey] = struct{}{}
 		}
 	}
 	return secretsPerVirtualListener
@@ -257,11 +253,12 @@ func (b *CertificateBuilderImpl) secretsPerVirtualListener(mapSecret2Listeners m
 
 // previousSecretsPerVirtualListener rebuilds the previous virtual-listener→secret mapping
 // directly from GateTree.PreviousVirtualListeners instead of re-deriving it from the
-// previousReferencedSecrets index via GetListenerForKey.
+// previousReferencedSecrets index by walking the tree, the way secretsPerVirtualListener
+// does for the current cycle.
 //
 // The indirect path breaks when a gateway is deleted: gateway.reset() clears g.Listeners
-// before the certificate builder runs, so GetListenerForKey returns nil and the deleted
-// gateway's secrets are silently dropped from the previous mapping. That causes
+// before the certificate builder runs, so the tree no longer lists the listener and the
+// deleted gateway's secrets are silently dropped from the previous mapping. That causes
 // handleUpdatedCrtList to see no removed secrets and skip the crt-list update, leaving a
 // stale entry in the .list file that points to the already-deleted PEM.
 //

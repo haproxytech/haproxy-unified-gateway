@@ -125,28 +125,14 @@ func (b *ControllerStore) CheckGatewayClassExists(gwcName string) bool {
 	return ok
 }
 
-// GetListenerForKey returns the Listener for the given listenerKey, or nil if not found.
-// It parses the listenerKey to extract the Gateway and Listener name, then looks up
-// the listener in the GateTree.
-func (b *ControllerStore) GetListenerForKey(listenerKey types.NamespacedName) *Listener {
-	// Parse the listener key to get Gateway and Listener
-	gwKey, listenerName, err := ConvertListenerKeyToGatewayKeyAndListenerName(listenerKey)
-	if err != nil {
+// listenerFor resolves a listener key to the listener it denotes. Both lookups are
+// field reads, which is the point of the key being structured.
+func (b *ControllerStore) listenerFor(key listenerKey) *Listener {
+	treeGw := b.GateTree.Gateways[key.GatewayKey]
+	if treeGw == nil {
 		return nil
 	}
-
-	treeGw, ok := b.GateTree.Gateways[gwKey]
-	if !ok || treeGw == nil {
-		return nil
-	}
-
-	// Get the listener from the gateway
-	listener, ok := treeGw.Listeners[listenerName]
-	if !ok || listener == nil {
-		return nil
-	}
-
-	return listener
+	return treeGw.Listeners[string(key.ListenerName)]
 }
 
 // GetGatewayForListener returns the Gateway for the given Listener, or nil if not found.

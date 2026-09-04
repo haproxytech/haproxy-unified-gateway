@@ -588,7 +588,7 @@ func TestListenersPerPort(t *testing.T) {
 
 		conflictsOnPort80 := b.ControllerStore.mapPort2Listeners[80]
 		assert.Len(t, conflictsOnPort80, 1)
-		httpsKey := NewListenerKey(gw.K8sResource, gw.K8sResource.Spec.Listeners[1])
+		httpsKey := gatewayListenerKey(client.ObjectKeyFromObject(gw.K8sResource), gw.K8sResource.Spec.Listeners[1].Name)
 		lcc := conflictsOnPort80[httpsKey]
 		assert.True(t, lcc.hasConflict)
 		assert.Equal(t, string(gatewayv1.ListenerReasonProtocolConflict), lcc.reason)
@@ -615,7 +615,7 @@ func TestListenersPerPort(t *testing.T) {
 
 		conflictsOnPort80 := b.ControllerStore.mapPort2Listeners[80]
 		assert.Len(t, conflictsOnPort80, 1)
-		httpsKey := NewListenerKey(gw2.K8sResource, gw2.K8sResource.Spec.Listeners[0])
+		httpsKey := gatewayListenerKey(client.ObjectKeyFromObject(gw2.K8sResource), gw2.K8sResource.Spec.Listeners[0].Name)
 		lcc := conflictsOnPort80[httpsKey]
 		assert.True(t, lcc.hasConflict)
 		assert.Equal(t, string(gatewayv1.ListenerReasonProtocolConflict), lcc.reason)

@@ -41,7 +41,7 @@ type listenerConflictCondition struct {
 	hasConflict bool
 }
 
-type listenerConflict map[client.ObjectKey]listenerConflictCondition // map[listenerKey] for example "default/gw1_l1"
+type listenerConflict map[listenerKey]listenerConflictCondition
 
 type GatewayBuilderParams struct {
 	// storage.CertificateStorage
@@ -181,8 +181,10 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 	processedListeners := make(map[string]*Listener)
 
 	for _, listener := range treeGw.K8sResource.Spec.Listeners {
+		gwKey := client.ObjectKeyFromObject(treeGw.K8sResource)
 		processedListener := Listener{
-			Owner:              client.ObjectKeyFromObject(treeGw.K8sResource),
+			Owner:              gwKey,
+			ListenerKey:        gatewayListenerKey(gwKey, listener.Name),
 			K8sGatewayListener: &listener,
 			AttachedRoutes:     make(map[client.ObjectKey]struct{}),
 			Conditions:         make(generic.Conditions),
@@ -297,7 +299,7 @@ func gatewaysWithChangedConflictVerdict(
 			if existed && previousCondition == currentCondition {
 				continue
 			}
-			gwKeys[ConvertListenerKeyToGatewayKey(listenerKey)] = struct{}{}
+			gwKeys[listenerKey.GatewayKey] = struct{}{}
 		}
 	}
 
@@ -308,7 +310,7 @@ func gatewaysWithChangedConflictVerdict(
 			if _, stillPresent := currentConflicts[listenerKey]; stillPresent {
 				continue
 			}
-			gwKeys[ConvertListenerKeyToGatewayKey(listenerKey)] = struct{}{}
+			gwKeys[listenerKey.GatewayKey] = struct{}{}
 		}
 	}
 
@@ -326,11 +328,9 @@ func nbListenersWithAndWithoutConflict(mapPort2ListenerConflict map[gatewayv1.Po
 	nbListeners := nbListeners{}
 	for _, conflictMap := range mapPort2ListenerConflict {
 		for glk, v := range conflictMap {
-			// First rebuild the Gateway key from the listenerKey
-			mapgwk := ConvertListenerKeyToGatewayKey(glk)
 			gwk := client.ObjectKeyFromObject(treeGw.K8sResource)
 			// Not our Gateway, continue
-			if mapgwk != gwk {
+			if glk.GatewayKey != gwk {
 				continue
 			}
 

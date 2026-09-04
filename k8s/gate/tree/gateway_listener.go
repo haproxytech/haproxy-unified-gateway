@@ -69,6 +69,14 @@ type Listener struct {
 	AttachedRoutes AttachedRoutes
 	// Owner is the gateway that this listener is connected to
 	Owner client.ObjectKey
+	// ListenerKey identifies this listener. Computed once at construction, and read
+	// through Key.
+	//
+	// It has to be exported: DeepCopy round-trips the Listener through JSON, which
+	// silently drops unexported fields -- and a copy with a zero key produces a
+	// wrong origin prefix, so the map cleanup of the previous state would purge
+	// nothing.
+	ListenerKey listenerKey
 	// VirtualListenerName is the virtual listener name that this listener is attached to, identified by its port and protocol category
 	VirtualListenerName string
 	// Checks results
@@ -540,7 +548,7 @@ func (l *Listener) checkConflict(treeGw *Gateway, listenersPerPort map[gatewayv1
 	}
 
 	conflictingKeys := make([]string, 0)
-	lk := ListenerKeyFromListenerName(treeGw.K8sResource, l.Name())
+	lk := l.Key()
 	if _, ok := listenersOnPort[lk]; !ok {
 		// should not happen
 		return
@@ -559,11 +567,7 @@ func (l *Listener) checkConflict(treeGw *Gateway, listenersPerPort map[gatewayv1
 		if glk == lk {
 			continue
 		}
-		_, listenerName, err := ConvertListenerKeyToGatewayKeyAndListenerName(glk)
-		if err != nil {
-			listenerName = glk.Name
-		}
-		conflictingKeys = append(conflictingKeys, listenerName)
+		conflictingKeys = append(conflictingKeys, string(glk.ListenerName))
 	}
 	if len(conflictingKeys) > 0 {
 		slices.Sort(conflictingKeys)
@@ -688,68 +692,11 @@ func (l *Listener) resetChecks() {
 	l.CheckPort = CheckResult{}
 }
 
-// NewListenerKey returns the Listener owner key appending the listener name to it
-// For Gateway ns/gateway, if the Listener name is "https", will return
-// ns/gateway_https
-// = Listener Key
-//
-//	Listener Key = NamespaceName {
-//	  Namespace : <gateway_ns>
-//	  Name:     : <gateway-name>_<listener_name>
-//	}
-func NewListenerKey(gw *gatewayv1.Gateway, listener gatewayv1.Listener) client.ObjectKey {
-	return ListenerKeyFromListenerName(gw, listener.Name)
-}
-
-func ListenerKeyFromListenerName(gw *gatewayv1.Gateway, listenerName gatewayv1.SectionName) client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: gw.Namespace,
-		Name: fmt.Sprintf(
-			"%s_%s",
-			gw.Name,
-			listenerName,
-		),
-	}
-}
-
-func (l Listener) Key() client.ObjectKey {
-	return client.ObjectKey{
-		Namespace: l.Owner.Namespace,
-		Name: fmt.Sprintf(
-			"%s_%s",
-			l.Owner.Name,
-			l.Name(),
-		),
-	}
-}
-
-// ConvertListenerKeyToGatewayKey converts a listener key back to a gateway key.
-// It assumes the listener key is in the format "gateway-name_listener-name", built by the previous ListenerKey function.
-// For a listener key with namespace "ns" and name "my-gateway_https",
-// it returns a gateway key with namespace "ns" and name "my-gateway".
-func ConvertListenerKeyToGatewayKey(listenerKey client.ObjectKey) client.ObjectKey {
-	gatewayKey, _, err := ConvertListenerKeyToGatewayKeyAndListenerName(listenerKey)
-	if err != nil {
-		return listenerKey
-	}
-	return gatewayKey
-}
-
-// ConvertListenerKeyToGatewayKeyAndListenerName converts a listener key back to a gateway key and listener name.
-// It assumes the listener key is in the format "gateway-name_listener-name", built by the ListenerKey function.
-// For a listener key with namespace "ns" and name "my-gateway_https",
-// it returns a gateway key with namespace "ns" and name "my-gateway", the listener name "https", and no error.
-// If the format is invalid, it returns an error.
-func ConvertListenerKeyToGatewayKeyAndListenerName(listenerKey client.ObjectKey) (client.ObjectKey, string, error) {
-	parts := strings.Split(listenerKey.Name, "_")
-	if len(parts) != 2 {
-		return client.ObjectKey{}, "", fmt.Errorf("invalid listener key format: %s", listenerKey.Name)
-	}
-	gatewayKey := client.ObjectKey{
-		Namespace: listenerKey.Namespace,
-		Name:      parts[0],
-	}
-	return gatewayKey, parts[1], nil
+// Key returns the identity of this listener. It is stored rather than recomputed:
+// the conflict table is keyed by it, and a second code path rebuilding it would
+// only have to disagree once for a listener to silently get no verdict at all.
+func (l *Listener) Key() listenerKey {
+	return l.ListenerKey
 }
 
 func (l *Listener) addAttachedRoute(routeKey client.ObjectKey, controllerStore ControllerStore) {

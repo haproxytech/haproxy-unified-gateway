@@ -18,62 +18,69 @@ import (
 	"log/slog"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
-	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type ReferencedBy struct {
-	exctractGVK utilsk8s.ExtractGVK
+// loggableKey is what ReferencedBy accepts as an owner identity: comparable,
+// since it keys a map, and renderable, since the debug logs name the owner.
+//
+// Owners are not always Kubernetes objects. A Gateway listener, for instance, is
+// identified by a composite key: the flat client.ObjectKey it used to be encoded
+// into forced every reader to decode it back, which is exactly what this type
+// parameter removes.
+type loggableKey interface {
+	comparable
+	String() string
+}
+
+type ReferencedBy[OwnerKey loggableKey] struct {
 	// Owner: Gate Key -> GVK of Owner -> Owner Key
-	Owner map[client.ObjectKey]map[schema.GroupVersionKind]map[client.ObjectKey]struct{}
+	Owner map[client.ObjectKey]map[schema.GroupVersionKind]map[OwnerKey]struct{}
 	Name  string
 }
 
-func NewReferencedBy(name string, exctractGVK utilsk8s.ExtractGVK) ReferencedBy {
-	return ReferencedBy{
-		exctractGVK: exctractGVK,
-		Owner:       make(map[client.ObjectKey]map[schema.GroupVersionKind]map[client.ObjectKey]struct{}),
-		Name:        name,
+func NewReferencedBy[OwnerKey loggableKey](name string) ReferencedBy[OwnerKey] {
+	return ReferencedBy[OwnerKey]{
+		Owner: make(map[client.ObjectKey]map[schema.GroupVersionKind]map[OwnerKey]struct{}),
+		Name:  name,
 	}
 }
 
-func (r *ReferencedBy) AddReferencedBy(logger *slog.Logger, ownedKey client.ObjectKey, owner client.Object) {
-	ownerGVK := r.exctractGVK(owner)
-	ownerKey := client.ObjectKeyFromObject(owner)
-	r.AddReferencedByUsingKeys(logger, ownedKey, ownerKey, ownerGVK)
+// logAttrOwner renders the owner the way logging.LogAttrKeyGVK does, which cannot
+// be reused here: it takes a concrete client.ObjectKey.
+func logAttrOwner[OwnerKey loggableKey](ownerKey OwnerKey, ownerGVK schema.GroupVersionKind) slog.Attr {
+	return slog.Group(
+		"resource",
+		logging.LogAttrGVK(ownerGVK),
+		slog.String("objectKey", ownerKey.String()),
+	)
 }
 
-func (r *ReferencedBy) AddReferencedByUsingKeys(logger *slog.Logger, ownedKey, ownerKey client.ObjectKey, ownerGVK schema.GroupVersionKind) {
+func (r *ReferencedBy[OwnerKey]) AddReferencedByUsingKeys(logger *slog.Logger, ownedKey client.ObjectKey, ownerKey OwnerKey, ownerGVK schema.GroupVersionKind) {
 	logger.LogAttrs(
 		context.WithValue(context.Background(), logging.CallerAdditionalSkipKey, 2), slog.LevelDebug,
 		"AddReferencedBy",
 		slog.String("name", r.Name),
 		slog.String("ownedKey", ownedKey.String()),
-		logging.LogAttrKeyGVK(ownerKey, ownerGVK),
+		logAttrOwner(ownerKey, ownerGVK),
 	)
 	if _, ok := r.Owner[ownedKey]; !ok {
-		r.Owner[ownedKey] = make(map[schema.GroupVersionKind]map[client.ObjectKey]struct{})
+		r.Owner[ownedKey] = make(map[schema.GroupVersionKind]map[OwnerKey]struct{})
 	}
 	if _, ok := r.Owner[ownedKey][ownerGVK]; !ok {
-		r.Owner[ownedKey][ownerGVK] = make(map[client.ObjectKey]struct{})
+		r.Owner[ownedKey][ownerGVK] = make(map[OwnerKey]struct{})
 	}
 	r.Owner[ownedKey][ownerGVK][ownerKey] = struct{}{}
 }
 
-func (r *ReferencedBy) RemoveReferencedBy(logger *slog.Logger, ownedKey client.ObjectKey, owner client.Object) {
-	ownerGVK := r.exctractGVK(owner)
-	ownerKey := client.ObjectKeyFromObject(owner)
-	r.RemoveReferencedByUsingKeys(logger, ownedKey, ownerKey, ownerGVK)
-}
-
-func (r *ReferencedBy) RemoveReferencedByUsingKeys(logger *slog.Logger, ownedKey, ownerKey client.ObjectKey, ownerGVK schema.GroupVersionKind) {
+func (r *ReferencedBy[OwnerKey]) RemoveReferencedByUsingKeys(logger *slog.Logger, ownedKey client.ObjectKey, ownerKey OwnerKey, ownerGVK schema.GroupVersionKind) {
 	logger.LogAttrs(
 		context.WithValue(context.Background(), logging.CallerAdditionalSkipKey, 2), slog.LevelDebug,
 		"RemoveReferencedBy",
 		slog.String("name", r.Name),
 		slog.String("ownedKey", ownedKey.String()),
-		logging.LogAttrKeyGVK(ownerKey, ownerGVK),
+		logAttrOwner(ownerKey, ownerGVK),
 	)
 	if _, ok := r.Owner[ownedKey]; !ok {
 		return
@@ -90,14 +97,14 @@ func (r *ReferencedBy) RemoveReferencedByUsingKeys(logger *slog.Logger, ownedKey
 	}
 }
 
-func (r *ReferencedBy) ReferencedBy(owned client.Object, ownerGVK schema.GroupVersionKind) map[client.ObjectKey]struct{} {
+func (r *ReferencedBy[OwnerKey]) ReferencedBy(owned client.Object, ownerGVK schema.GroupVersionKind) map[OwnerKey]struct{} {
 	ownedKey := client.ObjectKeyFromObject(owned)
 	return r.ReferencedByUsingKeys(ownedKey, ownerGVK)
 }
 
-func (r *ReferencedBy) ReferencedByUsingKeys(ownedKey client.ObjectKey, ownerGVK schema.GroupVersionKind) map[client.ObjectKey]struct{} {
+func (r *ReferencedBy[OwnerKey]) ReferencedByUsingKeys(ownedKey client.ObjectKey, ownerGVK schema.GroupVersionKind) map[OwnerKey]struct{} {
 	if r.Owner[ownedKey] == nil {
-		return map[client.ObjectKey]struct{}{}
+		return map[OwnerKey]struct{}{}
 	}
 	return r.Owner[ownedKey][ownerGVK]
 }
@@ -105,8 +112,8 @@ func (r *ReferencedBy) ReferencedByUsingKeys(ownedKey client.ObjectKey, ownerGVK
 // AllReferenced returns all owned keys that are referenced by a given ownerGVK, along with the list of owner keys
 // For examples, return all secrets that are referenced by a Gateway, along with the owner Gateway keys
 // map[ownedKey] => map [ownerKey] => struct{}
-func (r *ReferencedBy) AllReferenced(ownerGVK schema.GroupVersionKind) map[client.ObjectKey]map[client.ObjectKey]struct{} {
-	referenced := make(map[client.ObjectKey]map[client.ObjectKey]struct{})
+func (r *ReferencedBy[OwnerKey]) AllReferenced(ownerGVK schema.GroupVersionKind) map[client.ObjectKey]map[OwnerKey]struct{} {
+	referenced := make(map[client.ObjectKey]map[OwnerKey]struct{})
 	for ownedKey, ownerByGVK := range r.Owner {
 		gwOwners := ownerByGVK[ownerGVK]
 		if len(gwOwners) != 0 {
@@ -116,13 +123,13 @@ func (r *ReferencedBy) AllReferenced(ownerGVK schema.GroupVersionKind) map[clien
 	return referenced
 }
 
-func (r ReferencedBy) DeepCopy() ReferencedBy {
+func (r ReferencedBy[OwnerKey]) DeepCopy() ReferencedBy[OwnerKey] {
 	// Deep copy of owner map
-	ownerCopy := make(map[client.ObjectKey]map[schema.GroupVersionKind]map[client.ObjectKey]struct{}, len(r.Owner))
+	ownerCopy := make(map[client.ObjectKey]map[schema.GroupVersionKind]map[OwnerKey]struct{}, len(r.Owner))
 	for k1, v1 := range r.Owner {
-		innerCopy := make(map[schema.GroupVersionKind]map[client.ObjectKey]struct{}, len(v1))
+		innerCopy := make(map[schema.GroupVersionKind]map[OwnerKey]struct{}, len(v1))
 		for k2, v2 := range v1 {
-			deepestCopy := make(map[client.ObjectKey]struct{}, len(v2))
+			deepestCopy := make(map[OwnerKey]struct{}, len(v2))
 			for k3 := range v2 {
 				deepestCopy[k3] = struct{}{}
 			}
@@ -131,14 +138,13 @@ func (r ReferencedBy) DeepCopy() ReferencedBy {
 		ownerCopy[k1] = innerCopy
 	}
 
-	return ReferencedBy{
-		exctractGVK: r.exctractGVK,
-		Owner:       ownerCopy,
-		Name:        r.Name,
+	return ReferencedBy[OwnerKey]{
+		Owner: ownerCopy,
+		Name:  r.Name,
 	}
 }
 
-func (r *ReferencedBy) CleanOwners() {
+func (r *ReferencedBy[OwnerKey]) CleanOwners() {
 	for k := range r.Owner {
 		delete(r.Owner, k)
 	}

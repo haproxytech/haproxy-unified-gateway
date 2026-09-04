@@ -65,7 +65,7 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 			}
 
 			// Get the listener from the gateway
-			listener := b.GetListenerForKey(listenerKey)
+			listener := b.listenerFor(listenerKey)
 			if listener == nil {
 				continue
 			}

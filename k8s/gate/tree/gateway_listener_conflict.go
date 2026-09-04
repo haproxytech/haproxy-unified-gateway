@@ -67,12 +67,12 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 	// Now we need to check for hostname conflicts, but only within the same Gateway.
 	for port, listeners := range portListeners {
 		if _, ok := b.ControllerStore.mapPort2Listeners[port]; !ok {
-			b.ControllerStore.mapPort2Listeners[port] = make(map[client.ObjectKey]listenerConflictCondition)
+			b.ControllerStore.mapPort2Listeners[port] = make(listenerConflict)
 		}
 
 		// Mark all listeners as non-conflicting initially.
 		for _, lr := range listeners {
-			lk := NewListenerKey(lr.gatewayRef, lr.listenerRef)
+			lk := gatewayListenerKey(client.ObjectKeyFromObject(lr.gatewayRef), lr.listenerRef.Name)
 			b.ControllerStore.mapPort2Listeners[port][lk] = listenerConflictCondition{
 				hasConflict: false,
 				reason:      "",
@@ -86,7 +86,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 		// Listeners from different Gateways with overlapping hostnames are allowed: they will
 		// be merged into the same VirtualListener.
 		for i := range listeners {
-			iKey := NewListenerKey(listeners[i].gatewayRef, listeners[i].listenerRef)
+			iKey := gatewayListenerKey(client.ObjectKeyFromObject(listeners[i].gatewayRef), listeners[i].listenerRef.Name)
 			// A listener already marked as conflicting cannot be a winner.
 			if b.ControllerStore.mapPort2Listeners[port][iKey].hasConflict {
 				continue
@@ -100,7 +100,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 					continue
 				}
 
-				jKey := NewListenerKey(listeners[j].gatewayRef, listeners[j].listenerRef)
+				jKey := gatewayListenerKey(client.ObjectKeyFromObject(listeners[j].gatewayRef), listeners[j].listenerRef.Name)
 				jHostname := utils.PointerDefaultValueIfNil(listeners[j].listenerRef.Hostname)
 
 				if hostnameConflicts(string(iHostname), string(jHostname)) {
@@ -151,7 +151,7 @@ func (b *GatewayBuilderImpl) listenersPerPort(sortedGws []*Gateway) map[gatewayv
 
 		for _, listener := range treeGw.K8sResource.Spec.Listeners {
 			// Compute the gatewaylistener key (reference to both Gateway and Listener)
-			lk := NewListenerKey(treeGw.K8sResource, listener)
+			lk := gatewayListenerKey(client.ObjectKeyFromObject(treeGw.K8sResource), listener.Name)
 
 			// Check if the protocol category (secure/insecure/...) for the port is different from the current listener's protocol.
 			_, ok := mapPort2ProtocolCategory[listener.Port]
@@ -169,7 +169,7 @@ func (b *GatewayBuilderImpl) listenersPerPort(sortedGws []*Gateway) map[gatewayv
 				// If the protocol category is different, it's a conflict
 				// This listener is conflicting
 				if _, ok := b.ControllerStore.mapPort2Listeners[listener.Port]; !ok {
-					b.ControllerStore.mapPort2Listeners[listener.Port] = make(map[client.ObjectKey]listenerConflictCondition)
+					b.ControllerStore.mapPort2Listeners[listener.Port] = make(listenerConflict)
 				}
 				lcc := listenerConflictCondition{
 					hasConflict: true,

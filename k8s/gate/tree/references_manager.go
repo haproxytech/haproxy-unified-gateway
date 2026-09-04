@@ -21,6 +21,7 @@ import (
 
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ReferenceManager struct {
@@ -62,7 +63,7 @@ func (rm *ReferenceManager) UpdateRefences() {
 				}
 				nsName := GetCertificateRefNamespacedName(certRef, gw)
 				ownerGVK := rm.ControllerStore.ExtractGVK(objtypes.ObjectTypeGateway)
-				rm.ReferencedObjects.ReferencedSecrets.AddReferencedByUsingKeys(rm.Logger, nsName, NewListenerKey(gw, listener), ownerGVK)
+				rm.ReferencedObjects.ReferencedSecrets.AddReferencedByUsingKeys(rm.Logger, nsName, gatewayListenerKey(client.ObjectKeyFromObject(gw), listener.Name), ownerGVK)
 			}
 		}
 	}

@@ -124,7 +124,7 @@ func NewEventHandlerImpl(
 
 	gateTree := tree.NewGateTree()
 	unmanagedGateTree := tree.NewGateTree()
-	referencedObjects := tree.NewReferencedObjects(gateTreeConfig.ExtractGVK)
+	referencedObjects := tree.NewReferencedObjects()
 
 	capsLogger := gateTreeConfig.BaseLogger.With(logging.LogAttrCategory(logging.LogCategoryGate))
 	controllerStore := tree.ControllerStore{

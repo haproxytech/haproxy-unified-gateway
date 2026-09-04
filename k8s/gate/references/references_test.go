@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type mockObject struct {
@@ -43,20 +42,6 @@ func (m *mockObject) GroupVersionKind() schema.GroupVersionKind {
 	return m.gvk
 }
 
-func mockExtractGVK(obj client.Object) schema.GroupVersionKind {
-	if mo, ok := obj.(*mockObject); ok {
-		return mo.gvk
-	}
-	// Fallback for actual types if needed, though mocks are preferred for isolation
-	switch obj.(type) {
-	case *gatewayv1.GatewayClass:
-		return schema.GroupVersionKind{Group: gatewayv1.GroupVersion.Group, Version: gatewayv1.GroupVersion.Version, Kind: "GatewayClass"}
-	case *gatewayv1.Gateway:
-		return schema.GroupVersionKind{Group: gatewayv1.GroupVersion.Group, Version: gatewayv1.GroupVersion.Version, Kind: "Gateway"}
-	}
-	return schema.GroupVersionKind{}
-}
-
 func TestReferencedBy_Add(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -75,7 +60,7 @@ func TestReferencedBy_Add(t *testing.T) {
 	ownerGWCKey2 := client.ObjectKeyFromObject(ownerGWC2)
 	ownerGWKey1 := client.ObjectKeyFromObject(ownerGW1)
 
-	rb := NewReferencedBy("name", mockExtractGVK)
+	rb := NewReferencedBy[client.ObjectKey]("name")
 
 	t.Run("initial state", func(t *testing.T) {
 		assert.Empty(t, rb.Owner)
@@ -84,7 +69,7 @@ func TestReferencedBy_Add(t *testing.T) {
 	})
 
 	t.Run("add first reference", func(t *testing.T) {
-		rb.AddReferencedBy(logger, owned1Key, ownerGWC1)
+		rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC1), ownerGWC1.gvk)
 		assert.Contains(t, rb.Owner, ownedKey1)
 		assert.Contains(t, rb.Owner[ownedKey1], gvkGatewayClass)
 		assert.Contains(t, rb.Owner[ownedKey1][gvkGatewayClass], ownerGWCKey1)
@@ -95,7 +80,7 @@ func TestReferencedBy_Add(t *testing.T) {
 	})
 
 	t.Run("add second reference of same GVK", func(t *testing.T) {
-		rb.AddReferencedBy(logger, owned1Key, ownerGWC2)
+		rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC2), ownerGWC2.gvk)
 		assert.Contains(t, rb.Owner[ownedKey1][gvkGatewayClass], ownerGWCKey2)
 
 		refs := rb.ReferencedBy(owned1, gvkGatewayClass)
@@ -105,7 +90,7 @@ func TestReferencedBy_Add(t *testing.T) {
 	})
 
 	t.Run("add reference of different GVK", func(t *testing.T) {
-		rb.AddReferencedBy(logger, owned1Key, ownerGW1)
+		rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGW1), ownerGW1.gvk)
 		assert.Contains(t, rb.Owner[ownedKey1], gvkGateway)
 		assert.Contains(t, rb.Owner[ownedKey1][gvkGateway], ownerGWKey1)
 
@@ -118,7 +103,7 @@ func TestReferencedBy_Add(t *testing.T) {
 	})
 
 	t.Run("add existing reference (idempotency)", func(t *testing.T) {
-		rb.AddReferencedBy(logger, owned1Key, ownerGWC1)
+		rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC1), ownerGWC1.gvk)
 		refs := rb.ReferencedBy(owned1, gvkGatewayClass)
 		assert.Len(t, refs, 2) // Should not add a duplicate
 	})
@@ -128,7 +113,7 @@ func TestReferencedBy_Add(t *testing.T) {
 		assert.Empty(t, rb.ReferencedBy(nonExistentOwned, gvkGatewayClass))
 
 		// Add a reference to re-populate
-		rb.AddReferencedBy(logger, owned1Key, ownerGWC1)
+		rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC1), ownerGWC1.gvk)
 		nonExistentGVK := schema.GroupVersionKind{Group: "foo", Version: "v1", Kind: "Bar"}
 		assert.Empty(t, rb.ReferencedBy(owned1, nonExistentGVK))
 	})
@@ -151,7 +136,7 @@ func TestReferencedBy_Remove(t *testing.T) {
 	ownerGWCKey1 := client.ObjectKeyFromObject(ownerGWC1)
 	ownerGWCKey2 := client.ObjectKeyFromObject(ownerGWC2)
 
-	rb := NewReferencedBy("name", mockExtractGVK)
+	rb := NewReferencedBy[client.ObjectKey]("name")
 
 	t.Run("initial state", func(t *testing.T) {
 		assert.Empty(t, rb.Owner)
@@ -159,12 +144,12 @@ func TestReferencedBy_Remove(t *testing.T) {
 		assert.Empty(t, refs)
 	})
 
-	rb.AddReferencedBy(logger, owned1Key, ownerGWC1)
-	rb.AddReferencedBy(logger, owned1Key, ownerGWC2)
-	rb.AddReferencedBy(logger, owned1Key, ownerGW1)
+	rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC1), ownerGWC1.gvk)
+	rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC2), ownerGWC2.gvk)
+	rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGW1), ownerGW1.gvk)
 
 	t.Run("remove reference", func(t *testing.T) {
-		rb.RemoveReferencedBy(logger, owned1Key, ownerGWC1)
+		rb.RemoveReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC1), ownerGWC1.gvk)
 		refs := rb.ReferencedBy(owned1, gvkGatewayClass)
 		assert.Len(t, refs, 1)
 		assert.NotContains(t, refs, ownerGWCKey1)
@@ -173,7 +158,7 @@ func TestReferencedBy_Remove(t *testing.T) {
 	})
 
 	t.Run("remove last reference for a GVK", func(t *testing.T) {
-		rb.RemoveReferencedBy(logger, owned1Key, ownerGWC2)
+		rb.RemoveReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC2), ownerGWC2.gvk)
 		refs := rb.ReferencedBy(owned1, gvkGatewayClass)
 		assert.Empty(t, refs)
 		// The map for gvkGatewayClass might or might not be deleted,
@@ -187,7 +172,7 @@ func TestReferencedBy_Remove(t *testing.T) {
 	})
 
 	t.Run("remove last reference for an owned object", func(t *testing.T) {
-		rb.RemoveReferencedBy(logger, owned1Key, ownerGW1)
+		rb.RemoveReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGW1), ownerGW1.gvk)
 		refs := rb.ReferencedBy(owned1, gvkGateway)
 		assert.Empty(t, refs)
 
@@ -200,7 +185,7 @@ func TestReferencedBy_Remove(t *testing.T) {
 
 	t.Run("remove non-existent reference", func(t *testing.T) {
 		nonExistentOwner := &mockObject{name: "does-not-exist", gvk: gvkGatewayClass}
-		rb.RemoveReferencedBy(logger, owned1Key, nonExistentOwner) // Should not panic
+		rb.RemoveReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(nonExistentOwner), nonExistentOwner.gvk) // Should not panic
 		// State should be unchanged from previous test
 		assert.Empty(t, rb.ReferencedBy(owned1, gvkGatewayClass))
 		assert.Empty(t, rb.ReferencedBy(owned1, gvkGateway))
@@ -209,7 +194,7 @@ func TestReferencedBy_Remove(t *testing.T) {
 	t.Run("remove from non-existent owned object", func(t *testing.T) {
 		nonExistentOwned := &mockObject{name: "owned-does-not-exist", gvk: gvkGatewayClass}
 		nonExistentOwnedKey := client.ObjectKeyFromObject(nonExistentOwned)
-		rb.RemoveReferencedBy(logger, nonExistentOwnedKey, ownerGWC1) // Should not panic
+		rb.RemoveReferencedByUsingKeys(logger, nonExistentOwnedKey, client.ObjectKeyFromObject(ownerGWC1), ownerGWC1.gvk) // Should not panic
 		assert.NotContains(t, rb.Owner, client.ObjectKeyFromObject(nonExistentOwned))
 	})
 
@@ -218,7 +203,7 @@ func TestReferencedBy_Remove(t *testing.T) {
 		assert.Empty(t, rb.ReferencedBy(nonExistentOwned, gvkGatewayClass))
 
 		// Add a reference to re-populate
-		rb.AddReferencedBy(logger, owned1Key, ownerGWC1)
+		rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC1), ownerGWC1.gvk)
 		nonExistentGVK := schema.GroupVersionKind{Group: "foo", Version: "v1", Kind: "Bar"}
 		assert.Empty(t, rb.ReferencedBy(owned1, nonExistentGVK))
 	})
@@ -243,12 +228,12 @@ func TestReferencedBy_ReferencedBy(t *testing.T) {
 	ownerGWKey1 := client.ObjectKeyFromObject(ownerGW1)
 	ownerGWKey2 := client.ObjectKeyFromObject(ownerGW2)
 
-	rb := NewReferencedBy("name", mockExtractGVK)
+	rb := NewReferencedBy[client.ObjectKey]("name")
 
 	// Add references
-	rb.AddReferencedBy(logger, owned1Key, ownerGWC1)
-	rb.AddReferencedBy(logger, owned1Key, ownerGW1)
-	rb.AddReferencedBy(logger, owned1Key, ownerGW2)
+	rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGWC1), ownerGWC1.gvk)
+	rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGW1), ownerGW1.gvk)
+	rb.AddReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGW2), ownerGW2.gvk)
 
 	t.Run("get references for existing owned object and GVK", func(t *testing.T) {
 		refs := rb.ReferencedBy(owned1, gvkGateway)
@@ -272,7 +257,7 @@ func TestReferencedBy_ReferencedBy(t *testing.T) {
 	})
 
 	t.Run("get references after removal", func(t *testing.T) {
-		rb.RemoveReferencedBy(logger, owned1Key, ownerGW1)
+		rb.RemoveReferencedByUsingKeys(logger, owned1Key, client.ObjectKeyFromObject(ownerGW1), ownerGW1.gvk)
 		refs := rb.ReferencedBy(owned1, gvkGateway)
 		assert.Len(t, refs, 1)
 		assert.NotContains(t, refs, ownerGWKey1)

@@ -24,7 +24,6 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/references"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
-	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -62,8 +61,8 @@ type GateTree struct {
 type ReferencedObjects struct {
 	//  ReferencedSecrets includes the GatewayClasses that are references by Gateways Listeners
 	// Owners are Listeners
-	ReferencedSecrets         references.ReferencedBy
-	PreviousReferencedSecrets references.ReferencedBy
+	ReferencedSecrets         references.ReferencedBy[listenerKey]
+	PreviousReferencedSecrets references.ReferencedBy[listenerKey]
 }
 
 type CheckResult struct {
@@ -116,10 +115,10 @@ type TreeResourcePointer[T TreeResource] interface {
 	TreeObject[T]
 }
 
-func NewReferencedObjects(extractGVK utilsk8s.ExtractGVK) *ReferencedObjects {
+func NewReferencedObjects() *ReferencedObjects {
 	return &ReferencedObjects{
-		ReferencedSecrets:         references.NewReferencedBy("secret", extractGVK),
-		PreviousReferencedSecrets: references.NewReferencedBy("secret", extractGVK),
+		ReferencedSecrets:         references.NewReferencedBy[listenerKey]("secret"),
+		PreviousReferencedSecrets: references.NewReferencedBy[listenerKey]("secret"),
 	}
 }
 

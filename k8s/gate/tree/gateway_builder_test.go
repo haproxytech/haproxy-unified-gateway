@@ -31,12 +31,12 @@ func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 
 	treeGw := mkGateway(gwName, gwNamespace)
 
-	// Helper to create ObjectKey
-	mkKey := func(gwName, listenerName string) client.ObjectKey {
-		return client.ObjectKey{
-			Namespace: gwNamespace,
-			Name:      gwName + "_" + listenerName,
-		}
+	// Helper to create a listener key
+	mkKey := func(gwName, listenerName string) listenerKey {
+		return gatewayListenerKey(
+			client.ObjectKey{Namespace: gwNamespace, Name: gwName},
+			gatewayv1.SectionName(listenerName),
+		)
 	}
 
 	tests := []struct {
@@ -110,12 +110,12 @@ func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 	gwNamespace := "default"
 
-	// Helper to create ObjectKey
-	mkKey := func(gwName, listenerName string) client.ObjectKey {
-		return client.ObjectKey{
-			Namespace: gwNamespace,
-			Name:      gwName + "_" + listenerName,
-		}
+	// Helper to create a listener key
+	mkKey := func(gwName, listenerName string) listenerKey {
+		return gatewayListenerKey(
+			client.ObjectKey{Namespace: gwNamespace, Name: gwName},
+			gatewayv1.SectionName(listenerName),
+		)
 	}
 
 	mkGwKey := func(gwName string) client.ObjectKey {
@@ -318,8 +318,8 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 		}
 	}
 
-	listenerKey := func(gwName string) client.ObjectKey {
-		return client.ObjectKey{Namespace: ns, Name: gwName + "_l1"}
+	keyOf := func(gwName string) listenerKey {
+		return gatewayListenerKey(client.ObjectKey{Namespace: ns, Name: gwName}, "l1")
 	}
 
 	newBuilder := func(previous map[gatewayv1.PortNumber]listenerConflict, gws ...*Gateway) *GatewayBuilderImpl {
@@ -347,14 +347,14 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 		// Previous cycle: gw2 was alone on port 80, hence no conflict.
 		previous := map[gatewayv1.PortNumber]listenerConflict{
 			80: {
-				listenerKey("gw2"): {protocol: protocols.ProtocolCategorySecure},
+				keyOf("gw2"): {protocol: protocols.ProtocolCategorySecure},
 			},
 		}
 
 		b := newBuilder(previous, gw1, gw2)
 		b.checkListenerConflicts()
 
-		assert.True(t, b.ControllerStore.mapPort2Listeners[80][listenerKey("gw2")].hasConflict,
+		assert.True(t, b.ControllerStore.mapPort2Listeners[80][keyOf("gw2")].hasConflict,
 			"gw2 listener must be detected as conflicting")
 		assert.Equal(t, store.StatusUpserted, gw2.TreeStatus.Status,
 			"gw2 must be re-upserted so the new verdict reaches its listeners")
@@ -369,8 +369,8 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 
 		previous := map[gatewayv1.PortNumber]listenerConflict{
 			80: {
-				listenerKey("gw1"): {protocol: protocols.ProtocolCategoryInsecure},
-				listenerKey("gw2"): {
+				keyOf("gw1"): {protocol: protocols.ProtocolCategoryInsecure},
+				keyOf("gw2"): {
 					hasConflict: true,
 					reason:      string(gatewayv1.ListenerReasonProtocolConflict),
 					protocol:    protocols.ProtocolCategorySecure,
