@@ -489,3 +489,51 @@ func TestListenerReferencesFollowTheOwner(t *testing.T) {
 		)
 	})
 }
+
+// A verdict the vocabulary cannot spell must not come back as an empty condition
+// set. That value already means something else here -- a check with nothing to
+// report -- and taking it that way has a consequence well past a missing line in a
+// status: with no Conflicted condition, BuildConditions leaves Accepted true and
+// Valid set, so UpdateListenerProgrammedCondition stops skipping the listener and
+// marks it Programmed, while the virtual-listener builder never put it in a
+// frontend. A listener reported as programmed that serves nothing.
+//
+// The reachable case is the one below: checkConflict is the only check whose
+// verdict is read from data rather than written as a constant.
+func TestUnspellableVerdictRejectsTheListenerInstead(t *testing.T) {
+	l, _ := newListenerForPortTest(80)
+
+	rendered := l.conditionsFor(conditions.ListenerConditionVerdict("NotAVerdict"), "ignored")
+
+	accepted, exists := rendered.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionAccepted))
+	assert.True(t, exists, "the fallback must still say something, or the listener reads as accepted")
+	assert.Equal(t, metav1.ConditionFalse, accepted.Status)
+	assert.Equal(t, string(gatewayv1.ListenerReasonInvalid), accepted.Reason)
+	assert.Contains(t, accepted.Message, "NotAVerdict",
+		"the gap belongs in the message, where someone reading the resource can see it")
+	assert.Contains(t, accepted.Message, l.Key().String(),
+		"and it has to name which listener could not be reported")
+}
+
+// The whole chain, from the one check that reads its verdict from the conflict
+// table: a table entry claiming a conflict with a verdict nobody can spell must
+// leave the listener rejected, not accepted.
+func TestConflictWithUnspellableVerdictLeavesListenerInvalid(t *testing.T) {
+	l, _ := newListenerForPortTest(80)
+	other := gatewayListenerKey(client.ObjectKey{Namespace: "ns", Name: "gw"}, "other")
+
+	l.checkConflict(map[gatewayv1.PortNumber]listenerConflict{
+		80: {
+			l.Key(): {hasConflict: true, verdict: "NotAVerdict"},
+			other:   {hasConflict: true, verdict: conditions.VerdictProtocolConflict},
+		},
+	})
+
+	assert.NotEmpty(t, l.CheckConflict.Conditions,
+		"an empty verdict here is what silently made the listener acceptable")
+
+	l.BuildConditions(&Gateway{K8sResource: &gatewayv1.Gateway{}})
+
+	assert.False(t, l.Valid, "a listener nothing serves must not be reported as programmable")
+	assert.False(t, l.Accepted)
+}
