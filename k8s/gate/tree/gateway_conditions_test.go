@@ -37,8 +37,8 @@ func newProtocolTestGateway(protocols ...gatewayv1.ProtocolType) *Gateway {
 	for i, protocol := range protocols {
 		valid := protocol == gatewayv1.HTTPProtocolType || protocol == gatewayv1.HTTPSProtocolType || protocol == gatewayv1.TLSProtocolType
 		gw.Listeners[string(rune('a'+i))] = &Listener{
-			K8sResource:   gatewayv1.Listener{},
-			CheckProtocol: CheckResult{Valid: valid},
+			K8sGatewayListener: &gatewayv1.Listener{},
+			CheckProtocol:      CheckResult{Valid: valid},
 		}
 	}
 	return gw

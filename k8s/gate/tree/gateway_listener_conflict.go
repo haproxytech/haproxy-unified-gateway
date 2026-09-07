@@ -16,6 +16,7 @@ package tree
 import (
 	"slices"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
@@ -75,7 +76,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 			lk := gatewayListenerKey(client.ObjectKeyFromObject(lr.gatewayRef), lr.listenerRef.Name)
 			b.ControllerStore.mapPort2Listeners[port][lk] = listenerConflictCondition{
 				hasConflict: false,
-				reason:      "",
+				verdict:     "",
 				protocol:    protocols.ProtocolCategories[lr.listenerRef.Protocol],
 			}
 		}
@@ -106,7 +107,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 				if hostnameConflicts(string(iHostname), string(jHostname)) {
 					b.ControllerStore.mapPort2Listeners[port][jKey] = listenerConflictCondition{
 						hasConflict: true,
-						reason:      string(gatewayv1.ListenerReasonHostnameConflict),
+						verdict:     conditions.VerdictHostnameConflict,
 						protocol:    protocols.ProtocolCategories[listeners[j].listenerRef.Protocol],
 					}
 				}
@@ -173,7 +174,7 @@ func (b *GatewayBuilderImpl) listenersPerPort(sortedGws []*Gateway) map[gatewayv
 				}
 				lcc := listenerConflictCondition{
 					hasConflict: true,
-					reason:      string(gatewayv1.ListenerReasonProtocolConflict),
+					verdict:     conditions.VerdictProtocolConflict,
 					protocol:    protocols.ProtocolCategories[listener.Protocol],
 				}
 				b.ControllerStore.mapPort2Listeners[listener.Port][lk] = lcc

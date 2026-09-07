@@ -37,6 +37,14 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// The kinds that can declare a listener. They name the "from" side of a
+// ReferenceGrant, so they are the API's spelling and not ours: a grant is matched
+// on this string.
+const (
+	kindGateway     gatewayv1.Kind = "Gateway"
+	kindListenerSet gatewayv1.Kind = "ListenerSet"
+)
+
 // Listener is a listener of the merged list of a Gateway: either one declared in
 // the Gateway's own spec, or one contributed by an attached ListenerSet.
 //
@@ -56,14 +64,6 @@ import (
 // must be treated as read-only, like everything else the tree holds: the store
 // owns the per-event deep copy the controller-runtime cache returns on Get, and
 // several tree nodes alias it.
-// The kinds that can declare a listener. They name the "from" side of a
-// ReferenceGrant, so they are the API's spelling and not ours: a grant is matched
-// on this string.
-const (
-	kindGateway     gatewayv1.Kind = "Gateway"
-	kindListenerSet gatewayv1.Kind = "ListenerSet"
-)
-
 type Listener struct {
 	// K8sGatewayListener is the source resource when the listener comes from the
 	// Gateway's own spec. Exactly one of K8sGatewayListener and
@@ -217,8 +217,12 @@ func (l *Listener) DeepCopy() *Listener {
 }
 
 // MatchesParentRefPort reports whether a parentRef port, when set, selects this listener.
+//
+// The port is read through the listener's own accessors, which know which resource
+// declared it: a contributed entry holds no spec listener of any Gateway, so a port read
+// straight off that field would decide nothing -- or panic.
 func (l *Listener) MatchesParentRefPort(port *gatewayv1.PortNumber) bool {
-	return port == nil || l.K8sResource.Port == *port
+	return port == nil || l.Port() == *port
 }
 
 type RouteGroupKind struct {
@@ -367,7 +371,7 @@ func (l *Listener) checkRouteGroupKind(rejected []gatewayv1.RouteGroupKind, mana
 		)
 		l.CheckRouteGroupKind = CheckResult{
 			Valid:      false,
-			Conditions: conditions.NewListenerResolvedRefInvalidRouteKinds(msg),
+			Conditions: l.conditionsFor(conditions.VerdictInvalidRouteKinds, msg),
 		}
 		return
 	}
@@ -378,7 +382,10 @@ func (l *Listener) checkRouteGroupKind(rejected []gatewayv1.RouteGroupKind, mana
 }
 
 func (l *Listener) checkProtocol(managedKinds managedRouteGroupKindsByProtocol) {
-	// UnsupportedProtocol
+	// UnsupportedProtocol, then UnsupportedValue: the protocol is served, but not in
+	// the TLS mode asked for. The API spells those two apart, and so does the
+	// Gateway vocabulary -- an entry, which has no word for the second, is handled
+	// where its vocabulary is picked.
 	if !l.checkManagedProtocol(managedKinds) {
 		return
 	}
@@ -395,7 +402,7 @@ func (l *Listener) checkProtocol(managedKinds managedRouteGroupKindsByProtocol) 
 		)
 		l.CheckProtocol = CheckResult{
 			Valid:      false,
-			Conditions: conditions.NewListenerAcceptedUnsupportedValue(valErr.Error()),
+			Conditions: l.conditionsFor(conditions.VerdictUnsupportedValue, valErr.Error()),
 		}
 		return
 	}
@@ -422,7 +429,7 @@ func (l *Listener) checkManagedProtocol(managedKinds managedRouteGroupKindsByPro
 		)
 		l.CheckProtocol = CheckResult{
 			Valid:      false,
-			Conditions: conditions.NewListenerAcceptedUnsupportedProtocol(valErr.Error()),
+			Conditions: l.conditionsFor(conditions.VerdictUnsupportedProtocol, valErr.Error()),
 		}
 		return false
 	}
@@ -438,7 +445,7 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			msg := fmt.Sprintf("listener %s has protocol HTTPS but no TLS section", l.Name())
 			l.CheckSecret = CheckResult{
 				Valid:      false,
-				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
 			}
 			return
 		}
@@ -459,7 +466,7 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			msg := "Listener CertificateRefs must be of Group/Kind Secret"
 			l.CheckSecret = CheckResult{
 				Valid:      false,
-				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
 			}
 			break
 		}
@@ -470,7 +477,7 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			msg := fmt.Sprintf("Secret %s/%s does not exist", nsName.Namespace, nsName.Name)
 			l.CheckSecret = CheckResult{
 				Valid:      false,
-				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
 			}
 			continue
 		}
@@ -482,7 +489,7 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			msg := fmt.Sprintf("Secret reference %s/%s is not granted for listener in %s", nsName.Namespace, nsName.Name, l.ownerDescription())
 			l.CheckSecret = CheckResult{
 				Valid:      false,
-				Conditions: conditions.NewListenerResolvedRefListenerRefNotPermitted(msg),
+				Conditions: l.conditionsFor(conditions.VerdictRefNotPermitted, msg),
 			}
 			continue
 		}
@@ -493,7 +500,7 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			msg := fmt.Sprintf("Secret %s/%s: certificate and key are identical", nsName.Namespace, nsName.Name)
 			l.CheckSecret = CheckResult{
 				Valid:      false,
-				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
 			}
 			continue
 		}
@@ -502,7 +509,7 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			msg := fmt.Sprintf("Secret %s/%s: certificate contains an invalid PEM", nsName.Namespace, nsName.Name)
 			l.CheckSecret = CheckResult{
 				Valid:      false,
-				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
 			}
 			continue
 		}
@@ -511,7 +518,7 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			msg := fmt.Sprintf("Secret %s/%s: key contains an invalid PEM", nsName.Namespace, nsName.Name)
 			l.CheckSecret = CheckResult{
 				Valid:      false,
-				Conditions: conditions.NewListenerResolvedRefInvalidCertificateRefs(msg),
+				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
 			}
 			continue
 		}
@@ -546,7 +553,7 @@ func (l *Listener) checkPort(portBinder caps.PortBinder) {
 	)
 	l.CheckPort = CheckResult{
 		Valid:      false,
-		Conditions: conditions.NewListenerAcceptedPortPermissionDenied(msg),
+		Conditions: l.conditionsFor(conditions.VerdictPortNotBindable, msg),
 	}
 }
 
@@ -587,7 +594,7 @@ func (l *Listener) checkConflict(listenersPerPort map[gatewayv1.PortNumber]liste
 	if len(conflictingKeys) > 0 {
 		slices.Sort(conflictingKeys)
 		msg := fmt.Sprintf("Conflicting listeners: %s", strings.Join(conflictingKeys, ", "))
-		cond := conditions.NewListenerConflicted(msg, listenersOnPort[lk].reason)
+		cond := l.conditionsFor(listenersOnPort[lk].verdict, msg)
 		l.CheckConflict = CheckResult{
 			Valid:      false,
 			Conditions: cond,
@@ -633,9 +640,9 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	_, exists := l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionAccepted))
 	if !exists {
 		// Accepted = OK
-		l.Conditions.MergeOverrideConditions(conditions.NewListenerAcceptedOK())
+		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictAccepted, ""))
 	} else {
-		l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedInvalid())
+		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictNotProgrammable, ""))
 		shouldProgramm = false
 		isAccepted = false
 	}
@@ -643,16 +650,16 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	_, exists = l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs))
 	if !exists {
 		// ResolvedRefs = OK
-		l.Conditions.MergeOverrideConditions(conditions.NewListenerResolvedRefOK())
+		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictRefsResolved, ""))
 	} else {
-		l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedInvalid())
+		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictNotProgrammable, ""))
 		shouldProgramm = false
 		// ResolvedRefs=False does NOT prevent route attachment per the Gateway API spec
 	}
 
 	_, exists = l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionConflicted))
 	if exists {
-		l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedInvalid())
+		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictNotProgrammable, ""))
 		shouldProgramm = false
 		isAccepted = false
 	}
@@ -690,7 +697,7 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 			}
 		}
 		if !existingProgrammed {
-			l.Conditions.MergeOverrideConditions(conditions.NewListenerProgrammedPending())
+			l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictProgrammingPending, ""))
 		}
 	}
 
@@ -712,6 +719,41 @@ func (l *Listener) resetChecks() {
 // only have to disagree once for a listener to silently get no verdict at all.
 func (l *Listener) Key() listenerKey {
 	return l.ListenerKey
+}
+
+// conditionsFor renders a verdict in the vocabulary of whatever declared this
+// listener. Every check goes through it, so it is also the single place where the
+// choice of vocabulary will be made once ListenerSets contribute entries.
+//
+// A verdict the vocabulary cannot spell is a programming error -- the tables are
+// total over the verdicts, which a test enforces -- and it must not be answered
+// with an empty condition set. That would be read as "this check has nothing to
+// report", and for a conflicting listener the consequence is not a missing line in
+// a status: no Conflicted condition means Accepted stays true and Valid stays set,
+// so the HAProxy feedback marks the listener Programmed while the virtual-listener
+// builder, which excludes it from the conflict table, never put it in a frontend.
+// A listener reported as programmed that serves nothing.
+//
+// So the fallback rejects the listener and carries the gap in its message, where a
+// user reading the resource can see it. It is deliberately not silent, and
+// deliberately not a panic: an internal inconsistency about how to word a status
+// is not a reason to stop serving traffic.
+func (l *Listener) conditionsFor(verdict conditions.ListenerConditionVerdict, msg string) generic.Conditions {
+	rendered, err := conditions.NewGatewayListenerConditions(verdict, msg)
+	if err == nil {
+		return rendered
+	}
+
+	rejected, fallbackErr := conditions.NewGatewayListenerConditions(
+		conditions.VerdictUnreportable,
+		fmt.Sprintf("listener %s cannot be reported: %s", l.Key(), err),
+	)
+	if fallbackErr != nil {
+		// Unreachable unless the table lost VerdictUnreportable too, in which case there
+		// is nothing left to report with.
+		return generic.Conditions{}
+	}
+	return rejected
 }
 
 // referenceGrantFrom is the "from" side of the ReferenceGrant question this

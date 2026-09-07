@@ -14,8 +14,12 @@
 package tree
 
 import (
+	"context"
+	"log/slog"
+
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -25,17 +29,41 @@ import (
 // The update is skipped for listeners whose current Programmed condition already
 // has a higher ObservedGeneration than observedGen (stale result guard).
 // Thread-safe: acquires the GateTree write lock.
-func (t *GateTree) UpdateListenerProgrammedCondition(gwKey types.NamespacedName, observedGen int64, applyErr error) {
+//
+// It takes a logger because it is the one condition writer with nowhere to put a
+// failure: it either writes the Programmed condition or leaves the previous one
+// alone, so a problem building that condition would otherwise leave no trace at
+// all.
+func (t *GateTree) UpdateListenerProgrammedCondition(logger *slog.Logger, gwKey types.NamespacedName, observedGen int64, applyErr error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	gw, ok := t.Gateways[gwKey]
 	if !ok {
+		// Legitimately silent, unlike the error below: the feedback arrives after the
+		// apply, and the Gateway may have been deleted in between. There is nothing
+		// left to report a Programmed condition on.
 		return
 	}
 
 	condType := generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
-	newCond := buildListenerProgrammedCondition(condType, observedGen, applyErr)
+	newCond, err := buildListenerProgrammedCondition(observedGen, applyErr)
+	if err != nil {
+		// Leaving the existing condition alone is still the safe answer -- it says
+		// Pending, the truth of an unconfirmed apply, where a zero-valued condition
+		// would publish the empty Reason the API server rejects. But this path
+		// deliberately writes nothing, so unlike the checks it has no status to carry
+		// the gap: a listener would sit on Pending for ever with no trace anywhere.
+		// The log is the only channel left, and this is a programming error -- the
+		// verdict reported here is a constant of the conditions package -- so it is
+		// worth an error level.
+		logger.LogAttrs(context.Background(), slog.LevelError,
+			"Cannot report the HAProxy apply result on a Gateway's listeners",
+			logging.LogAttrKey(gwKey),
+			logging.LogAttrError(err),
+		)
+		return
+	}
 
 	for _, listener := range gw.Listeners {
 		// If the Listener was not accepted, then it was not Programmed.
@@ -64,15 +92,9 @@ func (t *GateTree) RUnlockGateways() {
 	t.mu.RUnlock()
 }
 
-func buildListenerProgrammedCondition(condType generic.ConditionType, observedGen int64, applyErr error) generic.Condition {
+func buildListenerProgrammedCondition(observedGen int64, applyErr error) (generic.Condition, error) {
 	if applyErr == nil {
-		return generic.Condition{
-			Type:               condType,
-			Status:             metav1.ConditionTrue,
-			Reason:             string(gatewayv1.ListenerReasonProgrammed),
-			Message:            "Listener is programmed in Haproxy",
-			ObservedGeneration: observedGen,
-		}
+		return conditions.NewGatewayListenerProgrammedCondition("", observedGen, true)
 	}
 	msg := applyErr.Error()
 	// Current MaxLength of the Message field in a Condition is 32768 characters.
@@ -81,11 +103,5 @@ func buildListenerProgrammedCondition(condType generic.ConditionType, observedGe
 	if len(msg) > maxLen {
 		msg = msg[:maxLen]
 	}
-	return generic.Condition{
-		Type:               condType,
-		Status:             metav1.ConditionFalse,
-		Reason:             string(gatewayv1.ListenerReasonInvalid),
-		Message:            msg,
-		ObservedGeneration: observedGen,
-	}
+	return conditions.NewGatewayListenerProgrammedCondition(msg, observedGen, false)
 }

@@ -169,11 +169,14 @@ func tlsRouteReferencesNamespace(route *TLSRoute, namespaces map[string]struct{}
 // gatewayReferencesNamespace reports whether any listener of the Gateway holds
 // a cross-namespace certificate reference into one of the namespaces.
 func gatewayReferencesNamespace(gw *Gateway, namespaces map[string]struct{}) bool {
+	// The merged list on purpose: an entry a ListenerSet contributes holds a
+	// certificateRef of its own, and a grant that permits it must revoke it the same
+	// way. The accessor is what knows where that entry's TLS config lives.
 	for _, listener := range gw.Listeners {
-		if listener == nil || listener.K8sResource.TLS == nil {
+		if listener == nil || listener.TLS() == nil {
 			continue
 		}
-		for _, certRef := range listener.K8sResource.TLS.CertificateRefs {
+		for _, certRef := range listener.TLS().CertificateRefs {
 			if refNamespaceHits(certRef.Namespace, gw.K8sResource.Namespace, namespaces) {
 				return true
 			}

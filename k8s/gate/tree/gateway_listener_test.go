@@ -346,7 +346,7 @@ func TestCheckPort_SkipsWhenEarlierCheckFailed(t *testing.T) {
 	l, _ := newListenerForPortTest(80)
 	l.CheckProtocol = CheckResult{
 		Valid:      false,
-		Conditions: conditions.NewListenerAcceptedUnsupportedProtocol("unsupported"),
+		Conditions: l.conditionsFor(conditions.VerdictUnsupportedProtocol, "unsupported"),
 	}
 
 	l.checkPort(caps.Static(1024, false))

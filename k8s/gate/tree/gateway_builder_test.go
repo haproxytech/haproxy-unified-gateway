@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/stretchr/testify/assert"
@@ -127,12 +128,12 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 
 	protocolConflict := listenerConflictCondition{
 		hasConflict: true,
-		reason:      string(gatewayv1.ListenerReasonProtocolConflict),
+		verdict:     conditions.VerdictProtocolConflict,
 		protocol:    protocols.ProtocolCategorySecure,
 	}
 	hostnameConflict := listenerConflictCondition{
 		hasConflict: true,
-		reason:      string(gatewayv1.ListenerReasonHostnameConflict),
+		verdict:     conditions.VerdictHostnameConflict,
 		protocol:    protocols.ProtocolCategorySecure,
 	}
 	noConflict := listenerConflictCondition{
@@ -372,7 +373,7 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 				keyOf("gw1"): {protocol: protocols.ProtocolCategoryInsecure},
 				keyOf("gw2"): {
 					hasConflict: true,
-					reason:      string(gatewayv1.ListenerReasonProtocolConflict),
+					verdict:     conditions.VerdictProtocolConflict,
 					protocol:    protocols.ProtocolCategorySecure,
 				},
 			},

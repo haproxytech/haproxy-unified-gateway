@@ -14,6 +14,7 @@
 package tree
 
 import (
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
@@ -31,10 +32,11 @@ type GatewayBuilderImpl struct {
 }
 
 type listenerConflictCondition struct {
-	// reason might be:
-	// - gatewayv1.ListenerReasonProtocolConflict
-	// - gatewayv1.ListenerReasonHostnameConflict
-	reason   string
+	// verdict says which kind of conflict was found, in this controller's own
+	// vocabulary: the same table serves the listeners a Gateway declares and the
+	// entries a ListenerSet contributes, and the Gateway API spells the reason
+	// differently for each.
+	verdict  conditions.ListenerConditionVerdict
 	protocol protocols.ProtocolCategory
 	// hasConflict is true if the listener has a conflict
 	// false if the listener has no conflict

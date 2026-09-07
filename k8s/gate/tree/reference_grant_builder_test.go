@@ -101,7 +101,7 @@ func TestGrantChangeRechecksCrossNamespaceDependents(t *testing.T) {
 	cs.GateTree.Gateways[gatewayKey] = &Gateway{
 		K8sResource: &gatewayv1.Gateway{Namespace: "app", Name: "gw"},
 		Listeners: map[string]*Listener{
-			"https": {K8sResource: gatewayv1.Listener{
+			"https": {K8sGatewayListener: &gatewayv1.Listener{
 				Name: "https",
 				TLS: &gatewayv1.ListenerTLSConfig{
 					CertificateRefs: []gatewayv1.SecretObjectReference{{Name: "cert", Namespace: nsPtr("infra")}},

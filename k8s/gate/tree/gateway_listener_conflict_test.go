@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/stretchr/testify/assert"
@@ -85,8 +86,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_l2": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_l2": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategorySecure},
 			},
 		},
 		{
@@ -99,8 +100,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_http":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_https": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_http":  {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_https": {hasConflict: true, verdict: conditions.VerdictProtocolConflict, protocol: protocols.ProtocolCategorySecure},
 			},
 		},
 		{
@@ -113,8 +114,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_h1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_h2": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_h1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_h2": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -127,8 +128,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_h1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_h2": {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_h1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_h2": {hasConflict: true, verdict: conditions.VerdictHostnameConflict, protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -141,8 +142,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_wild":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_exact": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_wild":  {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_exact": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -155,8 +156,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_wild1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_wild2": {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_wild1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_wild2": {hasConflict: true, verdict: conditions.VerdictHostnameConflict, protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -169,8 +170,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_empty": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_same":  {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_empty": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_same":  {hasConflict: true, verdict: conditions.VerdictHostnameConflict, protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -183,8 +184,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_catch-all": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_specific":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_catch-all": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_specific":  {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -201,10 +202,10 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_catch-all":               {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
-				"default/gw1_wildcard":                {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
-				"default/gw1_specific":                {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
-				"default/gw1_specific-under-wildcard": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_catch-all":               {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_wildcard":                {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_specific":                {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_specific-under-wildcard": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategorySecure},
 			},
 		},
 		{
@@ -220,8 +221,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/old_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/new_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/old_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/new_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -237,8 +238,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/old_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/new_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/old_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/new_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -254,8 +255,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/old_http":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/new_https": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategorySecure},
+				"default/old_http":  {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/new_https": {hasConflict: true, verdict: conditions.VerdictProtocolConflict, protocol: protocols.ProtocolCategorySecure},
 			},
 		},
 		{
@@ -276,8 +277,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/ing_https": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategorySecure},
-				"default/real_http": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategoryInsecure},
+				"default/ing_https": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategorySecure},
+				"default/real_http": {hasConflict: true, verdict: conditions.VerdictProtocolConflict, protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -295,10 +296,10 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_http":      {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_http2":     {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw2_ok-foo":    {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw2_catch-all": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_http":      {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_http2":     {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw2_ok-foo":    {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw2_catch-all": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -322,16 +323,16 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_http-foo":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_https-bar": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategorySecure},
-				"default/gw1_tls-foo":   {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategoryTLS},
-				"default/gw1_http-wild": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_http-bar":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_tcp":       {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProcotolCategoryTCP},
-				"default/gw2_tls-foo":   {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryTLS},
-				"default/gw2_https-bar": {hasConflict: true, reason: string(gatewayv1.ListenerReasonProtocolConflict), protocol: protocols.ProtocolCategorySecure},
-				"default/gw2_tls-wild":  {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryTLS},
-				"default/gw2_tls-bar":   {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryTLS},
+				"default/gw1_http-foo":  {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_https-bar": {hasConflict: true, verdict: conditions.VerdictProtocolConflict, protocol: protocols.ProtocolCategorySecure},
+				"default/gw1_tls-foo":   {hasConflict: true, verdict: conditions.VerdictProtocolConflict, protocol: protocols.ProtocolCategoryTLS},
+				"default/gw1_http-wild": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_http-bar":  {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_tcp":       {hasConflict: true, verdict: conditions.VerdictProtocolConflict, protocol: protocols.ProcotolCategoryTCP},
+				"default/gw2_tls-foo":   {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryTLS},
+				"default/gw2_https-bar": {hasConflict: true, verdict: conditions.VerdictProtocolConflict, protocol: protocols.ProtocolCategorySecure},
+				"default/gw2_tls-wild":  {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryTLS},
+				"default/gw2_tls-bar":   {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryTLS},
 			},
 		},
 		{
@@ -349,9 +350,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 			},
 			expected: map[string]listenerConflictCondition{
 				// l1 and l2 on same gw1 conflict; gw2/l1 (different gateway) is merged
-				"default/gw1_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw1_l2": {hasConflict: true, reason: string(gatewayv1.ListenerReasonHostnameConflict), protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw2_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_l2": {hasConflict: true, verdict: conditions.VerdictHostnameConflict, protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw2_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -369,8 +370,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 				nil, // Another deleted gateway
 			},
 			expected: map[string]listenerConflictCondition{
-				"default/gw1_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw2_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw2_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 		{
@@ -388,8 +389,8 @@ func TestComputeListenerConflicts(t *testing.T) {
 			},
 			expected: map[string]listenerConflictCondition{
 				// Different gateways with identical listeners → merged, no conflict
-				"default/gw1_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
-				"default/gw2_l1": {hasConflict: false, reason: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw1_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
+				"default/gw2_l1": {hasConflict: false, verdict: "", protocol: protocols.ProtocolCategoryInsecure},
 			},
 		},
 	}
@@ -591,7 +592,7 @@ func TestListenersPerPort(t *testing.T) {
 		httpsKey := gatewayListenerKey(client.ObjectKeyFromObject(gw.K8sResource), gw.K8sResource.Spec.Listeners[1].Name)
 		lcc := conflictsOnPort80[httpsKey]
 		assert.True(t, lcc.hasConflict)
-		assert.Equal(t, string(gatewayv1.ListenerReasonProtocolConflict), lcc.reason)
+		assert.Equal(t, conditions.VerdictProtocolConflict, lcc.verdict)
 		assert.Equal(t, protocols.ProtocolCategorySecure, lcc.protocol)
 	})
 
@@ -618,7 +619,7 @@ func TestListenersPerPort(t *testing.T) {
 		httpsKey := gatewayListenerKey(client.ObjectKeyFromObject(gw2.K8sResource), gw2.K8sResource.Spec.Listeners[0].Name)
 		lcc := conflictsOnPort80[httpsKey]
 		assert.True(t, lcc.hasConflict)
-		assert.Equal(t, string(gatewayv1.ListenerReasonProtocolConflict), lcc.reason)
+		assert.Equal(t, conditions.VerdictProtocolConflict, lcc.verdict)
 	})
 
 	t.Run("nil and deleted gateways are skipped", func(t *testing.T) {
