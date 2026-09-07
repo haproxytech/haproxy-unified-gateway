@@ -208,20 +208,34 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 		)
 		listener.AllowedRouteKinds = kept
 
+		// Every check below states something about the listener's own
+		// configuration, which is only worth stating once the resource holding it
+		// is itself valid: on an invalid Gateway the cause is reported on the
+		// Gateway, and a listener verdict would only add noise -- or contradict it,
+		// by declaring a listener acceptable under a parent that will serve nothing.
+		//
+		// This is the single decision point for that: the checks used to carry the
+		// guard individually, which left checkProtocol and checkPort without one, so
+		// an invalid Gateway still published a protocol or port verdict on its
+		// listeners while the other three stayed silent.
+		if !treeGw.Valid {
+			continue
+		}
+
 		switch listener.Protocol() {
 		// This switch will be completed with all needed checks per protocol
 		case gatewayv1.HTTPProtocolType, gatewayv1.TLSProtocolType:
-			listener.checkRouteGroupKind(treeGw, rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
+			listener.checkRouteGroupKind(rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
 			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
-			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
+			listener.checkConflict(b.ControllerStore.mapPort2Listeners)
 		case gatewayv1.HTTPSProtocolType:
-			listener.checkRouteGroupKind(treeGw, rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
+			listener.checkRouteGroupKind(rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
 			listener.checkCertificateRefs(treeGw, b.GateTree.Secrets, b.referenceGrantManager)
 			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
-			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
+			listener.checkConflict(b.ControllerStore.mapPort2Listeners)
 		default:
 			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
-			listener.checkConflict(treeGw, b.ControllerStore.mapPort2Listeners)
+			listener.checkConflict(b.ControllerStore.mapPort2Listeners)
 		}
 		listener.checkPort(b.ControllerStore.PortBinder)
 	}

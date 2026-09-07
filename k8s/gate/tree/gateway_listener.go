@@ -327,13 +327,9 @@ func isManagedRouteGroupKind(kind gatewayv1.RouteGroupKind, managedKinds []gatew
 // It takes the rejected half of the partition rather than recomputing it: the
 // caller needs the managed half anyway, to record it as the listener's
 // AllowedRouteKinds, and that must happen whatever the parent's state -- whereas
-// the condition below only makes sense for a valid Gateway.
-func (l *Listener) checkRouteGroupKind(treeGw *Gateway, rejected []gatewayv1.RouteGroupKind, managedKinds managedRouteGroupKindsByProtocol) {
-	if !treeGw.Valid {
-		l.CheckRouteGroupKind = CheckResult{}
-		return
-	}
-
+// the condition below only makes sense for a valid parent, which is why the caller
+// does not reach this check otherwise.
+func (l *Listener) checkRouteGroupKind(rejected []gatewayv1.RouteGroupKind, managedKinds managedRouteGroupKindsByProtocol) {
 	if len(rejected) > 0 {
 		// Name every rejected kind, group-qualified. The group matters: a kind is
 		// most often rejected *because* of it, and rendering the kind alone
@@ -409,11 +405,6 @@ func (l *Listener) checkManagedProtocol(managedKinds managedRouteGroupKindsByPro
 }
 
 func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.NamespacedName]*Secret, referenceGrantManager *ReferenceGrantManager) {
-	if !treeGw.Valid {
-		l.CheckSecret = CheckResult{}
-		return
-	}
-
 	tls := l.TLS()
 
 	// Check if we miss the TLS section for HTTPS protocol
@@ -539,11 +530,7 @@ func (l *Listener) checkPort(portBinder caps.PortBinder) {
 // with the reason:
 // - gatewayv1.ListenerReasonProtocolConflict
 // - gatewayv1.ListenerReasonHostnameConflict
-func (l *Listener) checkConflict(treeGw *Gateway, listenersPerPort map[gatewayv1.PortNumber]listenerConflict) {
-	if !treeGw.Valid {
-		l.CheckConflict = CheckResult{}
-		return
-	}
+func (l *Listener) checkConflict(listenersPerPort map[gatewayv1.PortNumber]listenerConflict) {
 	listenersOnPort, ok := listenersPerPort[l.Port()]
 	if !ok {
 		// Should not happen
