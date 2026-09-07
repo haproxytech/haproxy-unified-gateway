@@ -22,6 +22,8 @@ import (
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -420,5 +422,70 @@ func TestListenerAccessors(t *testing.T) {
 
 		assert.Equal(t, gatewayv1.SectionName("from-listenerset"), l.Name())
 		assert.Equal(t, gatewayv1.PortNumber(443), l.Port())
+	})
+}
+
+// An object reference in a listener is relative to the resource that declares it.
+// GEP-1713: "ReferenceGrants applied to a Gateway are not inherited by child
+// ListenerSets", and the converse. So the "from" side of the grant question, and
+// the namespace an unqualified reference resolves in, both follow the owner --
+// never the Gateway the listener happens to be served on.
+func TestListenerReferencesFollowTheOwner(t *testing.T) {
+	gw := client.ObjectKey{Namespace: "infra", Name: "shared"}
+	ls := client.ObjectKey{Namespace: "tenant-a", Name: "app"}
+
+	gatewayListener := &Listener{
+		ListenerKey: gatewayListenerKey(gw, "https"),
+		OwnerKind:   kindGateway,
+	}
+	listenerSetListener := &Listener{
+		ListenerKey: listenerSetListenerKey(gw, ls, "https"),
+		OwnerKind:   kindListenerSet,
+	}
+
+	t.Run("grant from", func(t *testing.T) {
+		assert.Equal(t,
+			GrantFrom{Group: gatewayv1.GroupName, Kind: "Gateway", Namespace: "infra"},
+			gatewayListener.referenceGrantFrom(),
+		)
+
+		// The whole point: a grant written "from: Gateway in infra" must NOT answer
+		// for this listener, and one written "from: ListenerSet in tenant-a" must.
+		assert.Equal(t,
+			GrantFrom{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant-a"},
+			listenerSetListener.referenceGrantFrom(),
+		)
+	})
+
+	t.Run("owner description", func(t *testing.T) {
+		// Reproduces the wording the condition message has always had for a Gateway
+		// listener, so an existing message is unchanged: "... for listener in
+		// gateway infra/shared".
+		assert.Equal(t, "gateway infra/shared", gatewayListener.ownerDescription())
+		assert.Equal(t, "listenerset tenant-a/app", listenerSetListener.ownerDescription())
+	})
+
+	t.Run("unqualified certificateRef resolves in the owner namespace", func(t *testing.T) {
+		certRef := gatewayv1.SecretObjectReference{Name: "tls"}
+
+		assert.Equal(t,
+			types.NamespacedName{Namespace: "infra", Name: "tls"},
+			gatewayListener.certificateRefKey(certRef),
+		)
+		assert.Equal(t,
+			types.NamespacedName{Namespace: "tenant-a", Name: "tls"},
+			listenerSetListener.certificateRefKey(certRef),
+			"resolving in the Gateway's namespace would read a Secret the ListenerSet never named",
+		)
+	})
+
+	t.Run("a qualified certificateRef keeps its own namespace", func(t *testing.T) {
+		elsewhere := gatewayv1.Namespace("certs")
+		certRef := gatewayv1.SecretObjectReference{Name: "tls", Namespace: &elsewhere}
+
+		assert.Equal(t,
+			types.NamespacedName{Namespace: "certs", Name: "tls"},
+			listenerSetListener.certificateRefKey(certRef),
+		)
 	})
 }
