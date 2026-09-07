@@ -96,10 +96,16 @@ func (s *Secret) SetTreeStatus(treeStatus TreeUpdate[Secret]) {
 	s.TreeStatus = treeStatus
 }
 
-// GetCertificateRefNamespacedName returns the namespaced name for a certificate reference,
-// using the Gateway's namespace as a default if the reference does not specify one.
-func GetCertificateRefNamespacedName(certRef gatewayv1.SecretObjectReference, gw *gatewayv1.Gateway) types.NamespacedName {
-	namespace := gw.Namespace
+// GetCertificateRefNamespacedName returns the namespaced name a certificate
+// reference denotes, resolving it in ownerNamespace when the reference does not
+// name one.
+//
+// ownerNamespace is the namespace of the resource that declares the listener
+// holding the reference -- the Gateway for one of its own listeners, the
+// ListenerSet for an entry it contributes. It is not the Gateway's namespace in
+// general: a reference is relative to the document it appears in.
+func GetCertificateRefNamespacedName(certRef gatewayv1.SecretObjectReference, ownerNamespace string) types.NamespacedName {
+	namespace := ownerNamespace
 	if certRef.Namespace != nil {
 		namespace = string(*certRef.Namespace)
 	}

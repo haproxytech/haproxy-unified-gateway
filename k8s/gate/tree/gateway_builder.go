@@ -180,13 +180,17 @@ func (b *GatewayBuilderImpl) CleanTreeUpdates() {
 func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 	processedListeners := make(map[string]*Listener)
 
+	gwKey := client.ObjectKeyFromObject(treeGw.K8sResource)
 	for _, listener := range treeGw.K8sResource.Spec.Listeners {
-		gwKey := client.ObjectKeyFromObject(treeGw.K8sResource)
 		processedListener := Listener{
 			ListenerKey:        gatewayListenerKey(gwKey, listener.Name),
 			K8sGatewayListener: &listener,
-			AttachedRoutes:     make(map[client.ObjectKey]struct{}),
-			Conditions:         make(generic.Conditions),
+			// This Gateway declares the listener, so it is what its object
+			// references are resolved and granted against.
+			OwnerKind:                kindGateway,
+			ExemptFromReferenceGrant: treeGw.GatewayForIngress,
+			AttachedRoutes:           make(map[client.ObjectKey]struct{}),
+			Conditions:               make(generic.Conditions),
 		}
 		processedListeners[string(listener.Name)] = &processedListener
 	}
@@ -229,7 +233,7 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 			listener.checkConflict(b.ControllerStore.mapPort2Listeners)
 		case gatewayv1.HTTPSProtocolType:
 			listener.checkRouteGroupKind(rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
-			listener.checkCertificateRefs(treeGw, b.GateTree.Secrets, b.referenceGrantManager)
+			listener.checkCertificateRefs(b.GateTree.Secrets, b.referenceGrantManager)
 			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
 			listener.checkConflict(b.ControllerStore.mapPort2Listeners)
 		default:

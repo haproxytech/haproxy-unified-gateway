@@ -56,6 +56,14 @@ import (
 // must be treated as read-only, like everything else the tree holds: the store
 // owns the per-event deep copy the controller-runtime cache returns on Get, and
 // several tree nodes alias it.
+// The kinds that can declare a listener. They name the "from" side of a
+// ReferenceGrant, so they are the API's spelling and not ours: a grant is matched
+// on this string.
+const (
+	kindGateway     gatewayv1.Kind = "Gateway"
+	kindListenerSet gatewayv1.Kind = "ListenerSet"
+)
+
 type Listener struct {
 	// K8sGatewayListener is the source resource when the listener comes from the
 	// Gateway's own spec. Exactly one of K8sGatewayListener and
@@ -75,6 +83,15 @@ type Listener struct {
 	// wrong origin prefix, so the map cleanup of the previous state would purge
 	// nothing.
 	ListenerKey listenerKey
+	// OwnerKind is the kind of the resource that declares this listener, "Gateway"
+	// or "ListenerSet". Object references the listener holds are resolved and
+	// granted against that resource, so the kind is part of the question asked of a
+	// ReferenceGrant, not a label.
+	//
+	// Stamped at construction, together with the key it completes: nothing in a
+	// listener's own payload says which kind produced it once the source object is
+	// read through the accessors, and the checks must not have to ask.
+	OwnerKind gatewayv1.Kind
 	// VirtualListenerName is the virtual listener name that this listener is attached to, identified by its port and protocol category
 	VirtualListenerName string
 	// Checks results
@@ -90,6 +107,16 @@ type Listener struct {
 	// Accepted indicates the listener configuration is accepted (valid protocol, no conflicts).
 	// Routes can attach to an accepted listener even if refs are unresolved.
 	Accepted bool
+	// ExemptFromReferenceGrant lets this listener reach a Secret in another
+	// namespace without a ReferenceGrant permitting it. It is set for the listeners
+	// of the synthetic Gateway that serves Ingress resources, whose cross-namespace
+	// references were already authorised by the Ingress they come from -- there is
+	// no user-authored Gateway to write a grant against.
+	//
+	// Stamped rather than derived from the Gateway's synthetic name: that decision
+	// is made once, where the synthetic Gateway is recognised, and re-deriving it
+	// here would be a second place to keep in agreement with the first.
+	ExemptFromReferenceGrant bool
 }
 
 // FromListenerSet reports whether this listener was contributed by a ListenerSet
@@ -402,7 +429,7 @@ func (l *Listener) checkManagedProtocol(managedKinds managedRouteGroupKindsByPro
 	return true
 }
 
-func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.NamespacedName]*Secret, referenceGrantManager *ReferenceGrantManager) {
+func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Secret, referenceGrantManager *ReferenceGrantManager) {
 	tls := l.TLS()
 
 	// Check if we miss the TLS section for HTTPS protocol
@@ -437,7 +464,7 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 			break
 		}
 
-		nsName := GetCertificateRefNamespacedName(certRef, treeGw.K8sResource)
+		nsName := l.certificateRefKey(certRef)
 		treeSecret, ok := gateSecrets[nsName]
 		if !ok || treeSecret.TreeStatus.Status == store.StatusDeleted {
 			msg := fmt.Sprintf("Secret %s/%s does not exist", nsName.Namespace, nsName.Name)
@@ -447,12 +474,12 @@ func (l *Listener) checkCertificateRefs(treeGw *Gateway, gateSecrets map[types.N
 			}
 			continue
 		}
-		isAccessGranted := treeGw.GatewayForIngress || referenceGrantManager.IsAccessGranted(
-			GrantFrom{Group: gatewayv1.GroupName, Kind: "Gateway", Namespace: treeGw.K8sResource.GetNamespace()},
+		isAccessGranted := l.ExemptFromReferenceGrant || referenceGrantManager.IsAccessGranted(
+			l.referenceGrantFrom(),
 			GrantTo{Group: "", Kind: "Secret", Namespace: treeSecret.K8sResource.GetNamespace(), Name: treeSecret.K8sResource.GetName()},
 		)
 		if !isAccessGranted {
-			msg := fmt.Sprintf("Secret reference %s/%s is not granted for listener in gateway %s/%s", nsName.Namespace, nsName.Name, treeGw.K8sResource.GetNamespace(), treeGw.K8sResource.GetName())
+			msg := fmt.Sprintf("Secret reference %s/%s is not granted for listener in %s", nsName.Namespace, nsName.Name, l.ownerDescription())
 			l.CheckSecret = CheckResult{
 				Valid:      false,
 				Conditions: conditions.NewListenerResolvedRefListenerRefNotPermitted(msg),
@@ -685,6 +712,35 @@ func (l *Listener) resetChecks() {
 // only have to disagree once for a listener to silently get no verdict at all.
 func (l *Listener) Key() listenerKey {
 	return l.ListenerKey
+}
+
+// referenceGrantFrom is the "from" side of the ReferenceGrant question this
+// listener's object references ask: which document is reaching out.
+//
+// GEP-1713 is explicit that a ReferenceGrant naming a Gateway does not cover the
+// ListenerSets attached to it, nor the other way round. A hard-coded "Gateway"
+// here would therefore let a grant written for the Gateway authorise a
+// ListenerSet's reference into another namespace, and ignore the grant that was
+// correctly written for that ListenerSet.
+func (l *Listener) referenceGrantFrom() GrantFrom {
+	return GrantFrom{
+		Group:     gatewayv1.GroupName,
+		Kind:      string(l.OwnerKind),
+		Namespace: l.Key().OwnerKey().Namespace,
+	}
+}
+
+// ownerDescription names the resource that declares this listener, for the
+// condition messages that have to say where a rejected reference was written.
+func (l *Listener) ownerDescription() string {
+	return strings.ToLower(string(l.OwnerKind)) + " " + l.Key().OwnerKey().String()
+}
+
+// certificateRefKey resolves one of this listener's certificateRefs, in the
+// namespace of the resource that declares the listener when the reference names
+// none.
+func (l *Listener) certificateRefKey(certRef gatewayv1.SecretObjectReference) types.NamespacedName {
+	return GetCertificateRefNamespacedName(certRef, l.Key().OwnerKey().Namespace)
 }
 
 func (l *Listener) addAttachedRoute(routeKey client.ObjectKey, controllerStore ControllerStore) {

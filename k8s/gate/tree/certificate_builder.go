@@ -277,11 +277,7 @@ func (b *CertificateBuilderImpl) previousSecretsPerVirtualListener() map[string]
 				if !utilsk8s.IsSecretGroupKindSupported(certRef) {
 					continue
 				}
-				ns := listener.Key().OwnerKey().Namespace
-				if certRef.Namespace != nil {
-					ns = string(*certRef.Namespace)
-				}
-				secretKey := client.ObjectKey{Namespace: ns, Name: string(certRef.Name)}
+				secretKey := client.ObjectKey(listener.certificateRefKey(certRef))
 				if _, ok := result[vlName]; !ok {
 					result[vlName] = make(map[client.ObjectKey]struct{})
 				}

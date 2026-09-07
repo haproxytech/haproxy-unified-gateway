@@ -61,7 +61,7 @@ func (rm *ReferenceManager) UpdateRefences() {
 				if !utilsk8s.IsSecretGroupKindSupported(certRef) {
 					continue
 				}
-				nsName := GetCertificateRefNamespacedName(certRef, gw)
+				nsName := GetCertificateRefNamespacedName(certRef, gw.Namespace)
 				ownerGVK := rm.ControllerStore.ExtractGVK(objtypes.ObjectTypeGateway)
 				rm.ReferencedObjects.ReferencedSecrets.AddReferencedByUsingKeys(rm.Logger, nsName, gatewayListenerKey(client.ObjectKeyFromObject(gw), listener.Name), ownerGVK)
 			}
