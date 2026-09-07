@@ -74,7 +74,7 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 			if !listener.Valid {
 				b.Logger.LogAttrs(
 					context.Background(), slog.LevelInfo, "Skipping invalid listener",
-					logging.LogAttrKey(listener.Owner),
+					logging.LogAttrKey(listener.Key().OwnerKey()),
 					slog.String("listener", string(listener.Name())),
 				)
 				continue
@@ -86,7 +86,7 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 			if gateway == nil || !gateway.Valid {
 				b.Logger.LogAttrs(
 					context.Background(), slog.LevelInfo, "Skipping invalid listener as invalid Gateway",
-					logging.LogAttrKey(listener.Owner),
+					logging.LogAttrKey(listener.Key().GatewayKey),
 					slog.String("listener", string(listener.Name())),
 				)
 				continue

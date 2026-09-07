@@ -183,7 +183,6 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 	for _, listener := range treeGw.K8sResource.Spec.Listeners {
 		gwKey := client.ObjectKeyFromObject(treeGw.K8sResource)
 		processedListener := Listener{
-			Owner:              gwKey,
 			ListenerKey:        gatewayListenerKey(gwKey, listener.Name),
 			K8sGatewayListener: &listener,
 			AttachedRoutes:     make(map[client.ObjectKey]struct{}),

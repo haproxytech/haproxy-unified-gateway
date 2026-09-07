@@ -127,7 +127,6 @@ func TestListenerKeyDistinguishesHomonyms(t *testing.T) {
 func TestListenerDeepCopyPreservesKey(t *testing.T) {
 	gw := client.ObjectKey{Namespace: "ns", Name: "gw"}
 	listener := &Listener{
-		Owner:       gw,
 		ListenerKey: gatewayListenerKey(gw, "https"),
 	}
 

@@ -84,7 +84,7 @@ func (b *HaproxyConfMgrImpl) upsertFrontends(vListenerName string, vListener *tr
 			b.logger.LogAttrs(
 				context.Background(), slog.LevelDebug, "Reprogramming frontend due to unknown programmed condition on listener",
 				logging.LogAttrFrontendName(newFe.Name),
-				logging.LogAttrKey(l.Owner),
+				logging.LogAttrKey(l.Key().OwnerKey()),
 			)
 			break
 		}
@@ -113,7 +113,7 @@ func (b *HaproxyConfMgrImpl) clearListenerMaps(vlName string, vListener *tree.Vi
 	for _, l := range vListener.Listeners {
 		listenerKeyName := l.Key().String()
 		resourceOrigin := maps.ResourceOrigin{
-			Namespace: l.Owner.Namespace,
+			Namespace: l.Key().OwnerKey().Namespace,
 			Name:      listenerKeyName,
 		}
 		listenerExactMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
@@ -134,12 +134,12 @@ func (b *HaproxyConfMgrImpl) clearListenerMaps(vlName string, vListener *tree.Vi
 // For every listener whose hostname is set and is not a wildcard, one entry is added to the exact-match map:
 //
 //	key:   hostname
-//	value: listener name built as per NewListenerKey(gw, listener).Name  →  "<gateway-name>_<listener-name>"
+//	value: the listener's encoded key (see listenerKey.String)
 //
 // For every listener whose hostname is a wildcard (e.g. "*.example.com"), one entry is added to the wildcard-match map:
 //
 //	key:   hostname with the leading "*" stripped (e.g. ".example.com"), for use with map_end
-//	value: listener name built as per NewListenerKey(gw, listener).Name  →  "<gateway-name>_<listener-name>"
+//	value: the listener's encoded key (see listenerKey.String)
 func (b *HaproxyConfMgrImpl) fillListenerMaps(vListenerName string, vListener *tree.VirtualListener) {
 	frontendName := b.getFrontendName(vListenerName)
 	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile(frontendName)
@@ -154,10 +154,9 @@ func (b *HaproxyConfMgrImpl) fillListenerMaps(vListenerName string, vListener *t
 		if hostnameStr == "" {
 			hostnameStr = "*."
 		}
-		// Equivalent to NewListenerKey(gw, listener).Name
 		listenerKeyName := l.Key().String()
 		resourceOrigin := maps.ResourceOrigin{
-			Namespace: l.Owner.Namespace,
+			Namespace: l.Key().OwnerKey().Namespace,
 			Name:      listenerKeyName,
 		}
 		if isDomainWildcard(hostnameStr) {

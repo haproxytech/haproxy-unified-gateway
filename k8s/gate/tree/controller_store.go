@@ -135,17 +135,17 @@ func (b *ControllerStore) listenerFor(key listenerKey) *Listener {
 	return treeGw.Listeners[string(key.ListenerName)]
 }
 
-// GetGatewayForListener returns the Gateway for the given Listener, or nil if not found.
-// It uses the Listener's Owner field to look up the gateway in the GateTree.
+// GetGatewayForListener returns the Gateway this listener is served on, or nil if
+// the tree does not hold it.
+//
+// The Gateway comes from the listener's key, which carries it whatever declared
+// the listener. It is deliberately not the listener's owner: a listener
+// contributed by a ListenerSet belongs to that ListenerSet and is served on the
+// Gateway it attaches to, and the two are different objects.
 func (b *ControllerStore) GetGatewayForListener(listener *Listener) *Gateway {
 	if listener == nil {
 		return nil
 	}
 
-	treeGw, ok := b.GateTree.Gateways[listener.Owner]
-	if !ok || treeGw == nil {
-		return nil
-	}
-
-	return treeGw
+	return b.GateTree.Gateways[listener.Key().GatewayKey]
 }
