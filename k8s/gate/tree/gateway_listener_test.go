@@ -21,6 +21,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -517,3 +518,32 @@ func TestUnspellableVerdictRejectsTheListenerInstead(t *testing.T) {
 
 // The whole chain, from the one check that reads its verdict from the conflict
 // table: a table entry claiming a conflict with a verdict nobody can spell must
+// The kinds set closes that chain by construction: checkConflict can no longer
+// hand conditionsFor a verdict outside the two constants, because it derives the
+// verdict from the kinds rather than reading one out of the table. What is left is
+// the next mistake -- adding a conflict kind and forgetting to extend the
+// derivation -- and that is what this pins: an unknown kind makes the entry
+// conflicting with no verdict to name it, and the listener must still come out
+// rejected rather than accepted-and-programmed.
+func TestUnknownConflictKindLeavesListenerRejected(t *testing.T) {
+	l, _ := newListenerForPortTest(80)
+	other := gatewayListenerKey(client.ObjectKey{Namespace: "ns", Name: "gw"}, "other")
+	const kindNobodyDerives conflictKinds = 1 << 7
+
+	require.Empty(t, kindNobodyDerives.verdict(), "the premise: this kind has no verdict")
+
+	l.checkConflict(map[gatewayv1.PortNumber]listenersOnPort{
+		80: {
+			l.Key(): {conflicts: kindNobodyDerives},
+			other:   {conflicts: conflictOnProtocol},
+		},
+	})
+
+	assert.NotEmpty(t, l.CheckConflict.Conditions,
+		"an entry with no verdict is what silently made the listener acceptable")
+
+	l.BuildConditions(&Gateway{K8sResource: &gatewayv1.Gateway{}})
+
+	assert.False(t, l.Valid, "a listener nothing serves must not be reported as programmable")
+	assert.False(t, l.Accepted)
+}
