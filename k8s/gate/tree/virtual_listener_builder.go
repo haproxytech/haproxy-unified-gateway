@@ -54,13 +54,13 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 		// Collect all non-conflicting listeners for this port
 		for listenerKey, conflictCondition := range listenerConflicts {
 			// Skip listeners that have conflicts
-			if conflictCondition.hasConflict {
+			if conflictCondition.conflicts.any() {
 				continue
 			}
 
 			// Get the protocol category (should be the same for all non-conflicting listeners on this port)
 			if virtualListener == nil {
-				protocolCategory = conflictCondition.protocol
+				protocolCategory = conflictCondition.protocolCategory
 				virtualListener = NewVirtualListener(protocolCategory, port)
 			}
 

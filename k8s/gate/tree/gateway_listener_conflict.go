@@ -16,7 +16,6 @@ package tree
 import (
 	"slices"
 
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
@@ -68,16 +67,14 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 	// Now we need to check for hostname conflicts, but only within the same Gateway.
 	for port, listeners := range portListeners {
 		if _, ok := b.ControllerStore.mapPort2Listeners[port]; !ok {
-			b.ControllerStore.mapPort2Listeners[port] = make(listenerConflict)
+			b.ControllerStore.mapPort2Listeners[port] = make(listenersOnPort)
 		}
 
 		// Mark all listeners as non-conflicting initially.
 		for _, lr := range listeners {
 			lk := gatewayListenerKey(client.ObjectKeyFromObject(lr.gatewayRef), lr.listenerRef.Name)
-			b.ControllerStore.mapPort2Listeners[port][lk] = listenerConflictCondition{
-				hasConflict: false,
-				verdict:     "",
-				protocol:    protocols.ProtocolCategories[lr.listenerRef.Protocol],
+			b.ControllerStore.mapPort2Listeners[port][lk] = listenerOnPort{
+				protocolCategory: protocols.ProtocolCategories[lr.listenerRef.Protocol],
 			}
 		}
 
@@ -89,7 +86,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 		for i := range listeners {
 			iKey := gatewayListenerKey(client.ObjectKeyFromObject(listeners[i].gatewayRef), listeners[i].listenerRef.Name)
 			// A listener already marked as conflicting cannot be a winner.
-			if b.ControllerStore.mapPort2Listeners[port][iKey].hasConflict {
+			if b.ControllerStore.mapPort2Listeners[port][iKey].conflicts.any() {
 				continue
 			}
 			iHostname := utils.PointerDefaultValueIfNil(listeners[i].listenerRef.Hostname)
@@ -105,10 +102,9 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 				jHostname := utils.PointerDefaultValueIfNil(listeners[j].listenerRef.Hostname)
 
 				if hostnameConflicts(string(iHostname), string(jHostname)) {
-					b.ControllerStore.mapPort2Listeners[port][jKey] = listenerConflictCondition{
-						hasConflict: true,
-						verdict:     conditions.VerdictHostnameConflict,
-						protocol:    protocols.ProtocolCategories[listeners[j].listenerRef.Protocol],
+					b.ControllerStore.mapPort2Listeners[port][jKey] = listenerOnPort{
+						protocolCategory: protocols.ProtocolCategories[listeners[j].listenerRef.Protocol],
+						conflicts:        conflictOnHostname,
 					}
 				}
 			}
@@ -170,14 +166,12 @@ func (b *GatewayBuilderImpl) listenersPerPort(sortedGws []*Gateway) map[gatewayv
 				// If the protocol category is different, it's a conflict
 				// This listener is conflicting
 				if _, ok := b.ControllerStore.mapPort2Listeners[listener.Port]; !ok {
-					b.ControllerStore.mapPort2Listeners[listener.Port] = make(listenerConflict)
+					b.ControllerStore.mapPort2Listeners[listener.Port] = make(listenersOnPort)
 				}
-				lcc := listenerConflictCondition{
-					hasConflict: true,
-					verdict:     conditions.VerdictProtocolConflict,
-					protocol:    protocols.ProtocolCategories[listener.Protocol],
+				b.ControllerStore.mapPort2Listeners[listener.Port][lk] = listenerOnPort{
+					protocolCategory: protocols.ProtocolCategories[listener.Protocol],
+					conflicts:        conflictOnProtocol,
 				}
-				b.ControllerStore.mapPort2Listeners[listener.Port][lk] = lcc
 				continue
 			}
 			// Same protocol category, check for overlap

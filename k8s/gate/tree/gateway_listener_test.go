@@ -517,23 +517,3 @@ func TestUnspellableVerdictRejectsTheListenerInstead(t *testing.T) {
 
 // The whole chain, from the one check that reads its verdict from the conflict
 // table: a table entry claiming a conflict with a verdict nobody can spell must
-// leave the listener rejected, not accepted.
-func TestConflictWithUnspellableVerdictLeavesListenerInvalid(t *testing.T) {
-	l, _ := newListenerForPortTest(80)
-	other := gatewayListenerKey(client.ObjectKey{Namespace: "ns", Name: "gw"}, "other")
-
-	l.checkConflict(map[gatewayv1.PortNumber]listenerConflict{
-		80: {
-			l.Key(): {hasConflict: true, verdict: "NotAVerdict"},
-			other:   {hasConflict: true, verdict: conditions.VerdictProtocolConflict},
-		},
-	})
-
-	assert.NotEmpty(t, l.CheckConflict.Conditions,
-		"an empty verdict here is what silently made the listener acceptable")
-
-	l.BuildConditions(&Gateway{K8sResource: &gatewayv1.Gateway{}})
-
-	assert.False(t, l.Valid, "a listener nothing serves must not be reported as programmable")
-	assert.False(t, l.Accepted)
-}

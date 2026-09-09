@@ -562,7 +562,7 @@ func (l *Listener) checkPort(portBinder caps.PortBinder) {
 // with the reason:
 // - gatewayv1.ListenerReasonProtocolConflict
 // - gatewayv1.ListenerReasonHostnameConflict
-func (l *Listener) checkConflict(listenersPerPort map[gatewayv1.PortNumber]listenerConflict) {
+func (l *Listener) checkConflict(listenersPerPort map[gatewayv1.PortNumber]listenersOnPort) {
 	listenersOnPort, ok := listenersPerPort[l.Port()]
 	if !ok {
 		// Should not happen
@@ -577,7 +577,7 @@ func (l *Listener) checkConflict(listenersPerPort map[gatewayv1.PortNumber]liste
 	}
 
 	// 1- No conflict for this listener, it's the winnier
-	if !listenersOnPort[lk].hasConflict {
+	if !listenersOnPort[lk].conflicts.any() {
 		// If there is no conflict for this listener
 		l.CheckConflict = CheckResult{}
 		return
@@ -594,7 +594,7 @@ func (l *Listener) checkConflict(listenersPerPort map[gatewayv1.PortNumber]liste
 	if len(conflictingKeys) > 0 {
 		slices.Sort(conflictingKeys)
 		msg := fmt.Sprintf("Conflicting listeners: %s", strings.Join(conflictingKeys, ", "))
-		cond := l.conditionsFor(listenersOnPort[lk].verdict, msg)
+		cond := l.conditionsFor(listenersOnPort[lk].conflicts.verdict(), msg)
 		l.CheckConflict = CheckResult{
 			Valid:      false,
 			Conditions: cond,

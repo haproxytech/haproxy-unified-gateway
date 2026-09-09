@@ -46,8 +46,8 @@ type ControllerStore struct {
 	PortBinder caps.PortBinder
 	// mapPort2Listeners is a map for each port:
 	// that contains for each listener if it has a conflict or not
-	previousMapPort2Listeners map[gatewayv1.PortNumber]listenerConflict
-	mapPort2Listeners         map[gatewayv1.PortNumber]listenerConflict
+	previousMapPort2Listeners map[gatewayv1.PortNumber]listenersOnPort
+	mapPort2Listeners         map[gatewayv1.PortNumber]listenersOnPort
 	// from config
 	ControllerName string
 	// IngressClass is the value of --ingress.class used to select managed Ingresses.
