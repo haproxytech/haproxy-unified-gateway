@@ -14,7 +14,6 @@
 package tree
 
 import (
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
@@ -55,22 +54,18 @@ func (k conflictKinds) any() bool { return k != 0 }
 
 func (k conflictKinds) has(kind conflictKinds) bool { return k&kind != 0 }
 
-// verdict is the conflict this controller reports for the kinds accumulated, in
-// its own vocabulary: the same detection serves the listeners a Gateway declares
-// and the entries a ListenerSet contributes, and the Gateway API spells the reason
-// differently for each.
-//
-// A protocol conflict wins over a hostname one when both are present. It is the
-// coarser of the two -- it condemns the port for that listener whatever hostname
-// it asks for -- so it is the one worth telling the user about first.
-func (k conflictKinds) verdict() conditions.ListenerConditionVerdict {
-	switch {
-	case k.has(conflictOnProtocol):
-		return conditions.VerdictProtocolConflict
-	case k.has(conflictOnHostname):
-		return conditions.VerdictHostnameConflict
+// names lists the kinds in the set, for the condition message. The order is fixed
+// rather than derived from the bits, so a message is stable across cycles and
+// therefore assertable.
+func (k conflictKinds) names() []string {
+	names := make([]string, 0, 2)
+	if k.has(conflictOnProtocol) {
+		names = append(names, "protocol")
 	}
-	return ""
+	if k.has(conflictOnHostname) {
+		names = append(names, "hostname")
+	}
+	return names
 }
 
 // conflictsByListener is every listener bound to one port and the conflicts it is

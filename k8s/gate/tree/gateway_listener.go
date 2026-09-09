@@ -593,9 +593,15 @@ func (l *Listener) checkConflict(conflictsByPort map[gatewayv1.PortNumber]confli
 	if len(peerNames) > 0 {
 		slices.Sort(peerNames)
 		msg := fmt.Sprintf("Conflicting listeners: %s", strings.Join(peerNames, ", "))
+		// Only when there is more than one kind, so no existing message changes. The
+		// reason can name a single kind; it has no word for two on a Gateway listener,
+		// and says "several" without saying which on an entry.
+		if kinds := conflicts.names(); len(kinds) > 1 {
+			msg += fmt.Sprintf(" (conflicts on %s)", strings.Join(kinds, " and "))
+		}
 		l.CheckConflict = CheckResult{
 			Valid:      false,
-			Conditions: l.conditionsFor(conflicts.verdict(), msg),
+			Conditions: l.conditionsFor(l.conflictVerdict(conflicts), msg),
 		}
 	}
 }
@@ -700,6 +706,34 @@ func (l *Listener) resetChecks() {
 // only have to disagree once for a listener to silently get no verdict at all.
 func (l *Listener) Key() listenerKey {
 	return l.ListenerKey
+}
+
+// conflictVerdict is the conflict this listener reports for the kinds it is in.
+//
+// It lives here, and not on conflictKinds, because the answer to "in both" depends
+// on the vocabulary and the set of kinds does not know it. The Gateway API gives a
+// ListenerSet entry the reason ListenerConflict for exactly that case, and gives a
+// Gateway's own listeners no word for it -- for Conflicted it declares only
+// HostnameConflict and ProtocolConflict.
+//
+// So a Gateway listener in both reports the protocol conflict, the coarser of the
+// two: it condemns the port for that listener whatever hostname it asks for. That
+// choice hides the other conflict rather than ranking it, which is why the message
+// names every kind whenever there is more than one -- otherwise a user would fix
+// the protocol and discover a hostname conflict nothing had mentioned.
+func (l *Listener) conflictVerdict(conflicts conflictKinds) conditions.ListenerConditionVerdict {
+	switch {
+	case conflicts.has(conflictOnProtocol) && conflicts.has(conflictOnHostname):
+		if l.FromListenerSet() {
+			return conditions.VerdictSeveralConflicts
+		}
+		return conditions.VerdictProtocolConflict
+	case conflicts.has(conflictOnProtocol):
+		return conditions.VerdictProtocolConflict
+	case conflicts.has(conflictOnHostname):
+		return conditions.VerdictHostnameConflict
+	}
+	return ""
 }
 
 // conditionsFor renders a verdict in the vocabulary of whatever declared this

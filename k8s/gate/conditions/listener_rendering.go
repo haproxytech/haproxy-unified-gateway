@@ -38,7 +38,9 @@ type listenerConditionSpelling[ConditionType ~string, ConditionReason ~string] s
 // Gateway API requires both, so the rule lives here once instead of in each
 // vocabulary.
 func (v ListenerConditionVerdict) isConflict() bool {
-	return v == VerdictHostnameConflict || v == VerdictProtocolConflict
+	return v == VerdictHostnameConflict ||
+		v == VerdictProtocolConflict ||
+		v == VerdictSeveralConflicts
 }
 
 // conditionsForVerdict is how one vocabulary reports one verdict: the conditions a
@@ -156,6 +158,30 @@ var gatewayListenerConditionSpellings = map[ListenerConditionVerdict]listenerCon
 	},
 }
 
+// gatewayListenerVerdictsWithoutSpelling are the verdicts the vocabulary of a
+// Gateway's own listeners has no reason for. Declaring the gap is what lets the
+// exhaustiveness test tell a deliberate absence from a forgotten entry, which it
+// otherwise could not: both look like a missing key.
+//
+// Nothing may derive one of these for a Gateway listener. Asking the table for it
+// is an error, so the fallback would reject the listener under VerdictUnreportable
+// -- a listener conflicting on two counts reported as unreportable. The derivation
+// is therefore where the vocabulary is known, on the Listener itself, and it never
+// produces a verdict its own vocabulary cannot spell.
+var gatewayListenerVerdictsWithoutSpelling = map[ListenerConditionVerdict]struct{}{
+	// The API gives entries ListenerConflict for a listener in several conflicts and
+	// gives a Gateway's listeners no equivalent: for Conflicted it declares only
+	// HostnameConflict and ProtocolConflict. A Gateway listener in both therefore
+	// reports the coarser of the two, and its message names the rest.
+	VerdictSeveralConflicts: {},
+}
+
+// listenerEntryVerdictsWithoutSpelling is the same declaration for the entry
+// vocabulary, empty so far: every verdict this controller concludes has an entry
+// reason. TooManyListeners will be the first the other way round -- a verdict only
+// an entry can carry.
+var listenerEntryVerdictsWithoutSpelling = map[ListenerConditionVerdict]struct{}{}
+
 // listenerEntryConditionSpellings spells the verdicts in the vocabulary of the entries a
 // ListenerSet contributes, for its status.listeners[].conditions. Same values as
 // the Gateway table for every verdict so far, and separate types so that a future
@@ -204,6 +230,10 @@ var listenerEntryConditionSpellings = map[ListenerConditionVerdict]listenerCondi
 	VerdictProtocolConflict: {
 		ConditionType:   gatewayv1.ListenerEntryConditionConflicted,
 		ConditionReason: gatewayv1.ListenerEntryReasonProtocolConflict,
+	},
+	VerdictSeveralConflicts: {
+		ConditionType:   gatewayv1.ListenerEntryConditionConflicted,
+		ConditionReason: gatewayv1.ListenerEntryReasonListenerConflict,
 	},
 	VerdictProgrammed: {
 		ConditionType:   gatewayv1.ListenerEntryConditionProgrammed,

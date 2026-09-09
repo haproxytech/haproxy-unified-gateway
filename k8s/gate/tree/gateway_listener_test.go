@@ -544,7 +544,7 @@ func TestUnknownConflictKindLeavesListenerRejected(t *testing.T) {
 	other := gatewayListenerKey(client.ObjectKey{Namespace: "ns", Name: "gw"}, "other")
 	const kindNobodyDerives conflictKinds = 1 << 7
 
-	require.Empty(t, kindNobodyDerives.verdict(), "the premise: this kind has no verdict")
+	require.Empty(t, l.conflictVerdict(kindNobodyDerives), "the premise: this kind has no verdict")
 
 	l.checkConflict(map[gatewayv1.PortNumber]conflictsByListener{
 		80: {

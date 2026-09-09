@@ -27,25 +27,12 @@ import (
 // table renders nothing at all, which would publish no condition where the API
 // expects one -- a silent gap, visible only in a resource's status.
 //
-// Nothing here declares a verdict inapplicable to one of the vocabularies. The
-// asymmetries the Gateway API does have -- ListenerConflict and TooManyListeners
-// only for entries, NoConflicts and NoValidCACertificate only for a Gateway's
-// listeners -- concern situations this controller does not detect yet, so no
-// verdict names them. The exemption list arrives with the first verdict that needs
-// one; until then totality is the stronger claim.
+// An absence has to be *declared*, which is the whole point of the two
+// "…WithoutSpelling" maps: a forgotten entry and a deliberate gap look identical to
+// a map lookup, and only one of them is acceptable.
 func TestEveryVerdictHasBothSpellings(t *testing.T) {
 	for _, verdict := range listenerConditionVerdicts {
 		t.Run(string(verdict), func(t *testing.T) {
-			gatewaySpelling, ok := gatewayListenerConditionSpellings[verdict]
-			assert.True(t, ok, "no spelling for a Gateway's own listener")
-			assert.NotEmpty(t, gatewaySpelling.ConditionType)
-			assert.NotEmpty(t, gatewaySpelling.ConditionReason)
-
-			entrySpelling, ok := listenerEntryConditionSpellings[verdict]
-			assert.True(t, ok, "no spelling for a ListenerSet entry")
-			assert.NotEmpty(t, entrySpelling.ConditionType)
-			assert.NotEmpty(t, entrySpelling.ConditionReason)
-
 			// The condition being asserted or denied is a property of the situation,
 			// so a verdict must not be reported as True on one resource and False on
 			// the other. An absent status would also read as an empty string, which
@@ -54,12 +41,33 @@ func TestEveryVerdictHasBothSpellings(t *testing.T) {
 			assert.True(t, ok, "no condition status")
 			assert.NotEmpty(t, status)
 
+			gatewaySpelling, spelledForGateway := gatewayListenerConditionSpellings[verdict]
+			_, absentForGateway := gatewayListenerVerdictsWithoutSpelling[verdict]
+			assert.NotEqual(t, spelledForGateway, absentForGateway,
+				"a verdict is either spelled for a Gateway's own listener or declared absent, never both or neither")
+
+			entrySpelling, spelledForEntry := listenerEntryConditionSpellings[verdict]
+			_, absentForEntry := listenerEntryVerdictsWithoutSpelling[verdict]
+			assert.NotEqual(t, spelledForEntry, absentForEntry,
+				"a verdict is either spelled for a ListenerSet entry or declared absent, never both or neither")
+
+			if spelledForGateway {
+				assert.NotEmpty(t, gatewaySpelling.ConditionType)
+				assert.NotEmpty(t, gatewaySpelling.ConditionReason)
+			}
+			if spelledForEntry {
+				assert.NotEmpty(t, entrySpelling.ConditionType)
+				assert.NotEmpty(t, entrySpelling.ConditionReason)
+			}
+
 			// The two vocabularies must at least agree on which condition they hang
 			// the verdict from: a situation reported under Accepted for a Gateway
 			// listener and under ResolvedRefs for an entry would make the same
 			// misconfiguration unrecognisable across two listeners of one frontend.
-			assert.Equal(t, string(gatewaySpelling.ConditionType), string(entrySpelling.ConditionType),
-				"same verdict under two different condition types")
+			if spelledForGateway && spelledForEntry {
+				assert.Equal(t, string(gatewaySpelling.ConditionType), string(entrySpelling.ConditionType),
+					"same verdict under two different condition types")
+			}
 		})
 	}
 }

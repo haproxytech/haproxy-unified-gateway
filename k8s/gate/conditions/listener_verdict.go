@@ -95,6 +95,15 @@ const (
 	// VerdictProtocolConflict is two listeners on one port asking for protocols
 	// that cannot share it.
 	VerdictProtocolConflict ListenerConditionVerdict = "ProtocolConflict"
+	// VerdictSeveralConflicts is a listener in more than one kind of conflict at
+	// once -- on its protocol and on its hostname.
+	//
+	// Only a ListenerSet entry can report it: the API gives entries the reason
+	// ListenerConflict for exactly this case and gives a Gateway's own listeners no
+	// word for it, which is why it is the first verdict one vocabulary cannot spell.
+	// Nothing may derive it for a Gateway listener -- see the note on the absent
+	// spelling.
+	VerdictSeveralConflicts ListenerConditionVerdict = "SeveralConflicts"
 
 	// VerdictProgrammed is the listener being configured in HAProxy.
 	VerdictProgrammed ListenerConditionVerdict = "Programmed"
@@ -122,6 +131,7 @@ var listenerConditionVerdicts = []ListenerConditionVerdict{
 	VerdictRefNotPermitted,
 	VerdictHostnameConflict,
 	VerdictProtocolConflict,
+	VerdictSeveralConflicts,
 	VerdictProgrammed,
 	VerdictProgrammingPending,
 	VerdictNotProgrammable,
@@ -146,6 +156,7 @@ var listenerConditionVerdictStatuses = map[ListenerConditionVerdict]metav1.Condi
 	// conflict.
 	VerdictHostnameConflict:   metav1.ConditionTrue,
 	VerdictProtocolConflict:   metav1.ConditionTrue,
+	VerdictSeveralConflicts:   metav1.ConditionTrue,
 	VerdictProgrammed:         metav1.ConditionTrue,
 	VerdictProgrammingPending: metav1.ConditionUnknown,
 	VerdictNotProgrammable:    metav1.ConditionFalse,
@@ -168,6 +179,7 @@ var listenerConditionVerdictsRequiringMessage = map[ListenerConditionVerdict]str
 	VerdictRefNotPermitted:       {},
 	VerdictHostnameConflict:      {},
 	VerdictProtocolConflict:      {},
+	VerdictSeveralConflicts:      {},
 }
 
 // listenerConditionVerdictMessages is the wording of the verdicts that describe a state
