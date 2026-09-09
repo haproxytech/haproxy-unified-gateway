@@ -600,23 +600,6 @@ func (l *Listener) checkConflict(conflictsByPort map[gatewayv1.PortNumber]confli
 	}
 }
 
-// hostnameConflicts reports whether two listener hostnames conflict for the purpose
-// of the Gateway API "HostnameConflict" condition.
-//
-// Per the Gateway API spec, two listeners conflict only when they have the exact
-// same hostname value (case-insensitive). Different hostnames — even when one is a
-// wildcard that would match the other — do NOT conflict, because specificity rules
-// (exact > wildcard > empty) always produce an unambiguous winner for any request.
-//
-// Concretely:
-//   - "" vs ""           → conflict  (two catch-all listeners, identical)
-//   - "" vs "foo.com"    → no conflict  (catch-all coexists with specific)
-//   - "*.ex.com" vs "foo.ex.com" → no conflict  (specific beats wildcard, unambiguous)
-//   - "*.ex.com" vs "*.ex.com"   → conflict  (identical wildcards)
-func hostnameConflicts(h1, h2 string) bool {
-	return strings.EqualFold(strings.TrimSuffix(h1, "."), strings.TrimSuffix(h2, "."))
-}
-
 func (*Listener) isSupportedCertKindGroup(certRef gatewayv1.SecretObjectReference) bool {
 	supportedKind := certRef.Kind == nil || *certRef.Kind == "Secret"
 	supportedGroup := certRef.Group == nil || *certRef.Group == ""
