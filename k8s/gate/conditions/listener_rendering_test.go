@@ -72,6 +72,26 @@ func TestEveryVerdictHasBothSpellings(t *testing.T) {
 	}
 }
 
+// The one asymmetry so far, and the reason the declaration exists. Asserted on the
+// tables rather than on prose so that a spelling appearing upstream, or being
+// removed here, fails instead of quietly changing what a listener publishes.
+func TestSeveralConflictsIsAnEntryOnlyVerdict(t *testing.T) {
+	_, spelledForGateway := gatewayListenerConditionSpellings[VerdictSeveralConflicts]
+	assert.False(t, spelledForGateway,
+		"the API declares only HostnameConflict and ProtocolConflict for a Gateway listener")
+
+	rendered, err := NewListenerEntryConditions(VerdictSeveralConflicts, "conflicts on protocol and hostname")
+	assert.NoError(t, err)
+
+	conflicted := generic.ConditionType(gatewayv1.ListenerEntryConditionConflicted)
+	assert.Equal(t, string(gatewayv1.ListenerEntryReasonListenerConflict), rendered[conflicted].Reason)
+
+	// And it carries the companion refusal like the single-kind conflicts do: without
+	// it the entry would read as accepted while its port is configured nowhere.
+	accepted := generic.ConditionType(gatewayv1.ListenerEntryConditionAccepted)
+	assert.Equal(t, metav1.ConditionFalse, rendered[accepted].Status)
+}
+
 // Every verdict must be on exactly one side of the message split: either it names
 // a culprit and its check owes a message, or it describes a state and carries its
 // own wording. A verdict on neither side would publish an empty message; one on

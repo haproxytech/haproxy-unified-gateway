@@ -561,3 +561,79 @@ func TestUnknownConflictKindLeavesListenerRejected(t *testing.T) {
 	assert.False(t, l.Valid, "a listener nothing serves must not be reported as programmable")
 	assert.False(t, l.Accepted)
 }
+
+// The same two kinds of conflict, reported differently depending on what declared
+// the listener -- which is why the derivation lives on the Listener and not on the
+// set of kinds. The Gateway API gives a ListenerSet entry the reason
+// ListenerConflict for a listener in several conflicts, and gives a Gateway's own
+// listeners no word for it.
+func TestConflictVerdictFollowsTheVocabulary(t *testing.T) {
+	gwKey := client.ObjectKey{Namespace: "ns", Name: "gw"}
+	gatewayListener := &Listener{
+		ListenerKey:        gatewayListenerKey(gwKey, "https"),
+		K8sGatewayListener: &gatewayv1.Listener{Name: "https"},
+	}
+	entry := &Listener{
+		ListenerKey:                 listenerSetListenerKey(gwKey, client.ObjectKey{Namespace: "ns", Name: "ls"}, "https"),
+		K8sListenerSetListenerEntry: &gatewayv1.ListenerEntry{Name: "https"},
+	}
+	both := conflictOnProtocol | conflictOnHostname
+
+	t.Run("a single kind reads the same on both", func(t *testing.T) {
+		for _, l := range []*Listener{gatewayListener, entry} {
+			assert.Equal(t, conditions.VerdictProtocolConflict, l.conflictVerdict(conflictOnProtocol))
+			assert.Equal(t, conditions.VerdictHostnameConflict, l.conflictVerdict(conflictOnHostname))
+			assert.Empty(t, l.conflictVerdict(noConflict))
+		}
+	})
+
+	t.Run("an entry in both conflicts says so", func(t *testing.T) {
+		assert.Equal(t, conditions.VerdictSeveralConflicts, entry.conflictVerdict(both))
+	})
+
+	t.Run("a Gateway listener in both reports the coarser one", func(t *testing.T) {
+		assert.Equal(t, conditions.VerdictProtocolConflict, gatewayListener.conflictVerdict(both),
+			"its vocabulary has no reason for several conflicts, so it must not derive one")
+	})
+
+	// The consequence of getting that wrong, stated where it can be checked: a
+	// verdict the vocabulary cannot spell would take the Unreportable fallback, and a
+	// listener conflicting on two counts would be published as unreportable.
+	t.Run("the Gateway vocabulary can spell every verdict derived for it", func(t *testing.T) {
+		for _, conflicts := range []conflictKinds{conflictOnProtocol, conflictOnHostname, both} {
+			rendered, err := conditions.NewGatewayListenerConditions(
+				gatewayListener.conflictVerdict(conflicts), "message from the check",
+			)
+			assert.NoError(t, err)
+			assert.NotEmpty(t, rendered)
+		}
+	})
+}
+
+// The message is the only place a Gateway listener can learn it is in two
+// conflicts, its reason having no word for it. Naming them only when there is more
+// than one keeps every existing message unchanged.
+func TestCompositeConflictNamesItsKindsInTheMessage(t *testing.T) {
+	acceptedType := generic.ConditionType(gatewayv1.ListenerConditionAccepted)
+	conflictedType := generic.ConditionType(gatewayv1.ListenerConditionConflicted)
+
+	messageFor := func(conflicts conflictKinds) string {
+		l, _ := newListenerForPortTest(80)
+		other := gatewayListenerKey(client.ObjectKey{Namespace: "ns", Name: "gw"}, "other")
+		l.checkConflict(map[gatewayv1.PortNumber]conflictsByListener{
+			80: {l.Key(): conflicts, other: conflictOnProtocol},
+		})
+		cond, ok := l.CheckConflict.Conditions.GetCondition(conflictedType)
+		require.True(t, ok, "a conflicting listener must report the Conflicted condition")
+		require.NotEmpty(t, l.CheckConflict.Conditions[acceptedType],
+			"and the companion refusal, or it reads as accepted")
+		return cond.Message
+	}
+
+	assert.Equal(t, "Conflicting listeners: other", messageFor(conflictOnProtocol),
+		"one kind: the message is unchanged")
+	assert.Equal(t, "Conflicting listeners: other", messageFor(conflictOnHostname))
+	assert.Equal(t, "Conflicting listeners: other (conflicts on protocol and hostname)",
+		messageFor(conflictOnProtocol|conflictOnHostname),
+		"two kinds: the reason names one, so the message has to name both")
+}
