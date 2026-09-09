@@ -18,6 +18,7 @@ import (
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/certificate"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
@@ -44,10 +45,18 @@ type ControllerStore struct {
 	// PortBinder reports whether the controller process can bind to a given
 	// port — derived from CAP_NET_BIND_SERVICE and the netns sysctl.
 	PortBinder caps.PortBinder
-	// mapPort2Listeners is a map for each port:
-	// that contains for each listener if it has a conflict or not
-	previousMapPort2Listeners map[gatewayv1.PortNumber]listenersOnPort
-	mapPort2Listeners         map[gatewayv1.PortNumber]listenersOnPort
+	// protocolCategoryByPort is the category a port serves, fixed by the first
+	// listener that claims it. It is a property of the port and not of any one
+	// listener: every listener on the port either matches it or conflicts on
+	// protocol. The VirtualListener, hence the HAProxy frontend, takes its category
+	// from here.
+	protocolCategoryByPort map[gatewayv1.PortNumber]protocols.ProtocolCategory
+	// conflictsByPort holds, for each port and each listener on it, the conflicts
+	// that listener is in -- the empty set included, which is what makes the diff
+	// below sound. previousConflictsByPort is the same table as of the previous
+	// cycle, kept to find the listeners whose verdict changed.
+	conflictsByPort         map[gatewayv1.PortNumber]conflictsByListener
+	previousConflictsByPort map[gatewayv1.PortNumber]conflictsByListener
 	// from config
 	ControllerName string
 	// IngressClass is the value of --ingress.class used to select managed Ingresses.

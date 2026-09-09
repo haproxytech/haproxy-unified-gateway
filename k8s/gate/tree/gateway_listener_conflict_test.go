@@ -74,7 +74,7 @@ func TestComputeListenerConflicts(t *testing.T) {
 	tests := []struct {
 		name     string
 		gateways []*Gateway
-		expected map[string]listenerOnPort
+		expected map[string]conflictKinds
 	}{
 		{
 			name: "No conflicts - single gateway, different ports",
@@ -85,9 +85,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("l2", 443, gatewayv1.HTTPSProtocolType, nil),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_l2": {protocolCategory: protocols.ProtocolCategorySecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_l1": noConflict,
+				"default/gw1_l2": noConflict,
 			},
 		},
 		{
@@ -99,9 +99,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("https", 80, gatewayv1.HTTPSProtocolType, nil), // 80 is already HTTP/Insecure
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_http":  {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_https": {conflicts: conflictOnProtocol, protocolCategory: protocols.ProtocolCategorySecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_http":  noConflict,
+				"default/gw1_https": conflictOnProtocol,
 			},
 		},
 		{
@@ -113,9 +113,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("h2", 80, gatewayv1.HTTPProtocolType, ptr("bar.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_h1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_h2": {protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_h1": noConflict,
+				"default/gw1_h2": noConflict,
 			},
 		},
 		{
@@ -127,9 +127,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("h2", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_h1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_h2": {conflicts: conflictOnHostname, protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_h1": noConflict,
+				"default/gw1_h2": conflictOnHostname,
 			},
 		},
 		{
@@ -141,9 +141,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("exact", 80, gatewayv1.HTTPProtocolType, ptr("foo.example.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_wild":  {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_exact": {protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_wild":  noConflict,
+				"default/gw1_exact": noConflict,
 			},
 		},
 		{
@@ -155,9 +155,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("wild2", 80, gatewayv1.HTTPProtocolType, ptr("*.example.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_wild1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_wild2": {conflicts: conflictOnHostname, protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_wild1": noConflict,
+				"default/gw1_wild2": conflictOnHostname,
 			},
 		},
 		{
@@ -169,9 +169,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("same", 80, gatewayv1.HTTPProtocolType, nil),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_empty": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_same":  {conflicts: conflictOnHostname, protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_empty": noConflict,
+				"default/gw1_same":  conflictOnHostname,
 			},
 		},
 		{
@@ -183,9 +183,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("specific", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_catch-all": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_specific":  {protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_catch-all": noConflict,
+				"default/gw1_specific":  noConflict,
 			},
 		},
 		{
@@ -201,11 +201,11 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("specific-under-wildcard", 443, gatewayv1.HTTPSProtocolType, ptr("fourth-example.wildcard.org")),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_catch-all":               {protocolCategory: protocols.ProtocolCategorySecure},
-				"default/gw1_wildcard":                {protocolCategory: protocols.ProtocolCategorySecure},
-				"default/gw1_specific":                {protocolCategory: protocols.ProtocolCategorySecure},
-				"default/gw1_specific-under-wildcard": {protocolCategory: protocols.ProtocolCategorySecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_catch-all":               noConflict,
+				"default/gw1_wildcard":                noConflict,
+				"default/gw1_specific":                noConflict,
+				"default/gw1_specific-under-wildcard": noConflict,
 			},
 		},
 		{
@@ -220,9 +220,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/old_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/new_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/old_l1": noConflict,
+				"default/new_l1": noConflict,
 			},
 		},
 		{
@@ -237,9 +237,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/old_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/new_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/old_l1": noConflict,
+				"default/new_l1": noConflict,
 			},
 		},
 		{
@@ -254,9 +254,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("https", 80, gatewayv1.HTTPSProtocolType, nil),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/old_http":  {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/new_https": {conflicts: conflictOnProtocol, protocolCategory: protocols.ProtocolCategorySecure},
+			expected: map[string]conflictKinds{
+				"default/old_http":  noConflict,
+				"default/new_https": conflictOnProtocol,
 			},
 		},
 		{
@@ -276,9 +276,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("https", 80, gatewayv1.HTTPSProtocolType, nil),
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/ing_https": {protocolCategory: protocols.ProtocolCategorySecure},
-				"default/real_http": {conflicts: conflictOnProtocol, protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/ing_https": noConflict,
+				"default/real_http": conflictOnProtocol,
 			},
 		},
 		{
@@ -295,11 +295,11 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("catch-all", 80, gatewayv1.HTTPProtocolType, nil), // nil = empty hostname, does NOT conflict with ok-foo (catch-all coexists with specific hostnames)
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_http":      {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_http2":     {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw2_ok-foo":    {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw2_catch-all": {protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_http":      noConflict,
+				"default/gw1_http2":     noConflict,
+				"default/gw2_ok-foo":    noConflict,
+				"default/gw2_catch-all": noConflict,
 			},
 		},
 		{
@@ -322,17 +322,17 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("tls-bar", 443, gatewayv1.TLSProtocolType, ptr("bar.com")),     // Same category. Different hostname string → no conflict.
 				),
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_http-foo":  {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_https-bar": {conflicts: conflictOnProtocol, protocolCategory: protocols.ProtocolCategorySecure},
-				"default/gw1_tls-foo":   {conflicts: conflictOnProtocol, protocolCategory: protocols.ProtocolCategoryTLS},
-				"default/gw1_http-wild": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_http-bar":  {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_tcp":       {conflicts: conflictOnProtocol, protocolCategory: protocols.ProcotolCategoryTCP},
-				"default/gw2_tls-foo":   {protocolCategory: protocols.ProtocolCategoryTLS},
-				"default/gw2_https-bar": {conflicts: conflictOnProtocol, protocolCategory: protocols.ProtocolCategorySecure},
-				"default/gw2_tls-wild":  {protocolCategory: protocols.ProtocolCategoryTLS},
-				"default/gw2_tls-bar":   {protocolCategory: protocols.ProtocolCategoryTLS},
+			expected: map[string]conflictKinds{
+				"default/gw1_http-foo":  noConflict,
+				"default/gw1_https-bar": conflictOnProtocol,
+				"default/gw1_tls-foo":   conflictOnProtocol,
+				"default/gw1_http-wild": noConflict,
+				"default/gw1_http-bar":  noConflict,
+				"default/gw1_tcp":       conflictOnProtocol,
+				"default/gw2_tls-foo":   noConflict,
+				"default/gw2_https-bar": conflictOnProtocol,
+				"default/gw2_tls-wild":  noConflict,
+				"default/gw2_tls-bar":   noConflict,
 			},
 		},
 		{
@@ -348,11 +348,11 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
+			expected: map[string]conflictKinds{
 				// l1 and l2 on same gw1 conflict; gw2/l1 (different gateway) is merged
-				"default/gw1_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw1_l2": {conflicts: conflictOnHostname, protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw2_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
+				"default/gw1_l1": noConflict,
+				"default/gw1_l2": conflictOnHostname,
+				"default/gw2_l1": noConflict,
 			},
 		},
 		{
@@ -369,9 +369,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 				),
 				nil, // Another deleted gateway
 			},
-			expected: map[string]listenerOnPort{
-				"default/gw1_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw2_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
+			expected: map[string]conflictKinds{
+				"default/gw1_l1": noConflict,
+				"default/gw2_l1": noConflict,
 			},
 		},
 		{
@@ -387,10 +387,10 @@ func TestComputeListenerConflicts(t *testing.T) {
 					mkListener("l1", 80, gatewayv1.HTTPProtocolType, ptr("foo.com")),
 				),
 			},
-			expected: map[string]listenerOnPort{
+			expected: map[string]conflictKinds{
 				// Different gateways with identical listeners → merged, no conflict
-				"default/gw1_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
-				"default/gw2_l1": {protocolCategory: protocols.ProtocolCategoryInsecure},
+				"default/gw1_l1": noConflict,
+				"default/gw2_l1": noConflict,
 			},
 		},
 	}
@@ -418,9 +418,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 			b.computeListenerConflicts()
 
 			// Flatten results
-			actual := make(map[string]listenerOnPort)
+			actual := make(map[string]conflictKinds)
 
-			for _, res := range b.ControllerStore.mapPort2Listeners {
+			for _, res := range b.ControllerStore.conflictsByPort {
 				for k, v := range res {
 					actual[k.String()] = v
 				}
@@ -546,7 +546,7 @@ func TestListenersPerPort(t *testing.T) {
 		result := b.listenersPerPort([]*Gateway{gw})
 		assert.Len(t, result[80], 1)
 		assert.Equal(t, "l1", string(result[80][0].listenerRef.Name))
-		assert.Empty(t, b.ControllerStore.mapPort2Listeners)
+		assert.Empty(t, b.ControllerStore.conflictsByPort)
 	})
 
 	t.Run("different ports, no conflicts", func(t *testing.T) {
@@ -560,7 +560,7 @@ func TestListenersPerPort(t *testing.T) {
 		assert.Len(t, result, 2)
 		assert.Len(t, result[80], 1)
 		assert.Len(t, result[443], 1)
-		assert.Empty(t, b.ControllerStore.mapPort2Listeners)
+		assert.Empty(t, b.ControllerStore.conflictsByPort)
 	})
 
 	t.Run("same port, same protocol category -> both in portListeners, no conflict", func(t *testing.T) {
@@ -572,7 +572,7 @@ func TestListenersPerPort(t *testing.T) {
 		b := newBuilder()
 		result := b.listenersPerPort([]*Gateway{gw})
 		assert.Len(t, result[80], 2)
-		assert.Empty(t, b.ControllerStore.mapPort2Listeners)
+		assert.Empty(t, b.ControllerStore.conflictsByPort)
 	})
 
 	t.Run("same port, different protocol categories -> first in portListeners, second is ProtocolConflict", func(t *testing.T) {
@@ -587,13 +587,15 @@ func TestListenersPerPort(t *testing.T) {
 		assert.Len(t, result[80], 1)
 		assert.Equal(t, "http", string(result[80][0].listenerRef.Name))
 
-		conflictsOnPort80 := b.ControllerStore.mapPort2Listeners[80]
+		conflictsOnPort80 := b.ControllerStore.conflictsByPort[80]
 		assert.Len(t, conflictsOnPort80, 1)
 		httpsKey := gatewayListenerKey(client.ObjectKeyFromObject(gw.K8sResource), gw.K8sResource.Spec.Listeners[1].Name)
-		lcc := conflictsOnPort80[httpsKey]
-		assert.True(t, lcc.conflicts.any())
-		assert.Equal(t, conditions.VerdictProtocolConflict, lcc.conflicts.verdict())
-		assert.Equal(t, protocols.ProtocolCategorySecure, lcc.protocolCategory)
+		assert.True(t, conflictsOnPort80[httpsKey].any())
+		assert.Equal(t, conditions.VerdictProtocolConflict, conflictsOnPort80[httpsKey].verdict())
+		// The category is now a property of the port, not of the entry: the port keeps
+		// the insecure category its first listener claimed, which is exactly why the
+		// HTTPS listener conflicts.
+		assert.Equal(t, protocols.ProtocolCategoryInsecure, b.ControllerStore.protocolCategoryByPort[80])
 	})
 
 	t.Run("multiple gateways, same port, same protocol -> all in portListeners", func(t *testing.T) {
@@ -602,7 +604,7 @@ func TestListenersPerPort(t *testing.T) {
 		b := newBuilder()
 		result := b.listenersPerPort([]*Gateway{gw1, gw2})
 		assert.Len(t, result[80], 2)
-		assert.Empty(t, b.ControllerStore.mapPort2Listeners)
+		assert.Empty(t, b.ControllerStore.conflictsByPort)
 	})
 
 	t.Run("multiple gateways, same port, different protocols -> first wins, second is ProtocolConflict", func(t *testing.T) {
@@ -614,12 +616,11 @@ func TestListenersPerPort(t *testing.T) {
 		assert.Len(t, result[80], 1)
 		assert.Equal(t, "http", string(result[80][0].listenerRef.Name))
 
-		conflictsOnPort80 := b.ControllerStore.mapPort2Listeners[80]
+		conflictsOnPort80 := b.ControllerStore.conflictsByPort[80]
 		assert.Len(t, conflictsOnPort80, 1)
 		httpsKey := gatewayListenerKey(client.ObjectKeyFromObject(gw2.K8sResource), gw2.K8sResource.Spec.Listeners[0].Name)
-		lcc := conflictsOnPort80[httpsKey]
-		assert.True(t, lcc.conflicts.any())
-		assert.Equal(t, conditions.VerdictProtocolConflict, lcc.conflicts.verdict())
+		assert.True(t, conflictsOnPort80[httpsKey].any())
+		assert.Equal(t, conditions.VerdictProtocolConflict, conflictsOnPort80[httpsKey].verdict())
 	})
 
 	t.Run("nil and deleted gateways are skipped", func(t *testing.T) {

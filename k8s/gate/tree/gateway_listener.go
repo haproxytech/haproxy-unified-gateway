@@ -562,42 +562,40 @@ func (l *Listener) checkPort(portBinder caps.PortBinder) {
 // with the reason:
 // - gatewayv1.ListenerReasonProtocolConflict
 // - gatewayv1.ListenerReasonHostnameConflict
-func (l *Listener) checkConflict(listenersPerPort map[gatewayv1.PortNumber]listenersOnPort) {
-	listenersOnPort, ok := listenersPerPort[l.Port()]
+func (l *Listener) checkConflict(conflictsByPort map[gatewayv1.PortNumber]conflictsByListener) {
+	conflictsOnThisPort, ok := conflictsByPort[l.Port()]
 	if !ok {
 		// Should not happen
 		return
 	}
 
-	conflictingKeys := make([]string, 0)
-	lk := l.Key()
-	if _, ok := listenersOnPort[lk]; !ok {
+	conflicts, ok := conflictsOnThisPort[l.Key()]
+	if !ok {
 		// should not happen
 		return
 	}
 
 	// 1- No conflict for this listener, it's the winnier
-	if !listenersOnPort[lk].conflicts.any() {
-		// If there is no conflict for this listener
+	if !conflicts.any() {
 		l.CheckConflict = CheckResult{}
 		return
 	}
 
-	// 2- Conflicts
-	for glk := range listenersOnPort {
-		// if the listener is itself, just continue
-		if glk == lk {
+	// 2- Conflicts: name the other listeners sharing the port, which is the part of
+	// the message a user can act on.
+	peerNames := make([]string, 0, len(conflictsOnThisPort)-1)
+	for peerKey := range conflictsOnThisPort {
+		if peerKey == l.Key() {
 			continue
 		}
-		conflictingKeys = append(conflictingKeys, string(glk.ListenerName))
+		peerNames = append(peerNames, string(peerKey.ListenerName))
 	}
-	if len(conflictingKeys) > 0 {
-		slices.Sort(conflictingKeys)
-		msg := fmt.Sprintf("Conflicting listeners: %s", strings.Join(conflictingKeys, ", "))
-		cond := l.conditionsFor(listenersOnPort[lk].conflicts.verdict(), msg)
+	if len(peerNames) > 0 {
+		slices.Sort(peerNames)
+		msg := fmt.Sprintf("Conflicting listeners: %s", strings.Join(peerNames, ", "))
 		l.CheckConflict = CheckResult{
 			Valid:      false,
-			Conditions: cond,
+			Conditions: l.conditionsFor(conflicts.verdict(), msg),
 		}
 	}
 }

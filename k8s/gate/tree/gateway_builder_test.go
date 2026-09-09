@@ -14,6 +14,16 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// Fixture aliases for the three conflict states a listener can be in. noConflict is
+// spelled out rather than left as a bare zero: an entry with no conflict is a value
+// the table deliberately holds, and reading "0" in a fixture invites taking it for
+// an absent entry, which means the opposite for the verdict diff.
+const (
+	protocolConflict = conflictOnProtocol
+	hostnameConflict = conflictOnHostname
+	noConflict       = conflictKinds(0)
+)
+
 func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 	gwName := "gw1"
 	gwNamespace := "default"
@@ -40,22 +50,22 @@ func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                     string
-		mapPort2ListenerConflict map[gatewayv1.PortNumber]listenersOnPort
-		expectedWithConflict     int32
-		expectedWithoutConflict  int32
+		name                    string
+		conflictsByPort         map[gatewayv1.PortNumber]conflictsByListener
+		expectedWithConflict    int32
+		expectedWithoutConflict int32
 	}{
 		{
-			name:                     "No listeners",
-			mapPort2ListenerConflict: map[gatewayv1.PortNumber]listenersOnPort{},
-			expectedWithConflict:     0,
-			expectedWithoutConflict:  0,
+			name:                    "No listeners",
+			conflictsByPort:         map[gatewayv1.PortNumber]conflictsByListener{},
+			expectedWithConflict:    0,
+			expectedWithoutConflict: 0,
 		},
 		{
 			name: "Single listener with conflict",
-			mapPort2ListenerConflict: map[gatewayv1.PortNumber]listenersOnPort{
+			conflictsByPort: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {
-					mkKey(gwName, "l1"): {conflicts: conflictOnProtocol},
+					mkKey(gwName, "l1"): conflictOnProtocol,
 				},
 			},
 			expectedWithConflict:    1,
@@ -63,9 +73,9 @@ func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 		},
 		{
 			name: "Single listener without conflict",
-			mapPort2ListenerConflict: map[gatewayv1.PortNumber]listenersOnPort{
+			conflictsByPort: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {
-					mkKey(gwName, "l1"): {},
+					mkKey(gwName, "l1"): noConflict,
 				},
 			},
 			expectedWithConflict:    0,
@@ -73,13 +83,13 @@ func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 		},
 		{
 			name: "Mixed listeners",
-			mapPort2ListenerConflict: map[gatewayv1.PortNumber]listenersOnPort{
+			conflictsByPort: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {
-					mkKey(gwName, "l1"): {conflicts: conflictOnProtocol},
-					mkKey(gwName, "l2"): {},
+					mkKey(gwName, "l1"): conflictOnProtocol,
+					mkKey(gwName, "l2"): noConflict,
 				},
 				443: {
-					mkKey(gwName, "l3"): {conflicts: conflictOnProtocol},
+					mkKey(gwName, "l3"): conflictOnProtocol,
 				},
 			},
 			expectedWithConflict:    2,
@@ -87,10 +97,10 @@ func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 		},
 		{
 			name: "Listeners from other gateways ignored",
-			mapPort2ListenerConflict: map[gatewayv1.PortNumber]listenersOnPort{
+			conflictsByPort: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {
-					mkKey(gwName, "l1"):  {conflicts: conflictOnProtocol},
-					mkKey("other", "l1"): {conflicts: conflictOnProtocol},
+					mkKey(gwName, "l1"):  conflictOnProtocol,
+					mkKey("other", "l1"): conflictOnProtocol,
 				},
 			},
 			expectedWithConflict:    1,
@@ -100,7 +110,7 @@ func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			nb := nbListenersWithAndWithoutConflict(tt.mapPort2ListenerConflict, treeGw)
+			nb := nbListenersWithAndWithoutConflict(tt.conflictsByPort, treeGw)
 			assert.Equal(t, tt.expectedWithConflict, nb.withConflict)
 			assert.Equal(t, tt.expectedWithoutConflict, nb.withoutConflict)
 		})
@@ -125,37 +135,25 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 		}
 	}
 
-	protocolConflict := listenerOnPort{
-		protocolCategory: protocols.ProtocolCategorySecure,
-		conflicts:        conflictOnProtocol,
-	}
-	hostnameConflict := listenerOnPort{
-		protocolCategory: protocols.ProtocolCategorySecure,
-		conflicts:        conflictOnHostname,
-	}
-	noConflict := listenerOnPort{
-		protocolCategory: protocols.ProtocolCategorySecure,
-	}
-
 	tests := []struct {
-		previous       map[gatewayv1.PortNumber]listenersOnPort
-		current        map[gatewayv1.PortNumber]listenersOnPort
+		previous       map[gatewayv1.PortNumber]conflictsByListener
+		current        map[gatewayv1.PortNumber]conflictsByListener
 		expectedGwKeys map[client.ObjectKey]struct{}
 		name           string
 	}{
 		{
 			name:           "Both tables empty",
-			previous:       map[gatewayv1.PortNumber]listenersOnPort{},
-			current:        map[gatewayv1.PortNumber]listenersOnPort{},
+			previous:       map[gatewayv1.PortNumber]conflictsByListener{},
+			current:        map[gatewayv1.PortNumber]conflictsByListener{},
 			expectedGwKeys: map[client.ObjectKey]struct{}{},
 		},
 		{
 			// The listener is fine and stays fine: nothing to recompute.
 			name: "Unchanged listener without conflict",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): noConflict},
 			},
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): noConflict},
 			},
 			expectedGwKeys: map[client.ObjectKey]struct{}{},
@@ -165,20 +163,20 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 			// this is the case the previous old-union-new selection re-upserted
 			// for nothing.
 			name: "Unchanged listener with the same conflict",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): protocolConflict},
 			},
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): protocolConflict},
 			},
 			expectedGwKeys: map[client.ObjectKey]struct{}{},
 		},
 		{
 			name: "Listener enters conflict",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): noConflict},
 			},
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): protocolConflict},
 			},
 			expectedGwKeys: map[client.ObjectKey]struct{}{
@@ -187,10 +185,10 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 		},
 		{
 			name: "Listener leaves conflict",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): protocolConflict},
 			},
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): noConflict},
 			},
 			expectedGwKeys: map[client.ObjectKey]struct{}{
@@ -201,10 +199,10 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 			// Still conflicting, but the reason changed: the condition message
 			// must be refreshed, which a membership-only comparison would miss.
 			name: "Conflict reason changes",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): protocolConflict},
 			},
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): hostnameConflict},
 			},
 			expectedGwKeys: map[client.ObjectKey]struct{}{
@@ -213,16 +211,16 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 		},
 		{
 			name: "Listener disappeared from the table",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): protocolConflict},
 			},
-			current:        map[gatewayv1.PortNumber]listenersOnPort{},
+			current:        map[gatewayv1.PortNumber]conflictsByListener{},
 			expectedGwKeys: map[client.ObjectKey]struct{}{mkGwKey("gw1"): {}},
 		},
 		{
 			name:     "Listener appeared in the table",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{},
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{},
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {mkKey("gw1", "l1"): noConflict},
 			},
 			expectedGwKeys: map[client.ObjectKey]struct{}{mkGwKey("gw1"): {}},
@@ -231,7 +229,7 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 			// First cycle: previousMapPort2Listeners is still nil.
 			name:     "Nil previous table",
 			previous: nil,
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80:  {mkKey("gw1", "l1"): noConflict},
 				443: {mkKey("gw2", "l1"): protocolConflict},
 			},
@@ -242,14 +240,14 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 		},
 		{
 			name: "Only the Gateway whose verdict changed is selected",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {
 					mkKey("gw1", "l1"): noConflict,
 					mkKey("gw2", "l1"): protocolConflict,
 				},
 				443: {mkKey("gw3", "l1"): noConflict},
 			},
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80: {
 					mkKey("gw1", "l1"): noConflict,
 					mkKey("gw2", "l1"): protocolConflict,
@@ -262,11 +260,11 @@ func TestGatewaysWithChangedConflictVerdict(t *testing.T) {
 		},
 		{
 			name: "Several listeners of the same Gateway yield a single key",
-			previous: map[gatewayv1.PortNumber]listenersOnPort{
+			previous: map[gatewayv1.PortNumber]conflictsByListener{
 				80:  {mkKey("gw1", "l1"): noConflict},
 				443: {mkKey("gw1", "l2"): noConflict},
 			},
-			current: map[gatewayv1.PortNumber]listenersOnPort{
+			current: map[gatewayv1.PortNumber]conflictsByListener{
 				80:  {mkKey("gw1", "l1"): protocolConflict},
 				443: {mkKey("gw1", "l2"): hostnameConflict},
 			},
@@ -319,18 +317,19 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 		return gatewayListenerKey(client.ObjectKey{Namespace: ns, Name: gwName}, "l1")
 	}
 
-	newBuilder := func(previous map[gatewayv1.PortNumber]listenersOnPort, gws ...*Gateway) *GatewayBuilderImpl {
+	newBuilder := func(previous map[gatewayv1.PortNumber]conflictsByListener, gws ...*Gateway) *GatewayBuilderImpl {
 		gateways := map[client.ObjectKey]*Gateway{}
 		for _, gw := range gws {
 			gateways[client.ObjectKeyFromObject(gw.K8sResource)] = gw
 		}
 		return &GatewayBuilderImpl{
 			ControllerStore: &ControllerStore{
-				Logger:                    discard,
-				GateTree:                  &GateTree{Gateways: gateways, GatewayClasses: map[client.ObjectKey]*GatewayClass{}},
-				UnmanagedGateTree:         &GateTree{Gateways: map[client.ObjectKey]*Gateway{}},
-				previousMapPort2Listeners: previous,
-				mapPort2Listeners:         map[gatewayv1.PortNumber]listenersOnPort{},
+				Logger:                  discard,
+				GateTree:                &GateTree{Gateways: gateways, GatewayClasses: map[client.ObjectKey]*GatewayClass{}},
+				UnmanagedGateTree:       &GateTree{Gateways: map[client.ObjectKey]*Gateway{}},
+				previousConflictsByPort: previous,
+				conflictsByPort:         map[gatewayv1.PortNumber]conflictsByListener{},
+				protocolCategoryByPort:  map[gatewayv1.PortNumber]protocols.ProtocolCategory{},
 			},
 		}
 	}
@@ -342,16 +341,16 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 		gw2 := mkGateway("gw2", younger, gatewayv1.HTTPSProtocolType, "")
 
 		// Previous cycle: gw2 was alone on port 80, hence no conflict.
-		previous := map[gatewayv1.PortNumber]listenersOnPort{
+		previous := map[gatewayv1.PortNumber]conflictsByListener{
 			80: {
-				keyOf("gw2"): {protocolCategory: protocols.ProtocolCategorySecure},
+				keyOf("gw2"): noConflict,
 			},
 		}
 
 		b := newBuilder(previous, gw1, gw2)
 		b.checkListenerConflicts()
 
-		assert.True(t, b.ControllerStore.mapPort2Listeners[80][keyOf("gw2")].conflicts.any(),
+		assert.True(t, b.ControllerStore.conflictsByPort[80][keyOf("gw2")].any(),
 			"gw2 listener must be detected as conflicting")
 		assert.Equal(t, store.StatusUpserted, gw2.TreeStatus.Status,
 			"gw2 must be re-upserted so the new verdict reaches its listeners")
@@ -364,20 +363,17 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 		gw1 := mkGateway("gw1", older, gatewayv1.HTTPProtocolType, "")
 		gw2 := mkGateway("gw2", younger, gatewayv1.HTTPSProtocolType, "")
 
-		previous := map[gatewayv1.PortNumber]listenersOnPort{
+		previous := map[gatewayv1.PortNumber]conflictsByListener{
 			80: {
-				keyOf("gw1"): {protocolCategory: protocols.ProtocolCategoryInsecure},
-				keyOf("gw2"): {
-					protocolCategory: protocols.ProtocolCategorySecure,
-					conflicts:        conflictOnProtocol,
-				},
+				keyOf("gw1"): noConflict,
+				keyOf("gw2"): protocolConflict,
 			},
 		}
 
 		b := newBuilder(previous, gw1, gw2)
 		b.checkListenerConflicts()
 
-		assert.Equal(t, previous, b.ControllerStore.mapPort2Listeners,
+		assert.Equal(t, previous, b.ControllerStore.conflictsByPort,
 			"the recomputed table must be identical to the previous one")
 		assert.Empty(t, gw1.TreeStatus.Status, "gw1 must not be re-upserted")
 		assert.Empty(t, gw2.TreeStatus.Status, "gw2 must not be re-upserted for an unchanged conflict")

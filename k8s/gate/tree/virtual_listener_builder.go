@@ -20,7 +20,6 @@ import (
 	"slices"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 )
 
@@ -43,29 +42,24 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 	// And re-initialize the current VirtualListeners map to compute the new state
 	b.ControllerStore.GateTree.VirtualListeners = make(map[string]*VirtualListener)
 
-	// Iterate over all ports in mapPort2Listeners
-	// Idea is to keep on the same VirtualListener all the Listeners that are on the same port and have no conflict,
-	// even if they belong to different Gateways
-	for port, listenerConflicts := range b.ControllerStore.mapPort2Listeners {
-		// Track protocol category for this port (should be consistent for non-conflicting listeners)
-		var protocolCategory protocols.ProtocolCategory
-		var virtualListener *VirtualListener
+	// One VirtualListener per port, gathering every listener on that port that is in
+	// no conflict, whichever Gateway declares it.
+	for port, conflictsOnThisPort := range b.ControllerStore.conflictsByPort {
+		// The category comes from the port, which is where it is decided: the first
+		// listener to claim a port fixes it, and every other listener on that port
+		// either matches it or conflicts on protocol. It used to be read off the
+		// first non-conflicting entry met while ranging over the map -- a "first"
+		// that map iteration makes arbitrary, and which only ever gave the right
+		// answer because the protocol pass guarantees a single category per port.
+		virtualListener := NewVirtualListener(b.ControllerStore.protocolCategoryByPort[port], port)
 
-		// Collect all non-conflicting listeners for this port
-		for listenerKey, conflictCondition := range listenerConflicts {
-			// Skip listeners that have conflicts
-			if conflictCondition.conflicts.any() {
+		for key, conflicts := range conflictsOnThisPort {
+			if conflicts.any() {
 				continue
 			}
 
-			// Get the protocol category (should be the same for all non-conflicting listeners on this port)
-			if virtualListener == nil {
-				protocolCategory = conflictCondition.protocolCategory
-				virtualListener = NewVirtualListener(protocolCategory, port)
-			}
-
 			// Get the listener from the gateway
-			listener := b.listenerFor(listenerKey)
+			listener := b.listenerFor(key)
 			if listener == nil {
 				continue
 			}
@@ -96,8 +90,9 @@ func (b *VirtualListenerBuilderImpl) ComputeTreeUpdates() {
 			virtualListener.Listeners = append(virtualListener.Listeners, listener)
 		}
 
-		// Only store the VirtualListener if it has at least one listener
-		if virtualListener != nil && len(virtualListener.Listeners) > 0 {
+		// A port whose every listener conflicts, or whose listeners all belong to an
+		// invalid Gateway, gets no frontend.
+		if len(virtualListener.Listeners) > 0 {
 			b.GateTree.VirtualListeners[virtualListener.Name] = virtualListener
 		}
 	}

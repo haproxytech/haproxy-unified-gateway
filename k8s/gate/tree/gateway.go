@@ -280,11 +280,11 @@ func (g *Gateway) unsupportedProtocolListeners() (invalid, total int) {
 // checkListenerConflicts on the Gateway checks if there is at least one Listener that has no conflict
 // - if there is at least one listener for this Gateway that has no conflict, then the Gateway status is "Accepted"
 // - if none listener are valid, then the Gateway condition type Accepted is False
-func (g *Gateway) checkListenerConflicts(mapPort2ListenerConflict map[gatewayv1.PortNumber]listenersOnPort) {
+func (g *Gateway) checkListenerConflicts(conflictsByPort map[gatewayv1.PortNumber]conflictsByListener) {
 	// See if at least one of them does not have conflict
 	// Or if they all have confict
 
-	nbListenersWithAndWithoutConflict := nbListenersWithAndWithoutConflict(mapPort2ListenerConflict, g)
+	nbListenersWithAndWithoutConflict := nbListenersWithAndWithoutConflict(conflictsByPort, g)
 
 	if nbListenersWithAndWithoutConflict.withConflict > 0 {
 		// Some listeners conflict for this Gateway

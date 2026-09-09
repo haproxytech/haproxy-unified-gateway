@@ -30,7 +30,8 @@ type listenerRefs struct {
 }
 
 // computeListenerConflicts detects conflicts between listeners on the same port.
-// It populates b.mapPort2ListenerConflict with the results of the conflict detection.
+// It populates b.conflictsByPort and b.protocolCategoryByPort with the results of
+// the conflict detection.
 // Conflicts can arise from:
 // - Different protocol categories (e.g., HTTP vs HTTPS) on the same port.
 // - Overlapping hostnames for listeners with compatible protocols on the same Gateway.
@@ -66,16 +67,14 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 	// Some of them are already marked as conflicting because of protocol category difference.
 	// Now we need to check for hostname conflicts, but only within the same Gateway.
 	for port, listeners := range portListeners {
-		if _, ok := b.ControllerStore.mapPort2Listeners[port]; !ok {
-			b.ControllerStore.mapPort2Listeners[port] = make(listenersOnPort)
+		if _, ok := b.ControllerStore.conflictsByPort[port]; !ok {
+			b.ControllerStore.conflictsByPort[port] = make(conflictsByListener)
 		}
 
 		// Mark all listeners as non-conflicting initially.
 		for _, lr := range listeners {
 			lk := gatewayListenerKey(client.ObjectKeyFromObject(lr.gatewayRef), lr.listenerRef.Name)
-			b.ControllerStore.mapPort2Listeners[port][lk] = listenerOnPort{
-				protocolCategory: protocols.ProtocolCategories[lr.listenerRef.Protocol],
-			}
+			b.ControllerStore.conflictsByPort[port][lk] = 0
 		}
 
 		// Detect hostname conflicts only within the same Gateway.
@@ -86,7 +85,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 		for i := range listeners {
 			iKey := gatewayListenerKey(client.ObjectKeyFromObject(listeners[i].gatewayRef), listeners[i].listenerRef.Name)
 			// A listener already marked as conflicting cannot be a winner.
-			if b.ControllerStore.mapPort2Listeners[port][iKey].conflicts.any() {
+			if b.ControllerStore.conflictsByPort[port][iKey].any() {
 				continue
 			}
 			iHostname := utils.PointerDefaultValueIfNil(listeners[i].listenerRef.Hostname)
@@ -102,10 +101,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 				jHostname := utils.PointerDefaultValueIfNil(listeners[j].listenerRef.Hostname)
 
 				if hostnameConflicts(string(iHostname), string(jHostname)) {
-					b.ControllerStore.mapPort2Listeners[port][jKey] = listenerOnPort{
-						protocolCategory: protocols.ProtocolCategories[listeners[j].listenerRef.Protocol],
-						conflicts:        conflictOnHostname,
-					}
+					b.ControllerStore.conflictsByPort[port][jKey] |= conflictOnHostname
 				}
 			}
 		}
@@ -130,11 +126,10 @@ func (b *GatewayBuilderImpl) nonDeletedGateways() map[types.NamespacedName]*Gate
 
 // listenersPerPort groups listeners by port.
 // It ensures that all listeners on the same port share a compatible protocol category (e.g., all HTTP or all HTTPS).
-// Listeners with incompatible protocols are marked as conflicting in mapPort2ListenerConflict
+// Listeners with incompatible protocols are marked as conflicting in conflictsByPort
 // and are not included in the returned map.
 func (b *GatewayBuilderImpl) listenersPerPort(sortedGws []*Gateway) map[gatewayv1.PortNumber][]listenerRefs {
 	portListeners := make(map[gatewayv1.PortNumber][]listenerRefs)
-	mapPort2ProtocolCategory := make(map[gatewayv1.PortNumber]protocols.ProtocolCategory)
 
 	// 2- For each Gateway, for each listener, check if the port is conflicting with some other port
 	for _, treeGw := range sortedGws {
@@ -151,10 +146,10 @@ func (b *GatewayBuilderImpl) listenersPerPort(sortedGws []*Gateway) map[gatewayv
 			lk := gatewayListenerKey(client.ObjectKeyFromObject(treeGw.K8sResource), listener.Name)
 
 			// Check if the protocol category (secure/insecure/...) for the port is different from the current listener's protocol.
-			_, ok := mapPort2ProtocolCategory[listener.Port]
+			_, ok := b.ControllerStore.protocolCategoryByPort[listener.Port]
 			if !ok {
 				// First listener on this port, the port protocol category is set for this port (secure/insecure/...)
-				mapPort2ProtocolCategory[listener.Port] = protocols.ProtocolCategories[listener.Protocol]
+				b.ControllerStore.protocolCategoryByPort[listener.Port] = protocols.ProtocolCategories[listener.Protocol]
 				portListeners[listener.Port] = append(portListeners[listener.Port], listenerRefs{
 					gatewayRef:  treeGw.K8sResource,
 					listenerRef: listener,
@@ -162,16 +157,13 @@ func (b *GatewayBuilderImpl) listenersPerPort(sortedGws []*Gateway) map[gatewayv
 				continue
 			}
 			// Second (or more) listener on this port
-			if mapPort2ProtocolCategory[listener.Port] != protocols.ProtocolCategories[listener.Protocol] {
+			if b.ControllerStore.protocolCategoryByPort[listener.Port] != protocols.ProtocolCategories[listener.Protocol] {
 				// If the protocol category is different, it's a conflict
 				// This listener is conflicting
-				if _, ok := b.ControllerStore.mapPort2Listeners[listener.Port]; !ok {
-					b.ControllerStore.mapPort2Listeners[listener.Port] = make(listenersOnPort)
+				if _, ok := b.ControllerStore.conflictsByPort[listener.Port]; !ok {
+					b.ControllerStore.conflictsByPort[listener.Port] = make(conflictsByListener)
 				}
-				b.ControllerStore.mapPort2Listeners[listener.Port][lk] = listenerOnPort{
-					protocolCategory: protocols.ProtocolCategories[listener.Protocol],
-					conflicts:        conflictOnProtocol,
-				}
+				b.ControllerStore.conflictsByPort[listener.Port][lk] |= conflictOnProtocol
 				continue
 			}
 			// Same protocol category, check for overlap

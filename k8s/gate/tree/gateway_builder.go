@@ -41,7 +41,9 @@ type GatewayBuilderImpl struct {
 // The zero value is "no conflict", which is what lets the table hold an entry for
 // every listener without a separate flag saying whether it conflicts: the state
 // "no conflict, but a leftover reason" becomes unrepresentable rather than merely
-// unused.
+// unused. It is also what keeps the value comparable, so the verdict diff that
+// decides which Gateways to re-upsert is a == on a uint8, with no equality
+// function to write or to forget.
 type conflictKinds uint8
 
 const (
@@ -71,29 +73,15 @@ func (k conflictKinds) verdict() conditions.ListenerConditionVerdict {
 	return ""
 }
 
-// listenerOnPort is what this controller knows about one listener bound to one
-// port: the protocol category it puts on that port, and the conflicts it is in.
+// conflictsByListener is every listener bound to one port and the conflicts it is
+// in, keyed by listener so that both readers -- the check that reports one
+// listener, and the diff that asks what a listener's verdict was -- are a direct
+// lookup.
 //
-// The category is kept for every listener, conflicting or not, because it is a
-// permanent fact rather than part of a verdict -- and it is read on the
-// non-conflicting entries: that is where the VirtualListener, hence the HAProxy
-// frontend, takes the category of its port.
-//
-// Entirely comparable on purpose. The verdict diff that decides which Gateways to
-// re-upsert compares two of these with ==, so there is no equality function to
-// write, or to forget when a field is added. A pointer field would compare
-// addresses instead, and the table is rebuilt every cycle, so the diff would
-// silently regress to "everything changed" -- which is the behaviour the sister
-// branch has just removed.
-type listenerOnPort struct {
-	protocolCategory protocols.ProtocolCategory
-	conflicts        conflictKinds
-}
-
-// listenersOnPort is every listener bound to one port, keyed by listener so that
-// both readers -- the check that reports one listener, and the diff that asks what
-// a listener's verdict was -- are a direct lookup.
-type listenersOnPort map[listenerKey]listenerOnPort
+// It holds an entry for every listener on the port, in no conflict included. That
+// totality is what makes the diff sound: an absent entry is a real difference and
+// not a gap.
+type conflictsByListener map[listenerKey]conflictKinds
 
 type GatewayBuilderParams struct {
 	// storage.CertificateStorage
@@ -166,7 +154,7 @@ func (b *GatewayBuilderImpl) computeGateTreeUpdates() {
 			for _, listener := range treeGw.Listeners {
 				listener.BuildConditions(treeGw)
 			}
-			treeGw.checkListenerConflicts(b.ControllerStore.mapPort2Listeners)
+			treeGw.checkListenerConflicts(b.ControllerStore.conflictsByPort)
 			treeGw.BuildConditions()
 		}
 	}
@@ -282,23 +270,27 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 		case gatewayv1.HTTPProtocolType, gatewayv1.TLSProtocolType:
 			listener.checkRouteGroupKind(rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
 			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
-			listener.checkConflict(b.ControllerStore.mapPort2Listeners)
+			listener.checkConflict(b.ControllerStore.conflictsByPort)
 		case gatewayv1.HTTPSProtocolType:
 			listener.checkRouteGroupKind(rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
 			listener.checkCertificateRefs(b.GateTree.Secrets, b.referenceGrantManager)
 			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
-			listener.checkConflict(b.ControllerStore.mapPort2Listeners)
+			listener.checkConflict(b.ControllerStore.conflictsByPort)
 		default:
 			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
-			listener.checkConflict(b.ControllerStore.mapPort2Listeners)
+			listener.checkConflict(b.ControllerStore.conflictsByPort)
 		}
 		listener.checkPort(b.ControllerStore.PortBinder)
 	}
 }
 
 func (b *GatewayBuilderImpl) resetListenerConflicts() {
-	b.ControllerStore.previousMapPort2Listeners = b.ControllerStore.mapPort2Listeners
-	b.ControllerStore.mapPort2Listeners = make(map[gatewayv1.PortNumber]listenersOnPort)
+	b.ControllerStore.previousConflictsByPort = b.ControllerStore.conflictsByPort
+	b.ControllerStore.conflictsByPort = make(map[gatewayv1.PortNumber]conflictsByListener)
+	// Not kept from one cycle to the next: a port's category is decided by whichever
+	// listener claims it first this cycle, and carrying a stale one over would let a
+	// deleted Gateway keep dictating the category of a port it no longer serves.
+	b.ControllerStore.protocolCategoryByPort = make(map[gatewayv1.PortNumber]protocols.ProtocolCategory)
 }
 
 // checkListenerConflicts recomputes the listener conflict table, then re-upserts
@@ -340,8 +332,8 @@ func (b *GatewayBuilderImpl) checkListenerConflicts() {
 // verdict changed between the previous and the current cycle.
 func (b *GatewayBuilderImpl) gatewaysWithChangedConflictVerdict() map[client.ObjectKey]struct{} {
 	return gatewaysWithChangedConflictVerdict(
-		b.ControllerStore.previousMapPort2Listeners,
-		b.ControllerStore.mapPort2Listeners,
+		b.ControllerStore.previousConflictsByPort,
+		b.ControllerStore.conflictsByPort,
 	)
 }
 
@@ -357,29 +349,29 @@ func (b *GatewayBuilderImpl) gatewaysWithChangedConflictVerdict() map[client.Obj
 // edited, hence already present in ClusterStore.Updates — selecting it is a no-op
 // filtered out by the StatusUpserted guard in checkListenerConflicts.
 func gatewaysWithChangedConflictVerdict(
-	previous, current map[gatewayv1.PortNumber]listenersOnPort,
+	previous, current map[gatewayv1.PortNumber]conflictsByListener,
 ) map[client.ObjectKey]struct{} {
 	gwKeys := map[client.ObjectKey]struct{}{}
 
 	for port, currentConflicts := range current {
 		previousConflicts := previous[port]
-		for listenerKey, currentCondition := range currentConflicts {
-			previousCondition, existed := previousConflicts[listenerKey]
-			if existed && previousCondition == currentCondition {
+		for key, currentKinds := range currentConflicts {
+			previousKinds, existed := previousConflicts[key]
+			if existed && previousKinds == currentKinds {
 				continue
 			}
-			gwKeys[listenerKey.GatewayKey] = struct{}{}
+			gwKeys[key.GatewayKey] = struct{}{}
 		}
 	}
 
 	// Listeners that were in the previous table and are gone from the current one.
 	for port, previousConflicts := range previous {
 		currentConflicts := current[port]
-		for listenerKey := range previousConflicts {
-			if _, stillPresent := currentConflicts[listenerKey]; stillPresent {
+		for key := range previousConflicts {
+			if _, stillPresent := currentConflicts[key]; stillPresent {
 				continue
 			}
-			gwKeys[listenerKey.GatewayKey] = struct{}{}
+			gwKeys[key.GatewayKey] = struct{}{}
 		}
 	}
 
@@ -393,18 +385,17 @@ type nbListeners struct {
 
 // nbListenersWithAndWithoutConflict returns the number of listeners that have a conflict
 // and the number of listeners that do not have a conflict for a given Gateway.
-func nbListenersWithAndWithoutConflict(mapPort2ListenerConflict map[gatewayv1.PortNumber]listenersOnPort, treeGw *Gateway) nbListeners {
+func nbListenersWithAndWithoutConflict(conflictsByPort map[gatewayv1.PortNumber]conflictsByListener, treeGw *Gateway) nbListeners {
 	nbListeners := nbListeners{}
-	for _, conflictMap := range mapPort2ListenerConflict {
-		for glk, v := range conflictMap {
-			gwk := client.ObjectKeyFromObject(treeGw.K8sResource)
+	gwKey := client.ObjectKeyFromObject(treeGw.K8sResource)
+	for _, conflictsOnPort := range conflictsByPort {
+		for key, conflicts := range conflictsOnPort {
 			// Not our Gateway, continue
-			if glk.GatewayKey != gwk {
+			if key.GatewayKey != gwKey {
 				continue
 			}
 
-			// If there is a conflict for this listener
-			if v.conflicts.any() {
+			if conflicts.any() {
 				nbListeners.withConflict++
 			} else {
 				nbListeners.withoutConflict++

@@ -532,10 +532,10 @@ func TestUnknownConflictKindLeavesListenerRejected(t *testing.T) {
 
 	require.Empty(t, kindNobodyDerives.verdict(), "the premise: this kind has no verdict")
 
-	l.checkConflict(map[gatewayv1.PortNumber]listenersOnPort{
+	l.checkConflict(map[gatewayv1.PortNumber]conflictsByListener{
 		80: {
-			l.Key(): {conflicts: kindNobodyDerives},
-			other:   {conflicts: conflictOnProtocol},
+			l.Key(): kindNobodyDerives,
+			other:   conflictOnProtocol,
 		},
 	})
 
