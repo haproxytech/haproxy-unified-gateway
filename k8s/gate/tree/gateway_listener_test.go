@@ -142,6 +142,114 @@ func TestPartitionRouteKinds(t *testing.T) {
 	}
 }
 
+// Two listeners conflict on hostname exactly when their normalised hostnames are
+// equal -- the property the detection now relies on, having replaced a pairwise
+// predicate by a claim index keyed on that normalised form. Every case of the
+// predicate's table is kept, because each states a rule of the Gateway API rather
+// than a fact about the old implementation.
+func Test_normalizedHostname(t *testing.T) {
+	tests := []struct {
+		name      string
+		hostname1 string
+		hostname2 string
+		want      bool
+	}{
+		{
+			name:      "exact match",
+			hostname1: "example.com",
+			hostname2: "example.com",
+			want:      true,
+		},
+		{
+			name:      "case-insensitive match",
+			hostname1: "Example.com",
+			hostname2: "example.com",
+			want:      true,
+		},
+		{
+			name:      "wildcards are identical",
+			hostname1: "*.example.com",
+			hostname2: "*.example.com",
+			want:      true,
+		},
+		{
+			name:      "both empty - two catch-all listeners conflict",
+			hostname1: "",
+			hostname2: "",
+			want:      true,
+		},
+		// The following pairs are different hostname values: specificity rules (exact >
+		// wildcard > empty) always produce an unambiguous winner, so no conflict.
+		{
+			name:      "wildcard vs matching specific - no conflict (specific beats wildcard)",
+			hostname1: "*.example.com",
+			hostname2: "foo.example.com",
+			want:      false,
+		},
+		{
+			name:      "specific vs matching wildcard - no conflict (specific beats wildcard)",
+			hostname1: "foo.example.com",
+			hostname2: "*.example.com",
+			want:      false,
+		},
+		{
+			name:      "wildcard vs parent domain - no conflict",
+			hostname1: "*.example.com",
+			hostname2: "example.com",
+			want:      false,
+		},
+		{
+			name:      "two different wildcards - no conflict",
+			hostname1: "*.foo.com",
+			hostname2: "*.bar.com",
+			want:      false,
+		},
+		{
+			name:      "two different exact hostnames - no conflict",
+			hostname1: "one.com",
+			hostname2: "two.com",
+			want:      false,
+		},
+		{
+			name:      "empty vs specific - no conflict (empty coexists with specific)",
+			hostname1: "",
+			hostname2: "one.com",
+			want:      false,
+		},
+		{
+			name:      "specific vs empty - no conflict (empty coexists with specific)",
+			hostname1: "one.com",
+			hostname2: "",
+			want:      false,
+		},
+		{
+			name:      "empty vs wildcard - no conflict (empty coexists with wildcard)",
+			hostname1: "",
+			hostname2: "*.example.com",
+			want:      false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			first := gatewayv1.Hostname(tt.hostname1)
+			second := gatewayv1.Hostname(tt.hostname2)
+			conflict := normalizedHostname(&first) == normalizedHostname(&second)
+			assert.Equal(t, tt.want, conflict)
+		})
+	}
+
+	// An unset hostname is a catch-all, which is the same claim as an explicitly
+	// empty one: the detection reaches this function with the spec's pointer, so the
+	// nil path is the common one in production and has to agree with the other.
+	t.Run("nil and empty are the same claim", func(t *testing.T) {
+		empty := gatewayv1.Hostname("")
+		assert.Equal(t, normalizedHostname(nil), normalizedHostname(&empty))
+	})
+}
+
+// newListenerForPortTest builds a Listener + parent Gateway minimally wired
+// for checkPort + BuildConditions. Other checks are left empty so the only
+// failure mode under test is the port-permission check.
 func newListenerForPortTest(port int32) (*Listener, *Gateway) {
 	gw := &Gateway{
 		K8sResource: &gatewayv1.Gateway{

@@ -17,8 +17,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -504,4 +506,218 @@ func TestNonDeletedGateways(t *testing.T) {
 		assert.Equal(t, gwAlive, result[aliveKey])
 		assert.NotContains(t, result, deadKey)
 	})
+}
+
+// Grouping is pure and total: every listener of every non-deleted Gateway lands
+// under its port, in the precedence order it was given, and nothing is decided or
+// written. The pass it replaced returned only the listeners that survived its own
+// protocol verdict, which is what made the composite conflict unreachable.
+func TestGroupListenerRefsByPort(t *testing.T) {
+	t1 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	mkGateway := func(name string, creationTime time.Time, listeners ...gatewayv1.Listener) *Gateway {
+		return &Gateway{K8sResource: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              name,
+				Namespace:         "default",
+				CreationTimestamp: metav1.NewTime(creationTime),
+			},
+			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
+		}}
+	}
+
+	mkListener := func(name string, port int, protocol gatewayv1.ProtocolType) gatewayv1.Listener {
+		return gatewayv1.Listener{
+			Name:     gatewayv1.SectionName(name),
+			Port:     gatewayv1.PortNumber(port),
+			Protocol: protocol,
+		}
+	}
+
+	t.Run("listeners of one Gateway are grouped by port", func(t *testing.T) {
+		gw := mkGateway("gw1", t1,
+			mkListener("http", 80, gatewayv1.HTTPProtocolType),
+			mkListener("https", 443, gatewayv1.HTTPSProtocolType),
+		)
+
+		refsByPort := groupListenerRefsByPort([]*Gateway{gw})
+
+		assert.Len(t, refsByPort, 2)
+		assert.Equal(t, "http", string(refsByPort[80][0].listener.Name))
+		assert.Equal(t, "https", string(refsByPort[443][0].listener.Name))
+	})
+
+	t.Run("a mismatched protocol is grouped like any other, not withheld", func(t *testing.T) {
+		gw := mkGateway("gw1", t1,
+			mkListener("http", 80, gatewayv1.HTTPProtocolType),
+			mkListener("https", 80, gatewayv1.HTTPSProtocolType),
+		)
+
+		refsByPort := groupListenerRefsByPort([]*Gateway{gw})
+
+		assert.Len(t, refsByPort[80], 2,
+			"withholding it is what kept it from ever reaching the hostname pass")
+	})
+
+	t.Run("the order the Gateways were given is the precedence order kept", func(t *testing.T) {
+		older := mkGateway("gw1", t1, mkListener("first", 80, gatewayv1.HTTPProtocolType))
+		younger := mkGateway("gw2", t2, mkListener("second", 80, gatewayv1.HTTPSProtocolType))
+
+		refsByPort := groupListenerRefsByPort([]*Gateway{older, younger})
+
+		assert.Equal(t, "first", string(refsByPort[80][0].listener.Name),
+			"the first entry is what decides the port's category, so the order is a contract")
+		assert.Equal(t, "second", string(refsByPort[80][1].listener.Name))
+	})
+
+	t.Run("nil and deleted gateways are skipped", func(t *testing.T) {
+		alive := mkGateway("alive", t1, mkListener("l1", 80, gatewayv1.HTTPProtocolType))
+		deleted := mkGateway("deleted", t2, mkListener("l2", 80, gatewayv1.HTTPProtocolType))
+		deleted.TreeStatus.Status = store.StatusDeleted
+
+		refsByPort := groupListenerRefsByPort([]*Gateway{nil, deleted, alive})
+
+		assert.Len(t, refsByPort[80], 1)
+		assert.Equal(t, "l1", string(refsByPort[80][0].listener.Name))
+	})
+}
+
+// The protocol pass is the single writer that establishes the table's totality: an
+// entry for every listener, the empty set included. The verdict diff reads an
+// absent entry as a real difference, so a listener the pass forgot would be
+// reported as changed on every cycle -- and one it wrote twice would hide a
+// verdict.
+func TestDetectProtocolConflicts(t *testing.T) {
+	t1 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	mkGateway := func(name string, listeners ...gatewayv1.Listener) *Gateway {
+		return &Gateway{K8sResource: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              name,
+				Namespace:         "default",
+				CreationTimestamp: metav1.NewTime(t1),
+			},
+			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
+		}}
+	}
+
+	mkListener := func(name string, port int, protocol gatewayv1.ProtocolType) gatewayv1.Listener {
+		return gatewayv1.Listener{
+			Name:     gatewayv1.SectionName(name),
+			Port:     gatewayv1.PortNumber(port),
+			Protocol: protocol,
+		}
+	}
+
+	newBuilder := func() *GatewayBuilderImpl {
+		b := &GatewayBuilderImpl{
+			ControllerStore: &ControllerStore{
+				GateTree: &GateTree{Gateways: make(map[client.ObjectKey]*Gateway)},
+			},
+		}
+		b.resetListenerConflicts()
+		return b
+	}
+
+	keyOf := func(gw *Gateway, listenerName string) listenerKey {
+		return gatewayListenerKey(client.ObjectKeyFromObject(gw.K8sResource), gatewayv1.SectionName(listenerName))
+	}
+
+	t.Run("every listener gets an entry, the ones in no conflict included", func(t *testing.T) {
+		gw := mkGateway("gw1",
+			mkListener("http", 80, gatewayv1.HTTPProtocolType),
+			mkListener("http2", 80, gatewayv1.HTTPProtocolType),
+			mkListener("https", 80, gatewayv1.HTTPSProtocolType),
+		)
+		b := newBuilder()
+
+		b.detectProtocolConflicts(groupListenerRefsByPort([]*Gateway{gw}))
+
+		assert.Len(t, b.ControllerStore.conflictsByPort[80], 3,
+			"totality: three listeners on the port, three entries")
+		assert.Equal(t, noConflict, b.ControllerStore.conflictsByPort[80][keyOf(gw, "http")])
+		assert.Equal(t, noConflict, b.ControllerStore.conflictsByPort[80][keyOf(gw, "http2")])
+		assert.Equal(t, protocolConflict, b.ControllerStore.conflictsByPort[80][keyOf(gw, "https")])
+	})
+
+	t.Run("the first listener decides the port's category", func(t *testing.T) {
+		gw := mkGateway("gw1",
+			mkListener("https", 80, gatewayv1.HTTPSProtocolType),
+			mkListener("http", 80, gatewayv1.HTTPProtocolType),
+		)
+		b := newBuilder()
+
+		b.detectProtocolConflicts(groupListenerRefsByPort([]*Gateway{gw}))
+
+		assert.Equal(t, protocols.ProtocolCategorySecure, b.ControllerStore.protocolCategoryByPort[80],
+			"the secure listener came first, so the port is secure")
+		assert.Equal(t, protocolConflict, b.ControllerStore.conflictsByPort[80][keyOf(gw, "http")])
+	})
+
+	t.Run("ports are independent", func(t *testing.T) {
+		gw := mkGateway("gw1",
+			mkListener("http", 80, gatewayv1.HTTPProtocolType),
+			mkListener("https", 443, gatewayv1.HTTPSProtocolType),
+		)
+		b := newBuilder()
+
+		b.detectProtocolConflicts(groupListenerRefsByPort([]*Gateway{gw}))
+
+		assert.Equal(t, protocols.ProtocolCategoryInsecure, b.ControllerStore.protocolCategoryByPort[80])
+		assert.Equal(t, protocols.ProtocolCategorySecure, b.ControllerStore.protocolCategoryByPort[443])
+		assert.Equal(t, noConflict, b.ControllerStore.conflictsByPort[443][keyOf(gw, "https")])
+	})
+}
+
+// The composite case is what the exclusion made unreachable, and it is now the
+// point of the whole restructuring: a listener can hold both kinds at once, which
+// is what a ListenerSet entry will report as ListenerConflict.
+//
+// The scenario is the smallest one that produces it. On port 80 the first listener
+// fixes the insecure category; two HTTPS listeners of the same Gateway follow, both
+// conflicting on protocol, and the second also claims a hostname the first has
+// taken. Under the old shape it never met the hostname pass at all.
+func TestBothConflictKindsAccumulateOnOneListener(t *testing.T) {
+	hostname := gatewayv1.Hostname("foo.example.com")
+	mkListener := func(name string, protocol gatewayv1.ProtocolType, host *gatewayv1.Hostname) gatewayv1.Listener {
+		return gatewayv1.Listener{
+			Name:     gatewayv1.SectionName(name),
+			Port:     80,
+			Protocol: protocol,
+			Hostname: host,
+		}
+	}
+	gw := &Gateway{K8sResource: &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw1", Namespace: "default"},
+		Spec: gatewayv1.GatewaySpec{Listeners: []gatewayv1.Listener{
+			mkListener("http", gatewayv1.HTTPProtocolType, nil),
+			mkListener("https-first", gatewayv1.HTTPSProtocolType, &hostname),
+			mkListener("https-second", gatewayv1.HTTPSProtocolType, &hostname),
+		}},
+	}}
+	gwKey := client.ObjectKeyFromObject(gw.K8sResource)
+
+	b := &GatewayBuilderImpl{ControllerStore: &ControllerStore{
+		GateTree: &GateTree{Gateways: map[client.ObjectKey]*Gateway{gwKey: gw}},
+	}}
+	b.resetListenerConflicts()
+	b.computeListenerConflicts()
+
+	conflictsOnPort80 := b.ControllerStore.conflictsByPort[80]
+	require.Len(t, conflictsOnPort80, 3, "totality: an entry for every listener of the port")
+
+	assert.Equal(t, noConflict, conflictsOnPort80[gatewayListenerKey(gwKey, "http")],
+		"the listener that fixed the category is in no conflict")
+
+	second := conflictsOnPort80[gatewayListenerKey(gwKey, "https-second")]
+	assert.True(t, second.has(conflictOnProtocol))
+	assert.True(t, second.has(conflictOnHostname),
+		"reaching the hostname pass is exactly what the exclusion prevented")
+
+	// The claim index is keyed on the category, so a listener conflicting on protocol
+	// cannot take the claim of one that does not. The catch-all HTTP listener keeps
+	// its own, and the first HTTPS listener keeps the secure claim on that hostname.
+	assert.Equal(t, protocolConflict, conflictsOnPort80[gatewayListenerKey(gwKey, "https-first")],
+		"the first claimant of a hostname in its own category conflicts on protocol only")
 }
