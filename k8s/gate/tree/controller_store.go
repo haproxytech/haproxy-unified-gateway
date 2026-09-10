@@ -134,14 +134,16 @@ func (b *ControllerStore) CheckGatewayClassExists(gwcName string) bool {
 	return ok
 }
 
-// listenerFor resolves a listener key to the listener it denotes. Both lookups are
-// field reads, which is the point of the key being structured.
+// listenerFor resolves a listener key to the listener it denotes: a map lookup for
+// the Gateway, then a scan of its merged listener list for the key itself. The scan
+// is what keeps that list ordered -- the order decides which listener wins a port --
+// and it runs over a handful of entries.
 func (b *ControllerStore) listenerFor(key listenerKey) *Listener {
 	treeGw := b.GateTree.Gateways[key.GatewayKey]
 	if treeGw == nil {
 		return nil
 	}
-	return treeGw.Listeners[string(key.ListenerName)]
+	return treeGw.listenerByKey(key)
 }
 
 // GetGatewayForListener returns the Gateway this listener is served on, or nil if

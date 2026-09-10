@@ -32,14 +32,13 @@ func newProtocolTestGateway(protocols ...gatewayv1.ProtocolType) *Gateway {
 		CheckValidGatewayClass: CheckResult{Valid: true},
 		CheckParamsRef:         CheckResult{Valid: true},
 		CheckConflict:          CheckResult{Valid: true},
-		Listeners:              make(map[string]*Listener),
 	}
-	for i, protocol := range protocols {
+	for _, protocol := range protocols {
 		valid := protocol == gatewayv1.HTTPProtocolType || protocol == gatewayv1.HTTPSProtocolType || protocol == gatewayv1.TLSProtocolType
-		gw.Listeners[string(rune('a'+i))] = &Listener{
+		gw.Listeners = append(gw.Listeners, &Listener{
 			K8sGatewayListener: &gatewayv1.Listener{},
 			CheckProtocol:      CheckResult{Valid: valid},
-		}
+		})
 	}
 	return gw
 }

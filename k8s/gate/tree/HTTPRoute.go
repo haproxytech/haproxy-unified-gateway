@@ -248,8 +248,8 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 	// Compute the list of attachable Listeners
 	attachableListeners := make([]*Listener, 0)
 	if parentRef.SectionName != nil {
-		listener, ok := treeGw.Listeners[string(*parentRef.SectionName)]
-		if !ok || !listener.MatchesParentRefPort(parentRef.Port) {
+		listener := treeGw.OwnListenerByName(*parentRef.SectionName)
+		if listener == nil || !listener.MatchesParentRefPort(parentRef.Port) {
 			return checkParentRefResult{
 				Managed:    true,
 				Valid:      false,
@@ -258,7 +258,11 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 		}
 		attachableListeners = append(attachableListeners, listener)
 	} else {
-		for _, listener := range treeGw.Listeners {
+		// No sectionName: every listener the Gateway declares itself is a candidate.
+		// Not the entries contributed by its ListenerSets -- those are reached by
+		// naming the ListenerSet as parentRef. A parentRef port, when it names one,
+		// narrows the candidates to the listeners on that port.
+		for _, listener := range treeGw.OwnListeners() {
 			if !listener.MatchesParentRefPort(parentRef.Port) {
 				continue
 			}

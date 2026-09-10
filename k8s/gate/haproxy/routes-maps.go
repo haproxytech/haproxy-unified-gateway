@@ -200,14 +200,15 @@ func (b *RouteMgrImpl) listenersForParentRefs(parentRefs []gatewayv1.ParentRefer
 			continue
 		}
 		if parentRef.SectionName != nil {
-			l, ok := treeGw.Listeners[string(*parentRef.SectionName)]
-			if ok {
+			// The Gateway's own listeners only: a sectionName on a Gateway parentRef
+			// never names an entry contributed by a ListenerSet.
+			if l := treeGw.OwnListenerByName(*parentRef.SectionName); l != nil {
 				result = append(result, l)
 			}
 		} else {
-			for _, l := range treeGw.Listeners {
-				result = append(result, l)
-			}
+			// No sectionName: the Gateway's own listeners, not the entries its
+			// ListenerSets contribute -- those are reached by naming the ListenerSet.
+			result = append(result, treeGw.OwnListeners()...)
 		}
 	}
 	return result

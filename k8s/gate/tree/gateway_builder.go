@@ -213,7 +213,7 @@ func (b *GatewayBuilderImpl) CleanTreeUpdates() {
 }
 
 func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
-	processedListeners := make(map[string]*Listener)
+	processedListeners := make([]*Listener, 0, len(treeGw.K8sResource.Spec.Listeners))
 
 	gwKey := client.ObjectKeyFromObject(treeGw.K8sResource)
 	for _, listener := range treeGw.K8sResource.Spec.Listeners {
@@ -227,7 +227,7 @@ func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
 			AttachedRoutes:           make(map[client.ObjectKey]struct{}),
 			Conditions:               make(generic.Conditions),
 		}
-		processedListeners[string(listener.Name)] = &processedListener
+		processedListeners = append(processedListeners, &processedListener)
 	}
 	treeGw.Listeners = processedListeners
 

@@ -43,8 +43,6 @@ type Gateway struct {
 	HugGate *v3.HugGate
 	// Final Conditions
 	Conditions generic.Conditions
-	// Listeners include the listeners of the Gateway.
-	Listeners map[string]*Listener // map[listenerName]
 	// TreeStatus
 	TreeStatus TreeUpdate[Gateway]
 	// Management Checks
@@ -52,6 +50,34 @@ type Gateway struct {
 	CheckValidGatewayClass CheckResult
 	// Additional checks
 	CheckConflict CheckResult
+	// Listeners is the merged listener list of this Gateway, in precedence order:
+	// the listeners the Gateway declares itself, in spec order, then the entries
+	// contributed by attached ListenerSets.
+	//
+	// Not a map keyed by the bare name: a listener name is unique only within the
+	// resource declaring it. The Gateway API explicitly allows the same name on a
+	// Gateway and on its ListenerSets, and on sibling ListenerSets, so such a map
+	// would collapse the homonyms -- the last of the consequences the structured
+	// listenerKey was introduced to remove.
+	//
+	// Not a map keyed by listenerKey either, which would fix the collapse but not
+	// the order, and the order is load-bearing: conflict detection gives a port to
+	// the first listener claiming it, so a map would make that verdict depend on
+	// Go's iteration order, hence on a hash seed.
+	//
+	// And not a map beside a slice, which would have both properties at the price of
+	// an invariant -- "the two hold the same elements" -- maintained procedurally and
+	// verified nowhere. That is the shape of defect this package has been removing:
+	// one field read as two things, a flag doubling a reason, a table whose totality
+	// two writers maintained between them.
+	//
+	// So a slice, and lookups that scan it. The list is bounded and small: the API
+	// caps a Gateway's own listeners at 64, and TooManyListeners exists because the
+	// merged total has to be capped as well. A scan runs once per route or per
+	// verdict, never per request. If it ever measured, the escape is an index
+	// derived from this list once per cycle -- one writer, nothing to keep in sync --
+	// rather than a second source of truth.
+	Listeners []*Listener
 	// Valid shows whether the Gateway is valid.
 	Valid bool
 	// Ingress Frontend equivalent
@@ -125,7 +151,7 @@ func (g *Gateway) reset() {
 	g.CheckValidGatewayClass = CheckResult{}
 	g.CheckConflict = CheckResult{}
 	g.Valid = false
-	g.Listeners = make(map[string]*Listener)
+	g.Listeners = nil
 }
 
 func (g *Gateway) SetAsManaged(logger *slog.Logger, cs ControllerStore) {
@@ -311,6 +337,58 @@ func (g *Gateway) checkListenerConflicts(conflictsByPort map[gatewayv1.PortNumbe
 		}
 	}
 	g.Valid = g.Valid && g.CheckConflict.Valid
+}
+
+// listenerByKey resolves a listener of the merged list by its identity. A linear
+// scan over a handful of listeners, which is what lets the list stay ordered.
+func (g *Gateway) listenerByKey(key listenerKey) *Listener {
+	for _, listener := range g.Listeners {
+		if listener.Key() == key {
+			return listener
+		}
+	}
+	return nil
+}
+
+// OwnListeners are the listeners this Gateway declares itself, without the entries
+// contributed by attached ListenerSets.
+//
+// This is the list a parentRef naming the Gateway attaches to. The Gateway API is
+// explicit that a route reaches a ListenerSet's listeners "by specifying it as a
+// parentRef": the parent named is the resource whose listeners are candidates, and
+// reaching both a Gateway and one of its ListenerSets takes two parentRefs. The
+// same asymmetry is what makes the API's own counter-example hold -- a Gateway
+// parentRef carrying a sectionName that exists only on a ListenerSet must not
+// attach.
+//
+// Filtered by origin rather than taken as the leading run of the merged list: the
+// order is a contract for precedence, not a promise that own listeners come first
+// for ever.
+func (g *Gateway) OwnListeners() []*Listener {
+	own := make([]*Listener, 0, len(g.Listeners))
+	for _, listener := range g.Listeners {
+		if !listener.FromListenerSet() {
+			own = append(own, listener)
+		}
+	}
+	return own
+}
+
+// OwnListenerByName resolves a listener the Gateway declares **itself**, by the
+// name a sectionName would use.
+//
+// Deliberately blind to the entries contributed by ListenerSets: a parentRef naming
+// this Gateway with a sectionName that exists only on one of its ListenerSets must
+// not attach -- reaching such a listener requires naming the ListenerSet as parent.
+// The Gateway API gives that exact case as a counter-example, and resolving it here
+// by bare name over the whole merged list is how an implementation gets it wrong.
+func (g *Gateway) OwnListenerByName(name gatewayv1.SectionName) *Listener {
+	for _, listener := range g.Listeners {
+		if !listener.FromListenerSet() && listener.Name() == name {
+			return listener
+		}
+	}
+	return nil
 }
 
 func (g *Gateway) BuildConditions() {
