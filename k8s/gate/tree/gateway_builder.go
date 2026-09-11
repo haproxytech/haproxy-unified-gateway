@@ -237,8 +237,19 @@ func (b *GatewayBuilderImpl) constructListenersOfUpsertedGateways() {
 		if treeGw.TreeStatus.Status != store.StatusUpserted {
 			continue
 		}
-		treeGw.constructOwnListeners()
+		b.constructMergedListeners(treeGw)
 	}
+}
+
+// constructMergedListeners rebuilds one Gateway's merged listener list, own
+// listeners then contributed entries.
+//
+// The contributions are looked up rather than passed in because the two callers
+// reach this from different places -- the pass above, and the re-upsert inside
+// conflict detection -- and neither should know where the table lives.
+func (b *GatewayBuilderImpl) constructMergedListeners(treeGw *Gateway) {
+	gwKey := client.ObjectKeyFromObject(treeGw.K8sResource)
+	treeGw.constructListeners(b.ControllerStore.contributedListenersByGatewayKey[gwKey])
 }
 
 // checkListeners runs every listener check of a Gateway, the conflict verdicts
@@ -334,9 +345,10 @@ func (b *GatewayBuilderImpl) checkListenerConflicts() {
 			// SetAsUpserted resets the Gateway, which drops the listener list built
 			// ahead of detection -- and the checks the re-upsert exists to trigger
 			// iterate that list, so it has to come back. Rebuilding is sound rather
-			// than merely convenient: the spec has not moved, so the listeners come
-			// back with the same keys, and the verdicts just recorded still resolve.
-			treeGw.constructOwnListeners()
+			// than merely convenient: neither the spec nor the contributions have
+			// moved, so the listeners come back with the same keys, and the verdicts
+			// just recorded still resolve.
+			b.constructMergedListeners(treeGw)
 		}
 	}
 }

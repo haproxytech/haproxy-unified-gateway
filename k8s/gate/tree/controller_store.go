@@ -23,6 +23,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -51,6 +52,18 @@ type ControllerStore struct {
 	// protocol. The VirtualListener, hence the HAProxy frontend, takes its category
 	// from here.
 	protocolCategoryByPort map[gatewayv1.PortNumber]protocols.ProtocolCategory
+	// contributedListenersByGatewayKey holds, per parent Gateway, the listeners the
+	// ListenerSets allowed to attach to it contribute, already in the precedence
+	// order the API prescribes: ListenerSets oldest first, then alphabetically by
+	// namespace/name, and within one ListenerSet its entries in spec order.
+	//
+	// It exists because the two halves run in different phases. The contribution pass
+	// reads only the cluster store, and runs before the Gateway builder has created
+	// or reset this cycle's tree Gateways, so it cannot append to a merged list that
+	// does not exist yet. It leaves the entries here instead, and the Gateway builder
+	// appends them after a Gateway's own listeners -- one writer for the merged list,
+	// which is what keeps the precedence order stated in a single place.
+	contributedListenersByGatewayKey map[client.ObjectKey][]*Listener
 	// conflictsByPort holds, for each port and each listener on it, the conflicts
 	// that listener is in -- the empty set included, which is what makes the diff
 	// below sound. previousConflictsByPort is the same table as of the previous

@@ -339,6 +339,20 @@ func (g *Gateway) checkListenerConflicts(conflictsByPort map[gatewayv1.PortNumbe
 	g.Valid = g.Valid && g.CheckConflict.Valid
 }
 
+// constructListeners fills the merged listener list: the listeners this Gateway
+// declares itself, in spec order, then the entries contributed by the ListenerSets
+// allowed to attach to it, in the order they were handed over.
+//
+// These two lines are the precedence contract the API states, and they are the only
+// place it is expressed. The contributed entries arrive already ordered among
+// themselves -- ListenerSets oldest first, ties on namespace/name -- because that
+// order is a property of the set of contributors, which only the contribution pass
+// sees; what belongs here is that the Gateway's own listeners come first.
+func (g *Gateway) constructListeners(contributedListeners []*Listener) {
+	g.constructOwnListeners()
+	g.Listeners = append(g.Listeners, contributedListeners...)
+}
+
 // constructOwnListeners fills the merged listener list with the listeners this
 // Gateway declares itself, in spec order, and nothing else.
 //

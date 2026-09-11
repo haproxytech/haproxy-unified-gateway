@@ -82,10 +82,18 @@ func (sp *gatewayClassStatusPatcher) SetStatus(obj client.Object) error {
 // ---------------------------
 // Gateway
 func newGatewayStatusPatcher(gw *tree.Gateway, addresses []gatewayv1.GatewayStatusAddress, extractGVK utilsk8s.ExtractGVK, logger *slog.Logger) StatusPatcher {
-	listenerStatuses := make([]gatewayv1.ListenerStatus, 0, len(gw.Listeners))
+	ownListeners := gw.OwnListeners()
+	listenerStatuses := make([]gatewayv1.ListenerStatus, 0, len(ownListeners))
 	if gw.Valid {
 		// If the Gateway is invalid, the listeners status should be empty
-		for _, listener := range gw.Listeners {
+		//
+		// Own listeners only, never the merged list. A Gateway's status.listeners
+		// describes the listeners it declares: an entry contributed by a ListenerSet
+		// is reported in that ListenerSet's own status.listeners instead. Publishing
+		// it here would also key it by its bare name in a list the API treats as a
+		// map by name, and a name is unique only within the resource declaring it --
+		// so two homonymous entries, which the API explicitly allows, would collide.
+		for _, listener := range ownListeners {
 			conds := listener.Conditions.ToMetav1Conditions()
 			// A listener whose protocol is not supported supports no route kind,
 			// so supportedKinds stays empty (see conformance tests
@@ -391,10 +399,17 @@ func FilterTLSRouteStatusByControllerName(tlsRouteStatus v1alpha2.TLSRouteStatus
 // the live k8s gateway status.
 func newGatewayListenerFeedbackStatusPatcher(gw *tree.Gateway, logger *slog.Logger) StatusPatcher {
 	condType := generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
-	snapshot := make(map[gatewayv1.SectionName]generic.Condition, len(gw.Listeners))
+	ownListeners := gw.OwnListeners()
+	snapshot := make(map[gatewayv1.SectionName]generic.Condition, len(ownListeners))
 	logger.LogAttrs(context.Background(), slog.LevelDebug, "[feedback] gateway",
 		logging.LogAttrObjectKey(gw.K8sResource))
-	for _, listener := range gw.Listeners {
+	// Own listeners only: this snapshot is keyed by bare section name and applied to
+	// the Gateway's status.listeners, and a bare name only identifies a listener
+	// within the resource that declares it. Feeding the merged list in would let a
+	// contributed entry overwrite the Programmed condition of a Gateway listener that
+	// happens to share its name -- which the API explicitly permits. The feedback for
+	// contributed entries is a separate path, keyed on the full listener key.
+	for _, listener := range ownListeners {
 		if cond, ok := listener.Conditions.GetCondition(condType); ok {
 			snapshot[listener.Name()] = cond
 			logger.LogAttrs(context.Background(), slog.LevelDebug, "[feedback] listener",

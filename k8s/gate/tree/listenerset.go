@@ -18,6 +18,7 @@ import (
 	"log/slog"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -35,6 +36,13 @@ type ListenerSet struct {
 	K8sResource *gatewayv1.ListenerSet
 	// TreeStatus
 	TreeStatus TreeUpdate[ListenerSet]
+	// Attachment is what the contribution pass decided: whether this ListenerSet's
+	// listeners entered the parent Gateway's merged list, and if not, whether the
+	// refusal is this controller's to report. Written once per cycle by the
+	// contribution pass, which is the only place the decision is taken -- the pass
+	// that reports it must not re-derive it, or the status and the data plane could
+	// disagree.
+	Attachment listenerSetAttachment
 }
 
 func NewListenerSet(k8sObject *gatewayv1.ListenerSet) *ListenerSet {
@@ -45,6 +53,33 @@ func NewListenerSet(k8sObject *gatewayv1.ListenerSet) *ListenerSet {
 			OldTreeResource: nil,
 		},
 	}
+}
+
+// GetCreationTimestamp, GetNamespace and GetName make a tree ListenerSet sortable
+// by SortByCreationTimestamp, which is exactly the precedence the API prescribes for
+// the ListenerSets attached to one Gateway: oldest first, ties broken on
+// "{namespace}/{name}". They return zero values once the resource is gone, which is
+// harmless -- a deleted ListenerSet contributes nothing, so where it sorts does not
+// matter.
+func (ls *ListenerSet) GetCreationTimestamp() metav1.Time {
+	if ls != nil && ls.K8sResource != nil {
+		return ls.K8sResource.GetCreationTimestamp()
+	}
+	return metav1.Time{}
+}
+
+func (ls *ListenerSet) GetNamespace() string {
+	if ls != nil && ls.K8sResource != nil {
+		return ls.K8sResource.GetNamespace()
+	}
+	return ""
+}
+
+func (ls *ListenerSet) GetName() string {
+	if ls != nil && ls.K8sResource != nil {
+		return ls.K8sResource.GetName()
+	}
+	return ""
 }
 
 func (ls *ListenerSet) SetAsDeleted(logger *slog.Logger) {
