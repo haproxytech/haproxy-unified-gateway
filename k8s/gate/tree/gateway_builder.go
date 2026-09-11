@@ -14,7 +14,6 @@
 package tree
 
 import (
-	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
@@ -129,6 +128,12 @@ func (b *GatewayBuilderImpl) computeGateTreeUpdates() {
 		b.computeTreeGatewayUpdate(gwKey, gwUpdate)
 	}
 
+	// The listener lists have to exist before conflicts are detected: detection
+	// compares listeners with each other, and a verdict depends on the others
+	// sharing the port. So every list is built, then the whole tree is compared,
+	// then each listener is judged.
+	b.constructListenersOfUpsertedGateways()
+
 	// Check for conflicts
 	// Add all Gateways that have a conflict in the list of updated Gateways
 	// in order to recompute the checks and status (both Gateway and listeners)
@@ -141,7 +146,7 @@ func (b *GatewayBuilderImpl) computeGateTreeUpdates() {
 
 		if treeGw.isManaged() {
 			// Process Listeners
-			b.buildListeners(treeGw)
+			b.checkListeners(treeGw)
 
 			// Compute status only if managed Gateway
 			// If not managed, then we should not update the status
@@ -212,26 +217,33 @@ func (b *GatewayBuilderImpl) CleanTreeUpdates() {
 	cleanTreeUpdates(b.UnmanagedGateTree.Gateways)
 }
 
-func (b *GatewayBuilderImpl) buildListeners(treeGw *Gateway) {
-	processedListeners := make([]*Listener, 0, len(treeGw.K8sResource.Spec.Listeners))
-
-	gwKey := client.ObjectKeyFromObject(treeGw.K8sResource)
-	for _, listener := range treeGw.K8sResource.Spec.Listeners {
-		processedListener := Listener{
-			ListenerKey:        gatewayListenerKey(gwKey, listener.Name),
-			K8sGatewayListener: &listener,
-			// This Gateway declares the listener, so it is what its object
-			// references are resolved and granted against.
-			OwnerKind:                kindGateway,
-			ExemptFromReferenceGrant: treeGw.GatewayForIngress,
-			AttachedRoutes:           make(map[client.ObjectKey]struct{}),
-			Conditions:               make(generic.Conditions),
+// constructListenersOfUpsertedGateways builds the merged listener list of every
+// Gateway upserted this cycle, ahead of conflict detection.
+//
+// Only the upserted ones: an untouched Gateway keeps the list it was built with,
+// its spec not having moved, and detection needs the lists of the whole tree. The
+// two sets meet because a Gateway enters the tree upserted, so every Gateway in it
+// has been through this pass at least once.
+//
+// Not gated on isManaged, unlike the checks: detection spans every non-deleted
+// Gateway of the tree, so withholding a list here would silently remove its
+// listeners from the comparison -- and the first listener on a port is what fixes
+// that port's category for all the others.
+func (b *GatewayBuilderImpl) constructListenersOfUpsertedGateways() {
+	for _, treeGw := range b.ControllerStore.GateTree.Gateways {
+		if treeGw == nil || treeGw.K8sResource == nil {
+			continue
 		}
-		processedListeners = append(processedListeners, &processedListener)
+		if treeGw.TreeStatus.Status != store.StatusUpserted {
+			continue
+		}
+		treeGw.constructOwnListeners()
 	}
-	treeGw.Listeners = processedListeners
+}
 
-	// Performs all needed checks
+// checkListeners runs every listener check of a Gateway, the conflict verdicts
+// having been settled beforehand.
+func (b *GatewayBuilderImpl) checkListeners(treeGw *Gateway) {
 	for _, listener := range treeGw.Listeners {
 		listener.resetChecks()
 
@@ -319,6 +331,12 @@ func (b *GatewayBuilderImpl) checkListenerConflicts() {
 		if treeGw.TreeStatus.Status != store.StatusUpserted && treeGw.TreeStatus.Status != store.StatusDeleted {
 			treeGw.SetAsUpserted(b.Logger, treeGw.K8sResource)
 			b.processManagementChecks(treeGw)
+			// SetAsUpserted resets the Gateway, which drops the listener list built
+			// ahead of detection -- and the checks the re-upsert exists to trigger
+			// iterate that list, so it has to come back. Rebuilding is sound rather
+			// than merely convenient: the spec has not moved, so the listeners come
+			// back with the same keys, and the verdicts just recorded still resolve.
+			treeGw.constructOwnListeners()
 		}
 	}
 }

@@ -297,7 +297,7 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 	// GatewayClass is deliberately absent from the tree so processManagementChecks
 	// returns early: this test is about the selection, not about management.
 	mkGateway := func(name string, created metav1.Time, protocol gatewayv1.ProtocolType, status store.Status) *Gateway {
-		return &Gateway{
+		treeGw := &Gateway{
 			K8sResource: &gatewayv1.Gateway{
 				Name:              name,
 				Namespace:         ns,
@@ -311,6 +311,12 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 			},
 			TreeStatus: TreeUpdate[Gateway]{Status: status},
 		}
+		// A Gateway held by the tree has been through the construction pass, whatever
+		// cycle upserted it -- including the ones untouched this cycle, whose lists
+		// are what detection compares them on. So build it here rather than in the
+		// subtests: it is part of being in the tree at all.
+		treeGw.constructOwnListeners()
+		return treeGw
 	}
 
 	keyOf := func(gwName string) listenerKey {

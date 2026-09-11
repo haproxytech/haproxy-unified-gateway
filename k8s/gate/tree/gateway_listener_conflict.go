@@ -25,26 +25,6 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// listenerRef is one listener together with the Gateway that declares it.
-//
-// Conflict detection runs before buildListeners, so the tree Listener objects do
-// not exist yet and the spec has to be read from the Kubernetes resource. That
-// ordering is not incidental: a listener's conditions depend on the other listeners
-// of the same port, so the verdicts have to be settled before any listener is built
-// from them.
-type listenerRef struct {
-	gateway  *gatewayv1.Gateway
-	listener gatewayv1.Listener
-}
-
-func (r listenerRef) key() listenerKey {
-	return gatewayListenerKey(client.ObjectKeyFromObject(r.gateway), r.listener.Name)
-}
-
-func (r listenerRef) protocolCategory() protocols.ProtocolCategory {
-	return protocols.ProtocolCategories[r.listener.Protocol]
-}
-
 // computeListenerConflicts detects the conflicts between listeners sharing a port
 // and records them in b.conflictsByPort, along with the category each port serves
 // in b.protocolCategoryByPort.
@@ -57,13 +37,19 @@ func (r listenerRef) protocolCategory() protocols.ProtocolCategory {
 //     Gateway already claims on that port and category.
 //
 // Listeners of *different* Gateways may claim the same hostname, and are merged
-// into one VirtualListener. That is not a conformance requirement -- no conformance
-// test puts two Gateways on one port -- but it follows from the API's model: each
-// Gateway requests its own Addresses and its listeners are bound to those, so the
-// same port on two Gateways is two sockets and no conflict. The API accordingly
-// defines conflicts within one Gateway's listener list: the Conflicted condition
-// lives in that Gateway's status, and the CEL rule forbidding a duplicate
-// (port, protocol, hostname) is scoped to one resource.
+// into one VirtualListener. That follows from the API's model: each Gateway requests
+// its own Addresses and its listeners are bound to those, so the same port on two
+// Gateways is two sockets and no conflict. The API accordingly defines conflicts
+// within one Gateway's listener list: the Conflicted condition lives in that
+// Gateway's status, and the CEL rule forbidding a duplicate (port, protocol,
+// hostname) is scoped to one resource.
+//
+// Several Gateways on one port is a case the conformance suite exercises heavily --
+// its base manifest alone keeps three on port 80 for the whole run -- and it passes
+// because the suite gives each Gateway its own instance and Service, which is the
+// API's premise honoured. Do not read that as evidence the shared mode is safe: it
+// is evidence of the opposite, the premise having to be restored for the suite to
+// hold.
 //
 // This implementation makes that premise false, and says so itself:
 // prepareGatewayUpdates computes the controller's addresses once and assigns the
@@ -114,9 +100,9 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 		}
 	})
 
-	refsByPort := groupListenerRefsByPort(sortedGws)
-	b.detectProtocolConflicts(refsByPort)
-	b.detectHostnameConflicts(refsByPort)
+	listenersByPort := groupListenersByPort(sortedGws)
+	b.detectProtocolConflicts(listenersByPort)
+	b.detectHostnameConflicts(listenersByPort)
 }
 
 // nonDeletedGateways returns a filtered copy of b.GateTree.Gateways containing
@@ -135,17 +121,23 @@ func (b *GatewayBuilderImpl) nonDeletedGateways() map[types.NamespacedName]*Gate
 	return result
 }
 
-// groupListenerRefsByPort gathers every listener of every Gateway under the port it
-// asks for, keeping within each port the precedence order of the Gateways it was
-// given -- which is what makes "the first one wins" a specified outcome rather than
-// a map-iteration accident.
+// groupListenersByPort gathers the merged listener list of every Gateway under the
+// port each listener asks for, keeping within a port the precedence order of the
+// Gateways it was given -- which is what makes "the first one wins" a specified
+// outcome rather than a map-iteration accident.
 //
 // It decides nothing and writes nowhere. That is the point: the pass that used to
 // group also fixed each port's category and marked the divergent listeners, so its
 // name described half of what it did and the other half was a side effect its
 // callers had to know about.
-func groupListenerRefsByPort(sortedGws []*Gateway) map[gatewayv1.PortNumber][]listenerRef {
-	refsByPort := make(map[gatewayv1.PortNumber][]listenerRef)
+//
+// It reads the Gateway's merged list, not its spec, so a listener contributed by a
+// ListenerSet is grouped and compared exactly like a declared one -- the reason
+// construction was pulled ahead of this pass. Reading the spec would have meant a
+// second representation of a listener, kept in step by hand, and the entries would
+// have had no way into the comparison at all.
+func groupListenersByPort(sortedGws []*Gateway) map[gatewayv1.PortNumber][]*Listener {
+	listenersByPort := make(map[gatewayv1.PortNumber][]*Listener)
 
 	for _, treeGw := range sortedGws {
 		if treeGw == nil || treeGw.K8sResource == nil {
@@ -155,15 +147,12 @@ func groupListenerRefsByPort(sortedGws []*Gateway) map[gatewayv1.PortNumber][]li
 			continue
 		}
 
-		for _, listener := range treeGw.K8sResource.Spec.Listeners {
-			refsByPort[listener.Port] = append(refsByPort[listener.Port], listenerRef{
-				gateway:  treeGw.K8sResource,
-				listener: listener,
-			})
+		for _, listener := range treeGw.Listeners {
+			listenersByPort[listener.Port()] = append(listenersByPort[listener.Port()], listener)
 		}
 	}
 
-	return refsByPort
+	return listenersByPort
 }
 
 // detectProtocolConflicts records the category each port serves -- decided by the
@@ -182,23 +171,23 @@ func groupListenerRefsByPort(sortedGws []*Gateway) map[gatewayv1.PortNumber][]li
 // conflict on protocol is what made the composite case unreachable: a listener that
 // never meets the hostname pass cannot accumulate two kinds, so ListenerConflict --
 // the Gateway API's reason for exactly that case -- could never be reported.
-func (b *GatewayBuilderImpl) detectProtocolConflicts(refsByPort map[gatewayv1.PortNumber][]listenerRef) {
-	for port, refs := range refsByPort {
-		conflictsOnPort := make(conflictsByListener, len(refs))
+func (b *GatewayBuilderImpl) detectProtocolConflicts(listenersByPort map[gatewayv1.PortNumber][]*Listener) {
+	for port, listeners := range listenersByPort {
+		conflictsOnPort := make(conflictsByListener, len(listeners))
 		b.ControllerStore.conflictsByPort[port] = conflictsOnPort
 
-		for _, ref := range refs {
+		for _, listener := range listeners {
 			portCategory, decided := b.ControllerStore.protocolCategoryByPort[port]
 			if !decided {
-				portCategory = ref.protocolCategory()
+				portCategory = listener.protocolCategory()
 				b.ControllerStore.protocolCategoryByPort[port] = portCategory
 			}
 
 			var conflicts conflictKinds
-			if ref.protocolCategory() != portCategory {
+			if listener.protocolCategory() != portCategory {
 				conflicts |= conflictOnProtocol
 			}
-			conflictsOnPort[ref.key()] = conflicts
+			conflictsOnPort[listener.Key()] = conflicts
 		}
 	}
 }
@@ -225,10 +214,10 @@ func (b *GatewayBuilderImpl) detectProtocolConflicts(refsByPort map[gatewayv1.Po
 // but that it lets one Gateway invalidate another's claim, which is a decision about
 // what this controller promises its tenants -- deliberately not taken here.
 type hostnameClaim struct {
-	gateway  client.ObjectKey
-	hostname string
-	category protocols.ProtocolCategory
-	port     gatewayv1.PortNumber
+	gatewayKey client.ObjectKey
+	hostname   string
+	category   protocols.ProtocolCategory
+	port       gatewayv1.PortNumber
 }
 
 // detectHostnameConflicts marks every listener whose hostname claim is already
@@ -238,19 +227,23 @@ type hostnameClaim struct {
 // pass, so no protocol verdict can be overwritten here -- which is the other half
 // of why the exclusion could go: dropping it without making the earlier pass the
 // builder would have had this one reset the verdicts it just recorded.
-func (b *GatewayBuilderImpl) detectHostnameConflicts(refsByPort map[gatewayv1.PortNumber][]listenerRef) {
+func (b *GatewayBuilderImpl) detectHostnameConflicts(listenersByPort map[gatewayv1.PortNumber][]*Listener) {
 	claimed := make(map[hostnameClaim]struct{})
 
-	for port, refs := range refsByPort {
-		for _, ref := range refs {
+	for port, listeners := range listenersByPort {
+		for _, listener := range listeners {
 			claim := hostnameClaim{
-				port:     port,
-				gateway:  client.ObjectKeyFromObject(ref.gateway),
-				category: ref.protocolCategory(),
-				hostname: normalizedHostname(ref.listener.Hostname),
+				port: port,
+				// The Gateway the listener is served on, not the resource declaring
+				// it: the comparison scope is the merged list, so an entry
+				// contributed by a ListenerSet competes with its parent Gateway's
+				// own listeners and with its siblings' entries.
+				gatewayKey: listener.Key().GatewayKey,
+				category:   listener.protocolCategory(),
+				hostname:   normalizedHostname(listener.Hostname()),
 			}
 			if _, taken := claimed[claim]; taken {
-				b.ControllerStore.conflictsByPort[port][ref.key()] |= conflictOnHostname
+				b.ControllerStore.conflictsByPort[port][listener.Key()] |= conflictOnHostname
 				continue
 			}
 			claimed[claim] = struct{}{}

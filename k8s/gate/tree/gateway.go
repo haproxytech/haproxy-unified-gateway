@@ -339,6 +339,38 @@ func (g *Gateway) checkListenerConflicts(conflictsByPort map[gatewayv1.PortNumbe
 	g.Valid = g.Valid && g.CheckConflict.Valid
 }
 
+// constructOwnListeners fills the merged listener list with the listeners this
+// Gateway declares itself, in spec order, and nothing else.
+//
+// Construction is deliberately separate from the checks those listeners then go
+// through, because the two cannot run at the same moment: a listener's conflict
+// verdict depends on the other listeners sharing its port, so every Gateway's list
+// has to exist before any single listener can be judged. Detection consequently
+// compares built listeners rather than re-reading the specs -- one representation of
+// a listener instead of two, which is what lets a contributed entry be compared on
+// the same footing as a declared one.
+//
+// A method on the Gateway rather than on the builder: turning a spec into listeners
+// needs nothing but the Gateway, and the re-upsert path has to redo it.
+func (g *Gateway) constructOwnListeners() {
+	ownListeners := make([]*Listener, 0, len(g.K8sResource.Spec.Listeners))
+	gwKey := client.ObjectKeyFromObject(g.K8sResource)
+
+	for _, specListener := range g.K8sResource.Spec.Listeners {
+		ownListeners = append(ownListeners, &Listener{
+			ListenerKey:        gatewayListenerKey(gwKey, specListener.Name),
+			K8sGatewayListener: &specListener,
+			// This Gateway declares the listener, so it is what its object
+			// references are resolved and granted against.
+			OwnerKind:                kindGateway,
+			ExemptFromReferenceGrant: g.GatewayForIngress,
+			AttachedRoutes:           make(map[client.ObjectKey]struct{}),
+			Conditions:               make(generic.Conditions),
+		})
+	}
+	g.Listeners = ownListeners
+}
+
 // listenerByKey resolves a listener of the merged list by its identity. A linear
 // scan over a handful of listeners, which is what lets the list stay ordered.
 func (g *Gateway) listenerByKey(key listenerKey) *Listener {

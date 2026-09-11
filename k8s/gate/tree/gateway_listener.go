@@ -26,6 +26,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	"k8s.io/apimachinery/pkg/types"
@@ -163,6 +164,17 @@ func (l *Listener) Protocol() gatewayv1.ProtocolType {
 		return l.K8sGatewayListener.Protocol
 	}
 	return ""
+}
+
+// protocolCategory is the category the listener's protocol falls in -- what the
+// HAProxy frontend serving its port has to be, and the scope a hostname claim is
+// compared within.
+//
+// Blind to tls.mode, as the category table itself is: two listeners differing only
+// by Terminate versus Passthrough share a category and are not reported as
+// conflicting on protocol.
+func (l *Listener) protocolCategory() protocols.ProtocolCategory {
+	return protocols.ProtocolCategories[l.Protocol()]
 }
 
 // Hostname returns the listener hostname, nil when unset. An unset hostname is a

@@ -41,9 +41,13 @@ func TestComputeListenerConflicts(t *testing.T) {
 				Listeners: listeners,
 			},
 		}
-		return &Gateway{
+		treeGw := &Gateway{
 			K8sResource: gw,
 		}
+		// Detection compares the merged listener lists, not the specs, so the list
+		// has to be built first -- as the builder does before the detection pass.
+		treeGw.constructOwnListeners()
+		return treeGw
 	}
 
 	// Helper to create a synthetic ingress Gateway (GatewayForIngress set).
@@ -512,12 +516,12 @@ func TestNonDeletedGateways(t *testing.T) {
 // under its port, in the precedence order it was given, and nothing is decided or
 // written. The pass it replaced returned only the listeners that survived its own
 // protocol verdict, which is what made the composite conflict unreachable.
-func TestGroupListenerRefsByPort(t *testing.T) {
+func TestGroupListenersByPort(t *testing.T) {
 	t1 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	t2 := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
 
 	mkGateway := func(name string, creationTime time.Time, listeners ...gatewayv1.Listener) *Gateway {
-		return &Gateway{K8sResource: &gatewayv1.Gateway{
+		treeGw := &Gateway{K8sResource: &gatewayv1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              name,
 				Namespace:         "default",
@@ -525,6 +529,8 @@ func TestGroupListenerRefsByPort(t *testing.T) {
 			},
 			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
 		}}
+		treeGw.constructOwnListeners()
+		return treeGw
 	}
 
 	mkListener := func(name string, port int, protocol gatewayv1.ProtocolType) gatewayv1.Listener {
@@ -541,11 +547,11 @@ func TestGroupListenerRefsByPort(t *testing.T) {
 			mkListener("https", 443, gatewayv1.HTTPSProtocolType),
 		)
 
-		refsByPort := groupListenerRefsByPort([]*Gateway{gw})
+		listenersByPort := groupListenersByPort([]*Gateway{gw})
 
-		assert.Len(t, refsByPort, 2)
-		assert.Equal(t, "http", string(refsByPort[80][0].listener.Name))
-		assert.Equal(t, "https", string(refsByPort[443][0].listener.Name))
+		assert.Len(t, listenersByPort, 2)
+		assert.Equal(t, "http", string(listenersByPort[80][0].Name()))
+		assert.Equal(t, "https", string(listenersByPort[443][0].Name()))
 	})
 
 	t.Run("a mismatched protocol is grouped like any other, not withheld", func(t *testing.T) {
@@ -554,9 +560,9 @@ func TestGroupListenerRefsByPort(t *testing.T) {
 			mkListener("https", 80, gatewayv1.HTTPSProtocolType),
 		)
 
-		refsByPort := groupListenerRefsByPort([]*Gateway{gw})
+		listenersByPort := groupListenersByPort([]*Gateway{gw})
 
-		assert.Len(t, refsByPort[80], 2,
+		assert.Len(t, listenersByPort[80], 2,
 			"withholding it is what kept it from ever reaching the hostname pass")
 	})
 
@@ -564,11 +570,11 @@ func TestGroupListenerRefsByPort(t *testing.T) {
 		older := mkGateway("gw1", t1, mkListener("first", 80, gatewayv1.HTTPProtocolType))
 		younger := mkGateway("gw2", t2, mkListener("second", 80, gatewayv1.HTTPSProtocolType))
 
-		refsByPort := groupListenerRefsByPort([]*Gateway{older, younger})
+		listenersByPort := groupListenersByPort([]*Gateway{older, younger})
 
-		assert.Equal(t, "first", string(refsByPort[80][0].listener.Name),
+		assert.Equal(t, "first", string(listenersByPort[80][0].Name()),
 			"the first entry is what decides the port's category, so the order is a contract")
-		assert.Equal(t, "second", string(refsByPort[80][1].listener.Name))
+		assert.Equal(t, "second", string(listenersByPort[80][1].Name()))
 	})
 
 	t.Run("nil and deleted gateways are skipped", func(t *testing.T) {
@@ -576,10 +582,10 @@ func TestGroupListenerRefsByPort(t *testing.T) {
 		deleted := mkGateway("deleted", t2, mkListener("l2", 80, gatewayv1.HTTPProtocolType))
 		deleted.TreeStatus.Status = store.StatusDeleted
 
-		refsByPort := groupListenerRefsByPort([]*Gateway{nil, deleted, alive})
+		listenersByPort := groupListenersByPort([]*Gateway{nil, deleted, alive})
 
-		assert.Len(t, refsByPort[80], 1)
-		assert.Equal(t, "l1", string(refsByPort[80][0].listener.Name))
+		assert.Len(t, listenersByPort[80], 1)
+		assert.Equal(t, "l1", string(listenersByPort[80][0].Name()))
 	})
 }
 
@@ -592,7 +598,7 @@ func TestDetectProtocolConflicts(t *testing.T) {
 	t1 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	mkGateway := func(name string, listeners ...gatewayv1.Listener) *Gateway {
-		return &Gateway{K8sResource: &gatewayv1.Gateway{
+		treeGw := &Gateway{K8sResource: &gatewayv1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              name,
 				Namespace:         "default",
@@ -600,6 +606,8 @@ func TestDetectProtocolConflicts(t *testing.T) {
 			},
 			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
 		}}
+		treeGw.constructOwnListeners()
+		return treeGw
 	}
 
 	mkListener := func(name string, port int, protocol gatewayv1.ProtocolType) gatewayv1.Listener {
@@ -632,7 +640,7 @@ func TestDetectProtocolConflicts(t *testing.T) {
 		)
 		b := newBuilder()
 
-		b.detectProtocolConflicts(groupListenerRefsByPort([]*Gateway{gw}))
+		b.detectProtocolConflicts(groupListenersByPort([]*Gateway{gw}))
 
 		assert.Len(t, b.ControllerStore.conflictsByPort[80], 3,
 			"totality: three listeners on the port, three entries")
@@ -648,7 +656,7 @@ func TestDetectProtocolConflicts(t *testing.T) {
 		)
 		b := newBuilder()
 
-		b.detectProtocolConflicts(groupListenerRefsByPort([]*Gateway{gw}))
+		b.detectProtocolConflicts(groupListenersByPort([]*Gateway{gw}))
 
 		assert.Equal(t, protocols.ProtocolCategorySecure, b.ControllerStore.protocolCategoryByPort[80],
 			"the secure listener came first, so the port is secure")
@@ -662,7 +670,7 @@ func TestDetectProtocolConflicts(t *testing.T) {
 		)
 		b := newBuilder()
 
-		b.detectProtocolConflicts(groupListenerRefsByPort([]*Gateway{gw}))
+		b.detectProtocolConflicts(groupListenersByPort([]*Gateway{gw}))
 
 		assert.Equal(t, protocols.ProtocolCategoryInsecure, b.ControllerStore.protocolCategoryByPort[80])
 		assert.Equal(t, protocols.ProtocolCategorySecure, b.ControllerStore.protocolCategoryByPort[443])
@@ -696,6 +704,7 @@ func TestBothConflictKindsAccumulateOnOneListener(t *testing.T) {
 			mkListener("https-second", gatewayv1.HTTPSProtocolType, &hostname),
 		}},
 	}}
+	gw.constructOwnListeners()
 	gwKey := client.ObjectKeyFromObject(gw.K8sResource)
 
 	b := &GatewayBuilderImpl{ControllerStore: &ControllerStore{
