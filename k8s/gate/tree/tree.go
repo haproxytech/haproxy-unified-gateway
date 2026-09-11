@@ -53,6 +53,9 @@ type GateTree struct {
 	Global                   *Global
 	Defaults                 *DefaultsCR
 	ReferenceGrants          map[types.NamespacedName]*ReferenceGrant
+	// ListenerSets holds the ListenerSets of the cluster. Their listeners are not
+	// here: each is contributed to the merged list of its parent Gateway.
+	ListenerSets map[types.NamespacedName]*ListenerSet
 	// mu protects concurrent access to gateway listener conditions, which may
 	// be written by the feedback path (forwardFeedback) from a separate goroutine.
 	mu sync.RWMutex
@@ -94,12 +97,13 @@ func NewGateTree() *GateTree {
 		Services:         make(map[types.NamespacedName]*Service),
 		VirtualListeners: make(map[string]*VirtualListener),
 		ReferenceGrants:  make(map[types.NamespacedName]*ReferenceGrant),
+		ListenerSets:     make(map[types.NamespacedName]*ListenerSet),
 	}
 }
 
 // TreeResource is a constraint that permits any of the tree's resource types.
 type TreeResource interface {
-	GatewayClass | Gateway | Secret | HTTPRoute | Service | TLSRoute | Global | DefaultsCR | ReferenceGrant
+	GatewayClass | Gateway | Secret | HTTPRoute | Service | TLSRoute | Global | DefaultsCR | ReferenceGrant | ListenerSet
 }
 
 type TreeObject[T TreeResource] interface {
