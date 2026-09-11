@@ -24,6 +24,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -74,10 +75,19 @@ func (*CertificateBuilderImpl) CleanTreeUpdates() {
 // -----------------------------------------------
 
 func (b *CertificateBuilderImpl) computeCertificateDiffs() {
+	// Both origins a listener can have. A listener contributed by a ListenerSet is
+	// indexed under the ListenerSet's own kind -- GEP-1713 keeps the two grant scopes
+	// apart -- and it needs its certificate written exactly like a Gateway
+	// listener's. Asking for the Gateway kind alone left a contributed HTTPS entry
+	// bound to a port with no certificate in its crt-list.
+	listenerOriginKinds := []schema.GroupVersionKind{
+		b.ControllerStore.ExtractGVK(objtypes.ObjectTypeGateway),
+		b.ControllerStore.ExtractGVK(objtypes.ObjectTypeListenerSet),
+	}
 	// Current secrets referenced by a Listener
-	currentSecretsReferenced := b.ControllerStore.ReferencedObjects.ReferencedSecrets.AllReferenced(b.ControllerStore.ExtractGVK(objtypes.ObjectTypeGateway))
+	currentSecretsReferenced := b.ControllerStore.ReferencedObjects.ReferencedSecrets.AllReferencedByAnyOf(listenerOriginKinds...)
 	// Previous secrets referenced by a Listener
-	previousSecretsReferenced := b.ControllerStore.ReferencedObjects.PreviousReferencedSecrets.AllReferenced(b.ControllerStore.ExtractGVK(objtypes.ObjectTypeGateway))
+	previousSecretsReferenced := b.ControllerStore.ReferencedObjects.PreviousReferencedSecrets.AllReferencedByAnyOf(listenerOriginKinds...)
 
 	// Cert
 	// Handle the newly added referenced Secrets

@@ -123,6 +123,39 @@ func (r *ReferencedBy[OwnerKey]) AllReferenced(ownerGVK schema.GroupVersionKind)
 	return referenced
 }
 
+// AllReferencedByAnyOf returns every owned key referenced by an owner of any of the
+// given kinds, with the owner keys merged into one set per owned key.
+//
+// It exists because one owned object can be referenced by owners of different kinds
+// and a consumer may legitimately want all of them: a Secret is referenced by a
+// Gateway listener's certificateRefs and by a ListenerSet entry's, and the
+// certificate builder has to write a PEM for it either way. Asking per kind and
+// merging in the caller would put the union in every consumer, where forgetting one
+// kind produces a listener bound to a port with no certificate -- a failure visible
+// only in a TLS handshake.
+//
+// The kinds stay a parameter rather than becoming "all kinds": the owner GVK is also
+// what a ReferenceGrant is resolved against, so a consumer that must distinguish
+// them keeps AllReferenced.
+func (r *ReferencedBy[OwnerKey]) AllReferencedByAnyOf(ownerGVKs ...schema.GroupVersionKind) map[client.ObjectKey]map[OwnerKey]struct{} {
+	referenced := make(map[client.ObjectKey]map[OwnerKey]struct{})
+	for ownedKey, ownerByGVK := range r.Owner {
+		for _, ownerGVK := range ownerGVKs {
+			owners := ownerByGVK[ownerGVK]
+			if len(owners) == 0 {
+				continue
+			}
+			if referenced[ownedKey] == nil {
+				referenced[ownedKey] = make(map[OwnerKey]struct{}, len(owners))
+			}
+			for ownerKey := range owners {
+				referenced[ownedKey][ownerKey] = struct{}{}
+			}
+		}
+	}
+	return referenced
+}
+
 func (r ReferencedBy[OwnerKey]) DeepCopy() ReferencedBy[OwnerKey] {
 	// Deep copy of owner map
 	ownerCopy := make(map[client.ObjectKey]map[schema.GroupVersionKind]map[OwnerKey]struct{}, len(r.Owner))

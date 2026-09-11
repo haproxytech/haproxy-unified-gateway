@@ -46,7 +46,11 @@ func NewReferenceManager(controllerStore *ControllerStore) *ReferenceManager {
 func (rm *ReferenceManager) UpdateRefences() {
 	rm.ReferencedObjects.PreviousReferencedSecrets = rm.ReferencedObjects.ReferencedSecrets.DeepCopy()
 
-	if len(rm.ClusterStore.Updates.Gateways) == 0 {
+	// A ListenerSet change counts as much as a Gateway one: its entries carry
+	// certificateRefs of their own, so a cycle triggered by a ListenerSet alone has
+	// an index to rebuild. Without this the entry's Secret would only be indexed the
+	// next time something happened to touch a Gateway.
+	if len(rm.ClusterStore.Updates.Gateways) == 0 && len(rm.ClusterStore.Updates.ListenerSets) == 0 {
 		return
 	}
 
@@ -64,6 +68,50 @@ func (rm *ReferenceManager) UpdateRefences() {
 				nsName := GetCertificateRefNamespacedName(certRef, gw.Namespace)
 				ownerGVK := rm.ControllerStore.ExtractGVK(objtypes.ObjectTypeGateway)
 				rm.ReferencedObjects.ReferencedSecrets.AddReferencedByUsingKeys(rm.Logger, nsName, gatewayListenerKey(client.ObjectKeyFromObject(gw), listener.Name), ownerGVK)
+			}
+		}
+	}
+	rm.addListenerSetSecretRefs()
+}
+
+// addListenerSetSecretRefs indexes the Secrets referenced by the entries of every
+// ListenerSet that may attach to one of this controller's Gateways.
+//
+// Only those. A ListenerSet whose parent refuses it, or whose parent belongs to
+// another controller, contributes no listener, so indexing its certificateRefs would
+// make the certificate builder write a PEM to disk for a Secret nothing serves --
+// reachable by anyone able to create a ListenerSet. The same predicate the
+// contribution pass uses decides it here, which is why it lives on the store.
+//
+// The owner GVK is the ListenerSet's, never the parent Gateway's, and the default
+// namespace for a certRef is the ListenerSet's own. Both follow GEP-1713: a
+// ReferenceGrant naming a Gateway must not cover its ListenerSets, nor the converse,
+// and the index is what the grant check is resolved against.
+func (rm *ReferenceManager) addListenerSetSecretRefs() {
+	ownerGVK := rm.ControllerStore.ExtractGVK(objtypes.ObjectTypeListenerSet)
+
+	for _, listenerSet := range rm.ClusterStore.ListenerSets {
+		if listenerSet == nil {
+			continue
+		}
+		if rm.ControllerStore.attachmentOfListenerSet(listenerSet) != attachmentAllowed {
+			continue
+		}
+		gwKey, _ := parentGatewayKey(listenerSet)
+		lsKey := client.ObjectKeyFromObject(listenerSet)
+
+		for _, entry := range listenerSet.Spec.Listeners {
+			if entry.TLS == nil {
+				continue
+			}
+			for _, certRef := range entry.TLS.CertificateRefs {
+				if !utilsk8s.IsSecretGroupKindSupported(certRef) {
+					continue
+				}
+				nsName := GetCertificateRefNamespacedName(certRef, listenerSet.Namespace)
+				rm.ReferencedObjects.ReferencedSecrets.AddReferencedByUsingKeys(
+					rm.Logger, nsName, listenerSetListenerKey(gwKey, lsKey, entry.Name), ownerGVK,
+				)
 			}
 		}
 	}
