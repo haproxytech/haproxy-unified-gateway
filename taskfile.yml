@@ -2,8 +2,8 @@
 version: "3"
 
 env:
-  KUBECTL_VERSION: v1.36.3
-  K8S_VERSION: v1.36.1
+  KUBECTL_VERSION: v1.36.4
+  K8S_VERSION: v1.37.0
   GWAPI_VERSIONS: v1.3.0, v1.4.0, v1.5.0
   GWAPI_EXP_VERSIONS:
   ENVTEST_VERSION: v1.36.2 # https://raw.githubusercontent.com/kubernetes-sigs/controller-tools/master/envtest-releases.yaml
@@ -16,16 +16,16 @@ vars:
   DEV_INIT_DIR: "example/dev-init"
   API_DEFINITION_DIR: "api/definition"
   # tools
-  YQ: github.com/mikefarah/yq/v4@v4.53.3
-  KIND: sigs.k8s.io/kind@v0.32.0
+  YQ: github.com/mikefarah/yq/v4@v4.53.6
+  KIND: sigs.k8s.io/kind@v0.33.0
   CLOUD_PROVIDER_KIND: sigs.k8s.io/cloud-provider-kind@v0.11.1
-  CONTROLLER_GEN: sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
-  CHECK_COMMIT: github.com/haproxytech/check-commit/v5@v5.8.1
-  BETTERALIGN: github.com/dkorunic/betteralign/cmd/betteralign@v0.15.0
+  CONTROLLER_GEN: sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0
+  CHECK_COMMIT: github.com/haproxytech/check-commit/v5@v5.8.3
+  BETTERALIGN: github.com/dkorunic/betteralign/cmd/betteralign@v0.15.1
   STATICCHECK: honnef.co/go/tools/cmd/staticcheck@v0.8.1
-  GO_LICENSES: github.com/google/go-licenses@v1.6.0
-  GOVULNCHECK: golang.org/x/vuln/cmd/govulncheck@v1.1.4
-  GOFUMPT: mvdan.cc/gofumpt@v0.11.0
+  GO_LICENSES: github.com/google/go-licenses/v2@v2.0.1
+  GOVULNCHECK: golang.org/x/vuln/cmd/govulncheck@v1.8.0
+  GOFUMPT: mvdan.cc/gofumpt@v0.12.0
   REVIVE: github.com/mgechev/revive@v1.16.0
   GOTESTSUM: gotest.tools/gotestsum@v1.13.0
 
