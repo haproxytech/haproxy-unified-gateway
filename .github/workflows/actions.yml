@@ -19,6 +19,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
         id: go
+      - name: Allow Go toolchain upgrades
+        # setup-go forces GOTOOLCHAIN=local; task tools may need a newer Go
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
       - name: Install Task
         uses: go-task/setup-task@v2
         with:
@@ -38,6 +41,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
         id: go
+      - name: Allow Go toolchain upgrades
+        # setup-go forces GOTOOLCHAIN=local; task tools may need a newer Go
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
       - name: Install Task
         uses: go-task/setup-task@v2
         with:
@@ -59,6 +65,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
         id: go
+      - name: Allow Go toolchain upgrades
+        # setup-go forces GOTOOLCHAIN=local; task tools may need a newer Go
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
       - name: Install Task
         uses: go-task/setup-task@v2
         with:
@@ -81,6 +90,9 @@ jobs:
         with:
           go-version-file: "go.mod"
           check-latest: true
+      - name: Allow Go toolchain upgrades
+        # setup-go forces GOTOOLCHAIN=local; task tools may need a newer Go
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
       - name: tidy
         run: go mod tidy
       - name: changes
@@ -96,6 +108,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
         id: go
+      - name: Allow Go toolchain upgrades
+        # setup-go forces GOTOOLCHAIN=local; task tools may need a newer Go
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
       - name: Install Task
         uses: go-task/setup-task@v2
         with:
@@ -117,6 +132,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
         id: go
+      - name: Allow Go toolchain upgrades
+        # setup-go forces GOTOOLCHAIN=local; task tools may need a newer Go
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
       - name: Install Task
         uses: go-task/setup-task@v2
         with:
@@ -136,6 +154,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
         id: go
+      - name: Allow Go toolchain upgrades
+        # setup-go forces GOTOOLCHAIN=local; task tools may need a newer Go
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
       - name: Install Task
         uses: go-task/setup-task@v2
         with:
