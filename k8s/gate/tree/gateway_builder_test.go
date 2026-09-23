@@ -21,10 +21,8 @@ func TestNbListenersWithAndWithoutConflict(t *testing.T) {
 	// Helper to create a Gateway
 	mkGateway := func(name, namespace string) *Gateway {
 		gw := &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-			},
+			Name:      name,
+			Namespace: namespace,
 		}
 		return &Gateway{
 			K8sResource: gw,
@@ -306,11 +304,9 @@ func TestCheckListenerConflictsReUpsert(t *testing.T) {
 	mkGateway := func(name string, created metav1.Time, protocol gatewayv1.ProtocolType, status store.Status) *Gateway {
 		return &Gateway{
 			K8sResource: &gatewayv1.Gateway{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              name,
-					Namespace:         ns,
-					CreationTimestamp: created,
-				},
+				Name:              name,
+				Namespace:         ns,
+				CreationTimestamp: created,
 				Spec: gatewayv1.GatewaySpec{
 					GatewayClassName: "not-in-tree",
 					Listeners: []gatewayv1.Listener{

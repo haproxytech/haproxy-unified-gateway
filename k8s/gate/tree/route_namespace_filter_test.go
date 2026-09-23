@@ -41,7 +41,7 @@ func makeNamespaces(names ...string) map[types.NamespacedName]*v1.Namespace {
 	m := make(map[types.NamespacedName]*v1.Namespace, len(names))
 	for _, name := range names {
 		m[types.NamespacedName{Name: name}] = &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Name: name,
 		}
 	}
 	return m
@@ -51,7 +51,7 @@ func makeNamespacesWithLabels(labels map[string]map[string]string) map[types.Nam
 	m := make(map[types.NamespacedName]*v1.Namespace, len(labels))
 	for name, lbls := range labels {
 		m[types.NamespacedName{Name: name}] = &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: lbls},
+			Name: name, Labels: lbls,
 		}
 	}
 	return m

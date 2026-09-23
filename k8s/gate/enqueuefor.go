@@ -51,10 +51,10 @@ func enqueueGatewayClassForHugGate(ctrlclient client.Client, _ utilsk8s.ExtractG
 		for _, gwc := range gwcList.Items {
 			if paramsRef, ok := getGatewayClassParamsRefKey(gwc); ok {
 				if paramsRef.Name == o.GetName() && paramsRef.Namespace == o.GetNamespace() {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					requests = append(requests, reconcile.Request{
 						Namespace: gwc.GetNamespace(),
 						Name:      gwc.GetName(),
-					}})
+					})
 				}
 			}
 		}
@@ -107,10 +107,10 @@ func enqueueGatewayForHugGate(dg utils.DedicatedGateway, dns utils.DedicatedName
 				// 1. Direct HugGate reference
 				if paramsRef, ok := getGatewayParamsRefKey(gw); ok {
 					if paramsRef.Name == o.GetName() && paramsRef.Namespace == o.GetNamespace() {
-						requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+						requests = append(requests, reconcile.Request{
 							Namespace: gw.GetNamespace(),
 							Name:      gw.GetName(),
-						}})
+						})
 					}
 				}
 				// 2. Gateway references a GatewayClass that refenrences this HugGate
@@ -121,10 +121,10 @@ func enqueueGatewayForHugGate(dg utils.DedicatedGateway, dns utils.DedicatedName
 						if paramsRef, ok := getGatewayClassParamsRefKey(gwc); ok {
 							if paramsRef.Name == o.GetName() && paramsRef.Namespace == o.GetNamespace() {
 								requests = append(
-									requests, reconcile.Request{NamespacedName: types.NamespacedName{
+									requests, reconcile.Request{
 										Namespace: gw.GetNamespace(),
 										Name:      gw.GetName(),
-									}},
+									},
 								)
 							}
 						}
@@ -176,10 +176,10 @@ func enqueueGatewayForGatewayClass(dg utils.DedicatedGateway, dns utils.Dedicate
 				}
 				gwcName := string(gw.Spec.GatewayClassName)
 				if gwcName == o.GetName() {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					requests = append(requests, reconcile.Request{
 						Namespace: gw.GetNamespace(),
 						Name:      gw.GetName(),
-					}})
+					})
 				}
 			}
 			return requests
@@ -208,10 +208,10 @@ func enqueueGatewayForHugService(dg utils.DedicatedGateway, dns utils.DedicatedN
 				if !dns.Check(types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name}) {
 					continue
 				}
-				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+				requests = append(requests, reconcile.Request{
 					Namespace: gw.GetNamespace(),
 					Name:      gw.GetName(),
-				}})
+				})
 			}
 			return requests
 		}
@@ -254,10 +254,10 @@ func enqueueGatewayForSecret(dg utils.DedicatedGateway, dns utils.DedicatedNames
 						secretNsName := utils.GetNamespacedName(certRef.Name, certRef.Namespace, gw.GetNamespace())
 
 						if secretNsName.Name == o.GetName() && secretNsName.Namespace == o.GetNamespace() {
-							requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+							requests = append(requests, reconcile.Request{
 								Namespace: gw.GetNamespace(),
 								Name:      gw.GetName(),
-							}})
+							})
 						}
 					}
 				}
@@ -295,10 +295,10 @@ func enqueueHTTPRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient c
 					gwNsName := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, route.GetNamespace())
 
 					if gwNsName.Name == o.GetName() && gwNsName.Namespace == o.GetNamespace() {
-						requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+						requests = append(requests, reconcile.Request{
 							Namespace: route.GetNamespace(),
 							Name:      route.GetName(),
-						}})
+						})
 					}
 				}
 			}
@@ -337,10 +337,10 @@ func enqueueHTTPRouteForService(dns utils.DedicatedNamespaces) func(ctrlclient c
 						serviceNsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, route.GetNamespace())
 
 						if serviceNsName.Name == o.GetName() && serviceNsName.Namespace == o.GetNamespace() {
-							requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+							requests = append(requests, reconcile.Request{
 								Namespace: route.GetNamespace(),
 								Name:      route.GetName(),
-							}})
+							})
 						}
 					}
 				}
@@ -382,10 +382,10 @@ func enqueueHTTPRouteForBackendCR(dns utils.DedicatedNamespaces) func(ctrlclient
 				if !routeUsesBackendCR(&route, o, annotatedSvcs, extractGVK) {
 					continue
 				}
-				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+				requests = append(requests, reconcile.Request{
 					Namespace: route.GetNamespace(),
 					Name:      route.GetName(),
-				}})
+				})
 			}
 			return requests
 		}
@@ -477,10 +477,10 @@ func enqueueTLSRouteForService(dns utils.DedicatedNamespaces) func(ctrlclient cl
 						serviceNsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, route.GetNamespace())
 
 						if serviceNsName.Name == o.GetName() && serviceNsName.Namespace == o.GetNamespace() {
-							requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+							requests = append(requests, reconcile.Request{
 								Namespace: route.GetNamespace(),
 								Name:      route.GetName(),
-							}})
+							})
 						}
 					}
 				}
@@ -519,10 +519,10 @@ func enqueueTLSRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient cl
 					gwNsName := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, route.GetNamespace())
 
 					if gwNsName.Name == o.GetName() && gwNsName.Namespace == o.GetNamespace() {
-						requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+						requests = append(requests, reconcile.Request{
 							Namespace: route.GetNamespace(),
 							Name:      route.GetName(),
-						}})
+						})
 					}
 				}
 			}
@@ -572,10 +572,10 @@ func enqueueHTTPRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.Extr
 		var requests []reconcile.Request
 		for _, route := range routeList.Items {
 			if httpRouteHasCrossNamespaceRefTo(route, o.GetNamespace(), svcWithBackendCRInRGNamespace) {
-				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+				requests = append(requests, reconcile.Request{
 					Namespace: route.Namespace,
 					Name:      route.Name,
-				}})
+				})
 			}
 		}
 		return requests
@@ -599,10 +599,10 @@ func enqueueGatewayForReferenceGrant(dg utils.DedicatedGateway) func(ctrlclient 
 					continue
 				}
 				if gatewayHasCrossNamespaceRefTo(gateway, o.GetNamespace()) {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					requests = append(requests, reconcile.Request{
 						Namespace: gateway.Namespace,
 						Name:      gateway.Name,
-					}})
+					})
 				}
 			}
 			return requests
@@ -668,10 +668,10 @@ func enqueueTLSRouteForReferenceGrant(ctrlclient client.Client, _ utilsk8s.Extra
 		var requests []reconcile.Request
 		for _, route := range routeList.Items {
 			if tlsRouteHasCrossNamespaceRefTo(route, o.GetNamespace(), svcWithBackendCRInRGNamespace) {
-				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+				requests = append(requests, reconcile.Request{
 					Namespace: route.Namespace,
 					Name:      route.Name,
-				}})
+				})
 			}
 		}
 		return requests
@@ -730,10 +730,10 @@ func enqueueTLSRouteForBackendCR(dns utils.DedicatedNamespaces) func(ctrlclient 
 				if !tlsRouteUsesServiceBackendCR(&route, annotatedSvcs) {
 					continue
 				}
-				requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+				requests = append(requests, reconcile.Request{
 					Namespace: route.GetNamespace(),
 					Name:      route.GetName(),
-				}})
+				})
 			}
 			return requests
 		}
@@ -782,10 +782,10 @@ func enqueueHugConfForDefaultsCR(ctrlclient client.Client, extractGVK utilsk8s.E
 			defaultsNsName := utils.GetNamespacedName(defaultsRef.Name, defaultsRef.Namespace, hugConf.Namespace)
 			if defaultsNsName.Name == o.GetName() && defaultsNsName.Namespace == o.GetNamespace() {
 				{
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					requests = append(requests, reconcile.Request{
 						Namespace: hugConf.GetNamespace(),
 						Name:      hugConf.GetName(),
-					}})
+					})
 				}
 			}
 		}
@@ -821,10 +821,10 @@ func enqueueHugConfForGlobalCR(ctrlclient client.Client, extractGVK utilsk8s.Ext
 			globalNsName := utils.GetNamespacedName(globalRef.Name, globalRef.Namespace, hugConf.Namespace)
 			if globalNsName.Name == o.GetName() && globalNsName.Namespace == o.GetNamespace() {
 				{
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					requests = append(requests, reconcile.Request{
 						Namespace: hugConf.GetNamespace(),
 						Name:      hugConf.GetName(),
-					}})
+					})
 				}
 			}
 		}

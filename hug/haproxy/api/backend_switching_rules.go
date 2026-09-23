@@ -15,6 +15,7 @@ package api
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	"github.com/haproxytech/client-native/v6/models"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
@@ -30,7 +31,7 @@ func (c *clientNative) UseBackendDeleteAll(name string) error {
 		return errGet
 	}
 
-	for index := len(rules) - 1; index >= 0; index-- {
+	for index := range slices.Backward(rules) {
 		errDelete := configuration.DeleteBackendSwitchingRule(int64(index), name, c.activeTransaction, 0)
 		if errDelete != nil {
 			return errDelete

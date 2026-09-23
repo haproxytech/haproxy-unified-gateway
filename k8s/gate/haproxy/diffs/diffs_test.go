@@ -55,20 +55,16 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 		{
 			name: "metadata missing hug key",
 			frontend: &models.Frontend{
-				FrontendBase: models.FrontendBase{
-					Metadata: map[string]any{"other": "value"},
-				},
+				Metadata: map[string]any{"other": "value"},
 			},
 			want: map[types.NamespacedName]int64{},
 		},
 		{
 			name: "hug key present but no Gateway section",
 			frontend: &models.Frontend{
-				FrontendBase: models.FrontendBase{
-					Metadata: map[string]any{
-						metadata.UnifiedGatewayMetaDataKey: map[string]any{
-							"SomethingElse": map[string]any{},
-						},
+				Metadata: map[string]any{
+					metadata.UnifiedGatewayMetaDataKey: map[string]any{
+						"SomethingElse": map[string]any{},
 					},
 				},
 			},
@@ -77,11 +73,9 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 		{
 			name: "single gateway",
 			frontend: &models.Frontend{
-				FrontendBase: models.FrontendBase{
-					Metadata: makeMetadata(map[string]any{
-						"default/my-gw": gatewayEntry(7, "link-1"),
-					}),
-				},
+				Metadata: makeMetadata(map[string]any{
+					"default/my-gw": gatewayEntry(7, "link-1"),
+				}),
 			},
 			want: map[types.NamespacedName]int64{
 				{Namespace: "default", Name: "my-gw"}: 7,
@@ -90,13 +84,11 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 		{
 			name: "multiple gateways",
 			frontend: &models.Frontend{
-				FrontendBase: models.FrontendBase{
-					Metadata: makeMetadata(map[string]any{
-						"default/gw-a": gatewayEntry(3, "link-1"),
-						"infra/gw-b":   gatewayEntry(10, "link-2"),
-						"staging/gw-c": gatewayEntry(1, "link-3"),
-					}),
-				},
+				Metadata: makeMetadata(map[string]any{
+					"default/gw-a": gatewayEntry(3, "link-1"),
+					"infra/gw-b":   gatewayEntry(10, "link-2"),
+					"staging/gw-c": gatewayEntry(1, "link-3"),
+				}),
 			},
 			want: map[types.NamespacedName]int64{
 				{Namespace: "default", Name: "gw-a"}: 3,
@@ -107,12 +99,10 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 		{
 			name: "entry with invalid namespace/name (no slash) is skipped",
 			frontend: &models.Frontend{
-				FrontendBase: models.FrontendBase{
-					Metadata: makeMetadata(map[string]any{
-						"no-slash":      gatewayEntry(5, "link-1"),
-						"default/valid": gatewayEntry(2, "link-2"),
-					}),
-				},
+				Metadata: makeMetadata(map[string]any{
+					"no-slash":      gatewayEntry(5, "link-1"),
+					"default/valid": gatewayEntry(2, "link-2"),
+				}),
 			},
 			want: map[types.NamespacedName]int64{
 				{Namespace: "default", Name: "valid"}: 2,
@@ -121,12 +111,10 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 		{
 			name: "entry missing Generation field is skipped",
 			frontend: &models.Frontend{
-				FrontendBase: models.FrontendBase{
-					Metadata: makeMetadata(map[string]any{
-						"default/no-gen": map[string]any{"LinkID": "link-1"},
-						"default/valid":  gatewayEntry(4, "link-2"),
-					}),
-				},
+				Metadata: makeMetadata(map[string]any{
+					"default/no-gen": map[string]any{"LinkID": "link-1"},
+					"default/valid":  gatewayEntry(4, "link-2"),
+				}),
 			},
 			want: map[types.NamespacedName]int64{
 				{Namespace: "default", Name: "valid"}: 4,
@@ -135,12 +123,10 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 		{
 			name: "Generation field is not a number is skipped",
 			frontend: &models.Frontend{
-				FrontendBase: models.FrontendBase{
-					Metadata: makeMetadata(map[string]any{
-						"default/bad-gen": map[string]any{"Generation": "not-a-number"},
-						"default/valid":   gatewayEntry(9, "link-1"),
-					}),
-				},
+				Metadata: makeMetadata(map[string]any{
+					"default/bad-gen": map[string]any{"Generation": "not-a-number"},
+					"default/valid":   gatewayEntry(9, "link-1"),
+				}),
 			},
 			want: map[types.NamespacedName]int64{
 				{Namespace: "default", Name: "valid"}: 9,
@@ -149,11 +135,9 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 		{
 			name: "generation zero is preserved",
 			frontend: &models.Frontend{
-				FrontendBase: models.FrontendBase{
-					Metadata: makeMetadata(map[string]any{
-						"default/gw": gatewayEntry(0, "link-1"),
-					}),
-				},
+				Metadata: makeMetadata(map[string]any{
+					"default/gw": gatewayEntry(0, "link-1"),
+				}),
 			},
 			want: map[types.NamespacedName]int64{
 				{Namespace: "default", Name: "gw"}: 0,

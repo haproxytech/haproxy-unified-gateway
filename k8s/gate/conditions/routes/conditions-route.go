@@ -106,7 +106,7 @@ func (c RouteConditions) ToV1RouteConditions() gatewayv1.HTTPRouteStatus {
 	})
 
 	return gatewayv1.HTTPRouteStatus{
-		RouteStatus: gatewayv1.RouteStatus{Parents: parents},
+		Parents: parents,
 	}
 }
 

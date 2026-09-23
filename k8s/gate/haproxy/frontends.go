@@ -370,21 +370,19 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	}
 
 	fe := &models.Frontend{
-		FrontendBase: models.FrontendBase{
-			Name:           frontendName,
-			From:           b.params.DefaultsSectionName,
-			Metadata:       md,
-			DefaultBackend: "backend_not_found",
-			Mode: func() string {
-				if vListener.ProtocolCategory == protocols.ProtocolCategorySecure || vListener.ProtocolCategory == protocols.ProtocolCategoryInsecure {
-					return "http"
-				}
-				if vListener.ProtocolCategory == protocols.ProtocolCategoryTLS {
-					return "tcp"
-				}
-				return ""
-			}(),
-		},
+		Name:           frontendName,
+		From:           b.params.DefaultsSectionName,
+		Metadata:       md,
+		DefaultBackend: "backend_not_found",
+		Mode: func() string {
+			if vListener.ProtocolCategory == protocols.ProtocolCategorySecure || vListener.ProtocolCategory == protocols.ProtocolCategoryInsecure {
+				return "http"
+			}
+			if vListener.ProtocolCategory == protocols.ProtocolCategoryTLS {
+				return "tcp"
+			}
+			return ""
+		}(),
 		ACLList:                  aclList,
 		TCPRequestRuleList:       tcpRules,
 		HTTPRequestRuleList:      httpRules,

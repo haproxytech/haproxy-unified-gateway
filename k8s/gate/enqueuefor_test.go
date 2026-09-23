@@ -22,7 +22,6 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,12 +37,12 @@ func testExtractGVKBackend(client.Object) schema.GroupVersionKind {
 }
 
 func crObject(ns, name string) client.Object {
-	return &v3.Backend{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	return &v3.Backend{Namespace: ns, Name: name}
 }
 
 func routeWithCRBackendFilter(routeNs, crName string) *gatewayv1.HTTPRoute {
 	return &gatewayv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: routeNs, Name: "r"},
+		Namespace: routeNs, Name: "r",
 		Spec: gatewayv1.HTTPRouteSpec{Rules: []gatewayv1.HTTPRouteRule{{
 			BackendRefs: []gatewayv1.HTTPBackendRef{{
 				Filters: []gatewayv1.HTTPRouteFilter{{
@@ -54,9 +53,7 @@ func routeWithCRBackendFilter(routeNs, crName string) *gatewayv1.HTTPRoute {
 						Name:  gatewayv1.ObjectName(crName),
 					},
 				}},
-				BackendRef: gatewayv1.BackendRef{
-					BackendObjectReference: gatewayv1.BackendObjectReference{Name: "somesvc"},
-				},
+				Name: "somesvc",
 			}},
 		}}},
 	}
@@ -64,12 +61,10 @@ func routeWithCRBackendFilter(routeNs, crName string) *gatewayv1.HTTPRoute {
 
 func routeToService(routeNs, svcName string) *gatewayv1.HTTPRoute {
 	return &gatewayv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: routeNs, Name: "r"},
+		Namespace: routeNs, Name: "r",
 		Spec: gatewayv1.HTTPRouteSpec{Rules: []gatewayv1.HTTPRouteRule{{
 			BackendRefs: []gatewayv1.HTTPBackendRef{{
-				BackendRef: gatewayv1.BackendRef{
-					BackendObjectReference: gatewayv1.BackendObjectReference{Name: gatewayv1.ObjectName(svcName)},
-				},
+				Name: gatewayv1.ObjectName(svcName),
 			}},
 		}}},
 	}
@@ -111,7 +106,7 @@ func TestRouteUsesBackendCR(t *testing.T) {
 }
 
 func svcWithAnnotation(ns, name, value string) *apiv1.Service {
-	s := &apiv1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	s := &apiv1.Service{Namespace: ns, Name: name}
 	if value != "" {
 		s.Annotations = map[string]string{constants.ServiceBackendCRAnnotation: value}
 	}
@@ -158,10 +153,10 @@ func routeToServiceNs(routeNs, svcName, svcNs string) *gatewayv1.HTTPRoute {
 		ref.Namespace = &ns
 	}
 	return &gatewayv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: routeNs, Name: "r"},
+		Namespace: routeNs, Name: "r",
 		Spec: gatewayv1.HTTPRouteSpec{Rules: []gatewayv1.HTTPRouteRule{{
 			BackendRefs: []gatewayv1.HTTPBackendRef{{
-				BackendRef: gatewayv1.BackendRef{BackendObjectReference: ref},
+				BackendObjectReference: ref,
 			}},
 		}}},
 	}
@@ -212,7 +207,7 @@ func tlsRouteToServiceNs(routeNs, svcName, svcNs string) *gatewayv1alpha2.TLSRou
 		ref.Namespace = &ns
 	}
 	return &gatewayv1alpha2.TLSRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: routeNs, Name: "r"},
+		Namespace: routeNs, Name: "r",
 		Spec: gatewayv1alpha2.TLSRouteSpec{Rules: []gatewayv1alpha2.TLSRouteRule{{
 			BackendRefs: []gatewayv1.BackendRef{{BackendObjectReference: ref}},
 		}}},
@@ -340,7 +335,7 @@ func newScheme(t *testing.T) *runtime.Scheme {
 }
 
 func refGrant(ns string) *gatewayv1beta1.ReferenceGrant {
-	return &gatewayv1beta1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "grant"}}
+	return &gatewayv1beta1.ReferenceGrant{Namespace: ns, Name: "grant"}
 }
 
 func TestEnqueueHTTPRouteForReferenceGrant(t *testing.T) {

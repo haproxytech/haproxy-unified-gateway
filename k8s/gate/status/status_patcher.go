@@ -297,7 +297,7 @@ func FilterStatusByControllerName(routeStatus gatewayv1.HTTPRouteStatus, control
 		}
 	}
 	return gatewayv1.HTTPRouteStatus{
-		RouteStatus: gatewayv1.RouteStatus{Parents: filtered},
+		Parents: filtered,
 	}
 }
 
@@ -368,7 +368,7 @@ func FilterTLSRouteStatusByControllerName(tlsRouteStatus v1alpha2.TLSRouteStatus
 		}
 	}
 	return v1alpha2.TLSRouteStatus{
-		RouteStatus: gatewayv1.RouteStatus{Parents: filtered},
+		Parents: filtered,
 	}
 }
 

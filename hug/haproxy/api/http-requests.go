@@ -15,6 +15,7 @@ package api
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	parser "github.com/haproxytech/client-native/v6/config-parser"
 	"github.com/haproxytech/client-native/v6/models"
@@ -31,7 +32,7 @@ func (c *clientNative) HTTPRequestDeleteAll(parentType parser.Section, name stri
 		return errGet
 	}
 
-	for index := len(rules) - 1; index >= 0; index-- {
+	for index := range slices.Backward(rules) {
 		errDelete := configuration.DeleteHTTPRequestRule(int64(index), string(parentType), name, c.activeTransaction, 0)
 		if errDelete != nil {
 			return errDelete

@@ -47,7 +47,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/rest"
@@ -371,18 +370,14 @@ func (test *IntTest) StopHaproxy(t *testing.T) {
 
 func (test *IntTest) createNamespace(ns string) error {
 	err := utils.CreateRuntimeObject(test.Ctx, test.Client, &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ns,
-		},
+		Name: ns,
 	}, true)
 	return err
 }
 
 func (test *IntTest) cleanupNamespace(ns string) error {
 	err := utils.DeleteRuntimeObject(test.Ctx, test.Client, &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ns,
-		},
+		Name: ns,
 	}, true)
 	return err
 }
