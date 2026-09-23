@@ -8,6 +8,12 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
+        with:
+          # full history so check-commit can diff against the PR base locally
+          fetch-depth: 0
+      - name: Install aspell
+        # commit-check image on GitLab ships aspell; ubuntu-latest runners do not
+        run: sudo apt-get update && sudo apt-get install -y aspell aspell-en
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
