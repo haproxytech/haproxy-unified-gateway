@@ -11,7 +11,7 @@ stages:
   - conformance-report
 variables:
   HAPROXY_VERSION: "3.2"
-  KIND: v0.27.0
+  KIND: v0.33.0
   DOCKER_HOST: tcp://docker:2375
   DOCKER_DRIVER: overlay2
   GO_VERSION: "1.27"
