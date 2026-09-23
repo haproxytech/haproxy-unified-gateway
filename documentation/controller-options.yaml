@@ -1,3 +1,13 @@
+AcceptProxy:
+    name: AcceptProxy
+    comment: |
+        AcceptProxy sets accept-proxy on the binds of every frontend generated from a
+        Gateway listener (HTTP, HTTPS and TLS passthrough alike). Use it when the load
+        balancer in front of HAProxy sends the PROXY protocol header, so that the
+        client address HAProxy sees, logs and evaluates is the real one rather than
+        the load balancer's. Every connection to those binds must then carry the
+        header: HAProxy rejects the ones that do not.
+    args: []
 BackendNameTemplate:
     name: BackendNameTemplate
     comment: ""

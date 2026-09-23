@@ -66,6 +66,7 @@ type HUGConfig struct {
 	UseWithGopherd               bool `ff:"          long: with-gopherd,                    usage: 'use gopherd to start/stop/restart HAProxy'"`
 	DisableIPv4                  bool `ff:"          long: disable-ipv4,                    usage: 'disable IPv4 support'"`
 	DisableIPv6                  bool `ff:"          long: disable-ipv6,			          usage: 'disable IPv6 support'"`
+	AcceptProxy                  bool `ff:"          long: accept-proxy,                    usage: 'set accept-proxy on the binds of the Gateway listener frontends: the load balancer in front sends the PROXY protocol header'"`
 	Version                      bool `ff:"          long: version,                         usage: 'print version and exit'"`
 	JobCheckCRD                  bool `ff:"          long: job-check-crd,                   usage: 'run CRD refresh job and exit'"`
 	EmptyIngressClass            bool `ff:"          long: empty-ingress-class,                        usage: 'when ingress-class is set, also handle Ingresses that have no ingressClassName'"`

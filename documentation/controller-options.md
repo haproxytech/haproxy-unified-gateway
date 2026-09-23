@@ -20,6 +20,7 @@ Available options:
 
 | Function | Arguments |
 | ---:|:--- |
+| AcceptProxy |  |
 | BackendNameTemplate | `template`(string) |
 | CacheReSyncPeriod | `syncPeriod`(time.Duration) |
 | ControllerConfCRD | `controllerConf`(types.NamespacedName) |
@@ -53,6 +54,25 @@ Available options:
 | StoreCertificateOnDisk | `structureType`(storage.StructureType) |
 | StoreMapsOnDisk | `structureType`(storage.StructureType) |
 | SyncPeriod | `syncPeriod`(time.Duration) |
+
+### AcceptProxy
+
+AcceptProxy sets accept-proxy on the binds of every frontend generated from a
+Gateway listener (HTTP, HTTPS and TLS passthrough alike). Use it when the load
+balancer in front of HAProxy sends the PROXY protocol header, so that the
+client address HAProxy sees, logs and evaluates is the real one rather than
+the load balancer's. Every connection to those binds must then carry the
+header: HAProxy rejects the ones that do not.
+
+Example:
+```go
+import (
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate
+  github.com/haproxytech/haproxy-unified-gateway/k8s/gate/options
+)
+
+controller, err := controller.New(opt.AcceptProxy())
+```
 
 ### BackendNameTemplate
 

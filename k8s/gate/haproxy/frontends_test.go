@@ -17,6 +17,10 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 )
 
 // TestTLSPassthroughRulesScopeConsistency guards against scope drift between
@@ -88,5 +92,54 @@ func TestTLSPassthroughRulesRouteIsJSONReadsSessScope(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("route_is_json ACL not found in TLS passthrough rule set")
+	}
+}
+
+// TestBindParamsAcceptProxy checks that AcceptProxy reaches the binds of every
+// listener frontend whatever its protocol category, and leaves the TLS
+// termination parameters alone.
+func TestBindParamsAcceptProxy(t *testing.T) {
+	certStorage := &storage.CertificateStorageDefault{
+		CertFilesBaseDir: "/etc/haproxy/crt-lists",
+		LinkID:           "hug",
+	}
+	tests := []struct {
+		name        string
+		category    protocols.ProtocolCategory
+		acceptProxy bool
+		wantSSL     bool
+	}{
+		{name: "http", category: protocols.ProtocolCategoryInsecure},
+		{name: "http accept-proxy", category: protocols.ProtocolCategoryInsecure, acceptProxy: true},
+		{name: "https", category: protocols.ProtocolCategorySecure, wantSSL: true},
+		{name: "https accept-proxy", category: protocols.ProtocolCategorySecure, acceptProxy: true, wantSSL: true},
+		{name: "tls passthrough", category: protocols.ProtocolCategoryTLS},
+		{name: "tls passthrough accept-proxy", category: protocols.ProtocolCategoryTLS, acceptProxy: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &HaproxyConfMgrImpl{
+				params: HaproxyConfMgrParams{
+					certificateStorage: certStorage,
+					HaproxyConfParams:  HaproxyConfParams{AcceptProxy: tt.acceptProxy},
+				},
+			}
+			vl := tree.NewVirtualListener(tt.category, 443)
+			got := b.bindParams("hug_"+vl.Name, vl.Name, vl)
+
+			if got.AcceptProxy != tt.acceptProxy {
+				t.Errorf("AcceptProxy = %v, want %v", got.AcceptProxy, tt.acceptProxy)
+			}
+			if got.Ssl != tt.wantSSL {
+				t.Errorf("Ssl = %v, want %v", got.Ssl, tt.wantSSL)
+			}
+			wantCrtList := ""
+			if tt.wantSSL {
+				wantCrtList = "/etc/haproxy/crt-lists/hug_" + vl.Name + ".list"
+			}
+			if got.CrtList != wantCrtList {
+				t.Errorf("CrtList = %q, want %q", got.CrtList, wantCrtList)
+			}
+		})
 	}
 }
