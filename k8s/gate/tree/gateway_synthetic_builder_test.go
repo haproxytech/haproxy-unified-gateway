@@ -36,7 +36,7 @@ func TestIngressTLSCertificateRefs(t *testing.T) {
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	ingWithTLS := func(name, className string, secrets ...string) *networkingv1.Ingress {
-		ing := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+		ing := &networkingv1.Ingress{Namespace: ns, Name: name}
 		if className != "" {
 			ing.Spec.IngressClassName = &className
 		}
@@ -134,15 +134,15 @@ func TestSyntheticGatewayBuilderHTTPSListener(t *testing.T) {
 	}
 
 	t.Run("no Ingress TLS -> http listener only", func(t *testing.T) {
-		b := newBuilder(&networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "web"}})
+		b := newBuilder(&networkingv1.Ingress{Namespace: ns, Name: "web"})
 		b.ComputeTreeUpdates()
 		assert.Equal(t, []string{"http"}, listenerNames(b))
 	})
 
 	t.Run("an Ingress with a TLS secret -> http and https listeners", func(t *testing.T) {
 		ing := &networkingv1.Ingress{
-			ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "web"},
-			Spec:       networkingv1.IngressSpec{TLS: []networkingv1.IngressTLS{{SecretName: "web-tls"}}},
+			Namespace: ns, Name: "web",
+			Spec: networkingv1.IngressSpec{TLS: []networkingv1.IngressTLS{{SecretName: "web-tls"}}},
 		}
 		b := newBuilder(ing)
 		b.ComputeTreeUpdates()

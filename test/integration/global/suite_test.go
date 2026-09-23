@@ -22,7 +22,6 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/base"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -53,14 +52,14 @@ func (s *GlobalSuite) SetupSuite() {
 	// Create the "test" namespace required for HugConf.
 	// The controller is configured to watch HugConf at namespace "test", name "hugconf".
 	err := utils.CreateRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: hugConfNamespace},
+		Name: hugConfNamespace,
 	}, true)
 	s.Require().NoError(err)
 }
 
 func (s *GlobalSuite) TearDownSuite() {
 	_ = utils.DeleteRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: hugConfNamespace},
+		Name: hugConfNamespace,
 	}, false)
 	s.BaseSuite.TearDownSuite()
 }

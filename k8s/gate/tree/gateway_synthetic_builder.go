@@ -17,7 +17,6 @@ import (
 	"context"
 	"log/slog"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -112,10 +111,8 @@ func (b *SyntheticGatewayBuilderImpl) ComputeTreeUpdates() {
 	previousGatewayUpdate.OldObject = previousGatewayUpdate.NewObject
 	previousGatewayUpdate.Status = store.StatusUpserted
 	previousGatewayUpdate.NewObject = &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      syntheticGatewayNamespacedName.Name,
-			Namespace: syntheticGatewayNamespacedName.Namespace,
-		},
+		Name:      syntheticGatewayNamespacedName.Name,
+		Namespace: syntheticGatewayNamespacedName.Namespace,
 		Spec: gatewayv1.GatewaySpec{
 			GatewayClassName: "ing:gatewayclass",
 			Listeners:        listeners,

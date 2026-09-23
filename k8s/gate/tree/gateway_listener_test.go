@@ -214,7 +214,7 @@ func Test_hostnameConflicts(t *testing.T) {
 func newListenerForPortTest(port int32) (*Listener, *Gateway) {
 	gw := &Gateway{
 		K8sResource: &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default", Generation: 1},
+			Name: "gw", Namespace: "default", Generation: 1,
 		},
 	}
 	l := &Listener{

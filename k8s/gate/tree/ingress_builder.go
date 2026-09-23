@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	networkingv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -260,14 +259,12 @@ func (b *IngressBuilderImpl) ingressBackendToRef(
 	}
 
 	return gatewayv1.HTTPBackendRef{
-		BackendRef: gatewayv1.BackendRef{
-			BackendObjectReference: gatewayv1.BackendObjectReference{
-				Name: gatewayv1.ObjectName(backend.Service.Name),
-				Port: &port,
-				// Namespace is intentionally nil: an Ingress can only reference a
-				// Service in its own namespace, so the backend stays same-namespace
-				// and never needs a ReferenceGrant.
-			},
+		BackendObjectReference: gatewayv1.BackendObjectReference{
+			Name: gatewayv1.ObjectName(backend.Service.Name),
+			Port: &port,
+			// Namespace is intentionally nil: an Ingress can only reference a
+			// Service in its own namespace, so the backend stays same-namespace
+			// and never needs a ReferenceGrant.
 		},
 		Filters: backendCRFilters,
 	}, true
@@ -388,10 +385,8 @@ func newSyntheticHTTPRoute(
 	gatewayNamespace := gatewayv1.Namespace(syntheticGatewayNamespacedName.Namespace)
 
 	return &gatewayv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ingress.Namespace,
-			Name:      name,
-		},
+		Namespace: ingress.Namespace,
+		Name:      name,
 		Spec: gatewayv1.HTTPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: []gatewayv1.ParentReference{{

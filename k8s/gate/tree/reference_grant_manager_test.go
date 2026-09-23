@@ -18,7 +18,6 @@ import (
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
@@ -49,7 +48,7 @@ func TestReferenceGrantManager_WildcardTo(t *testing.T) {
 	mgr := NewReferenceGrantManager()
 
 	k8s := &gatewayv1beta1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "backend-ns", Name: "grant-wildcard"},
+		Namespace: "backend-ns", Name: "grant-wildcard",
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{{
 				Group:     gatewayv1.GroupName,
@@ -81,7 +80,7 @@ func TestReferenceGrantManager_NamedTo(t *testing.T) {
 	mgr := NewReferenceGrantManager()
 
 	k8s := &gatewayv1beta1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "backend-ns", Name: "grant-named"},
+		Namespace: "backend-ns", Name: "grant-named",
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{{
 				Group:     gatewayv1.GroupName,
@@ -112,7 +111,7 @@ func TestReferenceGrantManager_UpdateWipesPreviousFootprint(t *testing.T) {
 	mgr := NewReferenceGrantManager()
 
 	k8sV1 := &gatewayv1beta1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "backend-ns", Name: "grant-update"},
+		Namespace: "backend-ns", Name: "grant-update",
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{{
 				Group:     gatewayv1.GroupName,
@@ -133,7 +132,7 @@ func TestReferenceGrantManager_UpdateWipesPreviousFootprint(t *testing.T) {
 
 	// Update the grant: only route-ns-new is now authorised.
 	k8sV2 := &gatewayv1beta1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "backend-ns", Name: "grant-update"},
+		Namespace: "backend-ns", Name: "grant-update",
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{{
 				Group:     gatewayv1.GroupName,
@@ -164,7 +163,7 @@ func TestReferenceGrantManager_DeleteMultiToNoLeftovers(t *testing.T) {
 	mgr := NewReferenceGrantManager()
 
 	k8s := &gatewayv1beta1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "backend-ns", Name: "grant-multi"},
+		Namespace: "backend-ns", Name: "grant-multi",
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{{
 				Group:     gatewayv1.GroupName,
@@ -205,7 +204,7 @@ func TestReferenceGrantManager_TwoGrantsSameTo_DeleteOneKeepsOther(t *testing.T)
 	mgr := NewReferenceGrantManager()
 
 	k8sA := &gatewayv1beta1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "backend-ns", Name: "grant-a"},
+		Namespace: "backend-ns", Name: "grant-a",
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{{
 				Group:     gatewayv1.GroupName,
@@ -216,7 +215,7 @@ func TestReferenceGrantManager_TwoGrantsSameTo_DeleteOneKeepsOther(t *testing.T)
 		},
 	}
 	k8sB := &gatewayv1beta1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "backend-ns", Name: "grant-b"},
+		Namespace: "backend-ns", Name: "grant-b",
 		Spec: gatewayv1beta1.ReferenceGrantSpec{
 			From: []gatewayv1beta1.ReferenceGrantFrom{{
 				Group:     gatewayv1.GroupName,

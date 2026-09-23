@@ -223,12 +223,10 @@ func (b *HaproxyConfMgrImpl) getServersForBackend(svcKey client.ObjectKey, be Ba
 				}
 
 				server := models.Server{
-					ServerParams: models.ServerParams{
-						Maintenance: "disabled",
-					},
-					Address: address,
-					Port:    new(int64(serverPort)),
-					Name:    serverName,
+					Maintenance: "disabled",
+					Address:     address,
+					Port:        new(int64(serverPort)),
+					Name:        serverName,
 				}
 				servers[serverName] = server
 			}

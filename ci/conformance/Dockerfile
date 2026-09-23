@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.23
+ARG GO_VERSION=1.27
 FROM golang:${GO_VERSION}-alpine AS builder
 WORKDIR /workspace
 COPY . .

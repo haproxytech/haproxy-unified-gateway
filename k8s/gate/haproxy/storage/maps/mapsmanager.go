@@ -97,16 +97,14 @@ func (m *MapFileState) ProcessMapFiles() {
 		for backendName, collectedIntents := range backendsOp {
 			// DiffValue
 			diffValue := &IntentValue{
-				WeightedValue: WeightedValue{
-					ValueName: backendName,
-					Weight: func() *int32 {
-						if collectedIntents.Weight != nil {
-							weight := *collectedIntents.Weight
-							return &weight
-						}
-						return nil
-					}(),
-				},
+				ValueName: backendName,
+				Weight: func() *int32 {
+					if collectedIntents.Weight != nil {
+						weight := *collectedIntents.Weight
+						return &weight
+					}
+					return nil
+				}(),
 				Operation: func() Operation {
 					// Deduced operation in ordered precedence
 					// Ex: an update is prior to a delete
@@ -224,10 +222,8 @@ func (i IntentValue) String() string {
 func (i IntentValue) Copy() *IntentValue {
 	weight := utils.PointerDefaultValueIfNil(i.WeightedValue.Weight)
 	return &IntentValue{
-		WeightedValue: WeightedValue{
-			ValueName: i.WeightedValue.ValueName,
-			Weight:    &weight,
-		},
+		ValueName: i.WeightedValue.ValueName,
+		Weight:    &weight,
 		Operation: i.Operation,
 	}
 }
@@ -402,10 +398,8 @@ func (m *MapFileState) ApplyDesiredBackends(
 	for backendName, currentIntent := range currentByBackend {
 		if _, stillDesired := desired[backendName]; !stillDesired {
 			currentByBackend[backendName] = &IntentValue{
-				WeightedValue: WeightedValue{
-					ValueName: backendName,
-					Weight:    currentIntent.Weight,
-				},
+				ValueName: backendName,
+				Weight:    currentIntent.Weight,
 				Operation: Delete,
 			}
 		}
@@ -419,10 +413,8 @@ func (m *MapFileState) ApplyDesiredBackends(
 		case !exists:
 			// CREATE
 			currentByBackend[backendName] = &IntentValue{
-				WeightedValue: WeightedValue{
-					ValueName: backendName,
-					Weight:    copyWeight(desiredBackend.Weight),
-				},
+				ValueName: backendName,
+				Weight:    copyWeight(desiredBackend.Weight),
 				Operation: Create,
 			}
 

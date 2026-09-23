@@ -33,11 +33,9 @@ func TestComputeListenerConflicts(t *testing.T) {
 	// Helper to create a Gateway
 	mkGateway := func(name string, creationTime time.Time, listeners ...gatewayv1.Listener) *Gateway {
 		gw := &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              name,
-				Namespace:         "default",
-				CreationTimestamp: metav1.NewTime(creationTime),
-			},
+			Name:              name,
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(creationTime),
 			Spec: gatewayv1.GatewaySpec{
 				Listeners: listeners,
 			},
@@ -444,11 +442,9 @@ func TestNonDeletedGateways(t *testing.T) {
 
 	mkGateway := func(name string, status store.Status) *Gateway {
 		gw := &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              name,
-				Namespace:         "default",
-				CreationTimestamp: metav1.NewTime(t1),
-			},
+			Name:              name,
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(t1),
 		}
 		return &Gateway{
 			K8sResource: gw,
@@ -517,12 +513,10 @@ func TestListenersPerPort(t *testing.T) {
 
 	mkGateway := func(name string, creationTime time.Time, listeners ...gatewayv1.Listener) *Gateway {
 		gw := &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              name,
-				Namespace:         "default",
-				CreationTimestamp: metav1.NewTime(creationTime),
-			},
-			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
+			Name:              name,
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(creationTime),
+			Spec:              gatewayv1.GatewaySpec{Listeners: listeners},
 		}
 		return &Gateway{K8sResource: gw}
 	}

@@ -277,16 +277,14 @@ func (r *GatewayReconciler) buildDeployment(resourceName, gwNS, gwName, gatewayF
 	one := int32(1)
 	runLabel := map[string]string{"run": resourceName}
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      resourceName,
-			Namespace: r.Config.DeployerNs,
-			Labels: map[string]string{
-				// Mirroring the "run" label from the Deployment
-				"run": resourceName,
-				// The watched Gateway's namespace and name are labeled to allow the HUG controller to correlate the Deployment with the correct Gateway.
-				labelGatewayNSKey:   gwNS,
-				labelGatewayNameKey: gwName,
-			},
+		Name:      resourceName,
+		Namespace: r.Config.DeployerNs,
+		Labels: map[string]string{
+			// Mirroring the "run" label from the Deployment
+			"run": resourceName,
+			// The watched Gateway's namespace and name are labeled to allow the HUG controller to correlate the Deployment with the correct Gateway.
+			labelGatewayNSKey:   gwNS,
+			labelGatewayNameKey: gwName,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &one,
@@ -353,15 +351,13 @@ func (r *GatewayReconciler) buildDeployment(resourceName, gwNS, gwName, gatewayF
 // buildService returns the desired Service for a Gateway.
 func (r *GatewayReconciler) buildService(resourceName, gwNS, gwName, svcLabelVal string) *corev1.Service {
 	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      resourceName,
-			Namespace: r.Config.DeployerNs,
-			Labels: map[string]string{
-				hugServiceLabelKey: svcLabelVal,
-				// The watched Gateway's namespace and name are labeled to the HUG Service
-				labelGatewayNSKey:   gwNS,
-				labelGatewayNameKey: gwName,
-			},
+		Name:      resourceName,
+		Namespace: r.Config.DeployerNs,
+		Labels: map[string]string{
+			hugServiceLabelKey: svcLabelVal,
+			// The watched Gateway's namespace and name are labeled to the HUG Service
+			labelGatewayNSKey:   gwNS,
+			labelGatewayNameKey: gwName,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"run": resourceName},

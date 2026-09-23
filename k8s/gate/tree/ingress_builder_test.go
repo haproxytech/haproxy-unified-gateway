@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -41,8 +40,8 @@ type ingressClassFixture struct {
 
 func mkIngressClass(f ingressClassFixture) *networkingv1.IngressClass {
 	ic := &networkingv1.IngressClass{
-		ObjectMeta: metav1.ObjectMeta{Name: f.name},
-		Spec:       networkingv1.IngressClassSpec{Controller: f.controller},
+		Name: f.name,
+		Spec: networkingv1.IngressClassSpec{Controller: f.controller},
 	}
 	if f.isDefault {
 		ic.Annotations = map[string]string{isDefaultClassAnnotation: "true"}
@@ -224,24 +223,22 @@ func TestIsIngressClassSupported(t *testing.T) {
 // mkIngressWithRule builds an Ingress with a single numeric-port rule (so it
 // converts to one synthetic HTTPRoute without a Service lookup).
 func mkIngressWithRule(ns, name, className string) *networkingv1.Ingress {
-	ing := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	ing := &networkingv1.Ingress{Namespace: ns, Name: name}
 	if className != "" {
 		ing.Spec.IngressClassName = &className
 	}
 	ing.Spec.Rules = []networkingv1.IngressRule{{
 		Host: "example.test",
-		IngressRuleValue: networkingv1.IngressRuleValue{
-			HTTP: &networkingv1.HTTPIngressRuleValue{
-				Paths: []networkingv1.HTTPIngressPath{{
-					Path: "/",
-					Backend: networkingv1.IngressBackend{
-						Service: &networkingv1.IngressServiceBackend{
-							Name: "svc",
-							Port: networkingv1.ServiceBackendPort{Number: 80},
-						},
+		HTTP: &networkingv1.HTTPIngressRuleValue{
+			Paths: []networkingv1.HTTPIngressPath{{
+				Path: "/",
+				Backend: networkingv1.IngressBackend{
+					Service: &networkingv1.IngressServiceBackend{
+						Name: "svc",
+						Port: networkingv1.ServiceBackendPort{Number: 80},
 					},
-				}},
-			},
+				},
+			}},
 		},
 	}}
 	return ing
@@ -278,7 +275,7 @@ func TestComputeTreeUpdatesReevaluatesOnIngressClassChange(t *testing.T) {
 		}
 		gt := &GateTree{HTTPRoutes: map[types.NamespacedName]*HTTPRoute{
 			syntheticKey: {K8sResource: &gatewayv1.HTTPRoute{
-				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: syntheticName},
+				Namespace: ns, Name: syntheticName,
 			}},
 		}}
 		b := &IngressBuilderImpl{ControllerStore: &ControllerStore{
@@ -459,7 +456,7 @@ func TestConvertIngressDefaultBackend(t *testing.T) {
 		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}}
 	ingress := &networkingv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "app", Name: "ing"},
+		Namespace: "app", Name: "ing",
 		Spec: networkingv1.IngressSpec{
 			DefaultBackend: &networkingv1.IngressBackend{
 				Service: &networkingv1.IngressServiceBackend{
@@ -497,7 +494,7 @@ func TestConvertIngressNoDefaultBackend(t *testing.T) {
 		ClusterStore: &store.ClusterStore{},
 		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}}
-	ingress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: "app", Name: "ing"}}
+	ingress := &networkingv1.Ingress{Namespace: "app", Name: "ing"}
 	if routes := b.convertIngressToHTTPRoutes(ingress); len(routes) != 0 {
 		t.Errorf("expected no synthetic routes without rules or a default backend, got %v", routes)
 	}
@@ -530,8 +527,8 @@ func TestResolveServicePort(t *testing.T) {
 
 	mkSvc := func(name string, ports ...corev1.ServicePort) *corev1.Service {
 		return &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
-			Spec:       corev1.ServiceSpec{Ports: ports},
+			Namespace: ns, Name: name,
+			Spec: corev1.ServiceSpec{Ports: ports},
 		}
 	}
 	svcPort := func(name string, num int32) corev1.ServicePort {
@@ -592,7 +589,7 @@ func TestResolveServicePort(t *testing.T) {
 				ClusterStore: &store.ClusterStore{Services: services},
 				Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}}
-			ingress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ing"}}
+			ingress := &networkingv1.Ingress{Namespace: ns, Name: "ing"}
 
 			got, ok := b.resolveServicePort(ingress, tc.backend)
 			assert.Equal(t, tc.wantOK, ok)

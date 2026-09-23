@@ -26,10 +26,8 @@ import (
 // Helper to create a Gateway with a given name and timestamp offset
 func newGateway(name string, now metav1.Time, offset time.Duration) *gatewayv1.Gateway {
 	return &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              name,
-			CreationTimestamp: metav1.Time{Time: now.Add(offset)},
-		},
+		Name:              name,
+		CreationTimestamp: metav1.Time{Time: now.Add(offset)},
 	}
 }
 

@@ -593,23 +593,21 @@ func (b *HaproxyConfMgrImpl) newBackend(backendName string, md metadata.MetaData
 	}
 
 	newBackend := &models.Backend{
-		BackendBase: models.BackendBase{
-			Metadata: md,
-			Name:     backendName,
-			Mode: func() string {
-				if isHTTPBackend {
-					return "http"
-				}
-				return "tcp"
-			}(),
-			From:          b.params.DefaultsSectionName,
-			Balance:       &models.Balance{Algorithm: new("roundrobin")},
-			Abortonclose:  "disabled",
-			ServerTimeout: new(int64(50000)),
-			Forwardfor:    optionForwardFor,
-			DefaultServer: &models.DefaultServer{
-				ServerParams: models.ServerParams{Check: "enabled"},
-			},
+		Metadata: md,
+		Name:     backendName,
+		Mode: func() string {
+			if isHTTPBackend {
+				return "http"
+			}
+			return "tcp"
+		}(),
+		From:          b.params.DefaultsSectionName,
+		Balance:       &models.Balance{Algorithm: new("roundrobin")},
+		Abortonclose:  "disabled",
+		ServerTimeout: new(int64(50000)),
+		Forwardfor:    optionForwardFor,
+		DefaultServer: &models.DefaultServer{
+			Check: "enabled",
 		},
 	}
 
@@ -690,12 +688,10 @@ func (b *HaproxyConfMgrImpl) newRedirectBackend(backendName string, md metadata.
 		return nil, fmt.Errorf("redirect backend %q has no redirect rule", backendName)
 	}
 	be := &models.Backend{
-		BackendBase: models.BackendBase{
-			Metadata: md,
-			Name:     backendName,
-			Mode:     "http",
-			From:     b.params.DefaultsSectionName,
-		},
+		Metadata:            md,
+		Name:                backendName,
+		Mode:                "http",
+		From:                b.params.DefaultsSectionName,
 		HTTPRequestRuleList: filterResult.RedirectRules,
 	}
 	return be, nil

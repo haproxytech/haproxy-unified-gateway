@@ -24,7 +24,6 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -36,7 +35,7 @@ func grantServiceToBackend(fromNs, toNs string) *tree.ReferenceGrantManager {
 	rgm := tree.NewReferenceGrantManager()
 	rgm.UpsertReferenceGrant(tree.ReferenceGrant{
 		K8sResource: &gatewayv1beta1.ReferenceGrant{
-			ObjectMeta: metav1.ObjectMeta{Namespace: toNs, Name: "grant"},
+			Namespace: toNs, Name: "grant",
 			Spec: gatewayv1beta1.ReferenceGrantSpec{
 				From: []gatewayv1beta1.ReferenceGrantFrom{{Group: "", Kind: "Service", Namespace: gatewayv1.Namespace(fromNs)}},
 				To:   []gatewayv1beta1.ReferenceGrantTo{{Group: gatewayv1.Group(v3.GroupName), Kind: "Backend"}},
@@ -61,7 +60,7 @@ func serviceCRMgr(
 }
 
 func annotatedService(ns, name, annotationValue string) *apiv1.Service {
-	s := &apiv1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	s := &apiv1.Service{Namespace: ns, Name: name}
 	if annotationValue != "" {
 		s.Annotations = map[string]string{constants.ServiceBackendCRAnnotation: annotationValue}
 	}
@@ -70,9 +69,7 @@ func annotatedService(ns, name, annotationValue string) *apiv1.Service {
 
 func serviceHTTPBackendRef(name string) gatewayv1.HTTPBackendRef {
 	return gatewayv1.HTTPBackendRef{
-		BackendRef: gatewayv1.BackendRef{
-			BackendObjectReference: gatewayv1.BackendObjectReference{Name: gatewayv1.ObjectName(name)},
-		},
+		Name: gatewayv1.ObjectName(name),
 	}
 }
 
@@ -95,7 +92,7 @@ func TestMergeServiceBackendCR(t *testing.T) {
 			map[k8stypes.NamespacedName]*v3.Backend{crNN: tuningCR("http", "")},
 		)
 		// newBackend simulates the route-level result: Mode already set to tcp.
-		be := &models.Backend{BackendBase: models.BackendBase{Mode: "tcp"}}
+		be := &models.Backend{Mode: "tcp"}
 		if err := mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -109,7 +106,7 @@ func TestMergeServiceBackendCR(t *testing.T) {
 			map[k8stypes.NamespacedName]*apiv1.Service{svcNN: annotatedService("team-a", "echo", "tuning")},
 			map[k8stypes.NamespacedName]*v3.Backend{crNN: tuningCR("", "leastconn")},
 		)
-		be := &models.Backend{BackendBase: models.BackendBase{Mode: "http", Abortonclose: "enabled"}}
+		be := &models.Backend{Mode: "http", Abortonclose: "enabled"}
 		if err := mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -126,7 +123,7 @@ func TestMergeServiceBackendCR(t *testing.T) {
 			map[k8stypes.NamespacedName]*apiv1.Service{svcNN: annotatedService("team-a", "echo", "team-a/tuning")},
 			map[k8stypes.NamespacedName]*v3.Backend{crNN: tuningCR("http", "")},
 		)
-		be := &models.Backend{BackendBase: models.BackendBase{Mode: "tcp"}}
+		be := &models.Backend{Mode: "tcp"}
 		_ = mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a")
 		if be.Mode != "http" {
 			t.Errorf("expected same-namespace ns/name to resolve, Mode=%q", be.Mode)
@@ -141,7 +138,7 @@ func TestMergeServiceBackendCR(t *testing.T) {
 			},
 		)
 		// No ReferenceGrantManager set (nil) => not permitted.
-		be := &models.Backend{BackendBase: models.BackendBase{Mode: "tcp"}}
+		be := &models.Backend{Mode: "tcp"}
 		_ = mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a")
 		if be.Mode != "tcp" {
 			t.Errorf("expected cross-namespace to be skipped without a grant, Mode=%q", be.Mode)
@@ -158,7 +155,7 @@ func TestMergeServiceBackendCR(t *testing.T) {
 		// Grant: Service in team-a may reference a Backend in shared.
 		mgr.controllerStore.ReferenceGrantManager = grantServiceToBackend("team-a", "shared")
 
-		be := &models.Backend{BackendBase: models.BackendBase{Mode: "tcp"}}
+		be := &models.Backend{Mode: "tcp"}
 		if err := mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -172,7 +169,7 @@ func TestMergeServiceBackendCR(t *testing.T) {
 			map[k8stypes.NamespacedName]*apiv1.Service{svcNN: annotatedService("team-a", "echo", "")},
 			nil,
 		)
-		be := &models.Backend{BackendBase: models.BackendBase{Mode: "tcp"}}
+		be := &models.Backend{Mode: "tcp"}
 		if err := mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -186,7 +183,7 @@ func TestMergeServiceBackendCR(t *testing.T) {
 			map[k8stypes.NamespacedName]*apiv1.Service{svcNN: annotatedService("team-a", "echo", "absent")},
 			nil,
 		)
-		be := &models.Backend{BackendBase: models.BackendBase{Mode: "tcp"}}
+		be := &models.Backend{Mode: "tcp"}
 		if err := mgr.mergeServiceBackendCR(be, serviceHTTPBackendRef("echo"), "team-a"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
