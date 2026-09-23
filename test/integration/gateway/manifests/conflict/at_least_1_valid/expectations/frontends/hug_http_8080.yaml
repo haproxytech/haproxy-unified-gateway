@@ -4,6 +4,31 @@ acl_list:
   metadata:
     hug: for lua routing
   value: -m str {
+- acl_name: lr_exact_single
+  criterion: var(txn.selected_listener_route)
+  metadata:
+    hug: single exact-host candidate
+  value: -m reg ^[^,]+$
+- acl_name: lr_wild_single
+  criterion: var(txn.selected_listener_route_wildcard)
+  metadata:
+    hug: single wildcard-host candidate
+  value: -m reg ^[^,]+$
+- acl_name: lr_exact_found
+  criterion: var(txn.selected_listener_route)
+  metadata:
+    hug: exact-host candidates present
+  value: -m found
+- acl_name: lr_wild_found
+  criterion: var(txn.selected_listener_route_wildcard)
+  metadata:
+    hug: wildcard-host candidates present
+  value: -m found
+- acl_name: fast_path
+  criterion: var(txn.lr)
+  metadata:
+    hug: native fast-path lookup active
+  value: -m found
 - acl_name: _preload_path_exact
   criterion: str(_),map(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_exact.map)
   metadata:
@@ -84,10 +109,68 @@ http_request_rule_list:
   var_expr: var(txn.tmp_wild),map_beg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/listener_route_wildcard_match.map)
   var_name: selected_listener_route_wildcard
   var_scope: txn
-- lua_action: find_route
+- cond: if
+  cond_test: lr_exact_single !lr_wild_found
+  metadata:
+    hug: 'fast path: single exact-host candidate'
+  type: set-var
+  var_expr: var(txn.selected_listener_route)
+  var_name: lr
+  var_scope: txn
+- cond: if
+  cond_test: lr_wild_single !lr_exact_found
+  metadata:
+    hug: 'fast path: single wildcard-host candidate'
+  type: set-var
+  var_expr: var(txn.selected_listener_route_wildcard)
+  var_name: lr
+  var_scope: txn
+- cond: if
+  cond_test: fast_path
+  metadata:
+    hug: 'fast path: BLR computation'
+  type: set-var
+  var_expr: var(txn.lr),concat("",txn.path)
+  var_name: blr
+  var_scope: txn
+- cond: if
+  cond_test: fast_path
+  metadata:
+    hug: 'fast path: base listener route for logs'
+  type: set-var
+  var_expr: var(txn.blr)
+  var_name: base_listener_route
+  var_scope: txn
+- cond: if
+  cond_test: fast_path
+  metadata:
+    hug: 'fast path: exact path match'
+  type: set-var
+  var_expr: var(txn.blr),map(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_exact.map)
+  var_name: route
+  var_scope: txn
+- cond: if
+  cond_test: fast_path
+  metadata:
+    hug: 'fast path: longest prefix match'
+  type: set-var
+  var_expr: var(txn.blr),map_beg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_prefix.map)
+  var_name: route,ifnotexists
+  var_scope: txn
+- cond: if
+  cond_test: fast_path
+  metadata:
+    hug: 'fast path: regex match'
+  type: set-var
+  var_expr: var(txn.blr),map_reg(/tmp/hug/e2e-tests-gateway/maps/hug_http_8080/path_regex.map)
+  var_name: route,ifnotexists
+  var_scope: txn
+- cond: if
+  cond_test: '!fast_path'
+  lua_action: find_route
   lua_params: /tmp/hug/e2e-tests-gateway/maps/hug_http_8080
   metadata:
-    hug: 'lua find_route: BLR computation + path map lookup'
+    hug: 'lua find_route: multi-candidate scoring + path map lookup'
   type: lua
 - cond: if
   cond_test: route_is_json
