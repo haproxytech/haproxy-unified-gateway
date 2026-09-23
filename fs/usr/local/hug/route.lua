@@ -69,6 +69,10 @@ end
 -- TODO: might need a "purge" strategy to avoid memory leak
 local cache = {}
 
+-- Per-thread path map indexes, maintained by the find_route section below;
+-- declared here so the cache-clearing task can see it.
+local map_index = {}
+
 -- dictionnary to describe supported algorithms
 -- each algorithm must expose a few functions:
 -- - load_route: to load a route string in the cache
@@ -165,6 +169,8 @@ local function clear_cache()
         local count = count_keys(cache)
         local str = core.concat()
         cache = {}
+        -- Also drop map indexes, so deleted frontends do not leak memory.
+        map_index = {}
         -- str:add('cleared ')
         -- str:add(count)
         -- str:add(' entries')
@@ -218,8 +224,14 @@ end
 core.register_action("route", { "http-req" }, route)
 
 -- Path maps are pre-loaded by HAProxy via dummy ACLs in haproxy.cfg, so
--- core.get_patref returns a handle to the live in-memory pat_ref. Iterating
--- with pairs() sees runtime-socket updates (set/add/del map) immediately.
+-- core.get_patref returns a handle to the live in-memory pat_ref.
+-- Iterating the patref costs ~0.4us per entry (each pairs() step crosses
+-- into C), so lookups are served from per-thread indexes rebuilt from the
+-- patref when older than MAP_INDEX_TTL. The patref exposes no change
+-- signal, so runtime map updates become visible within the TTL window
+-- instead of on the next request.
+local MAP_INDEX_TTL = 1
+
 local patref_cache = {}
 
 local function get_ref(filepath)
@@ -239,34 +251,70 @@ local function get_ref(filepath)
     return nil
 end
 
-local function exact_lookup(filepath, key)
-    local r = get_ref(filepath)
-    if not r then return nil end
-    for k, v in pairs(r) do
-        if k == key then return v end
-    end
-    return nil
+local function now_s()
+    local t = core.now()
+    return t.sec + t.usec / 1e6
 end
 
+-- map_index[filepath] = { built_at, values, sorted }
+local function build_index(filepath)
+    local ref = get_ref(filepath)
+    if not ref then return nil end
+    local idx = { built_at = now_s(), values = {}, sorted = {}, maxlen = 0 }
+    for k, v in pairs(ref) do
+        idx.values[k] = v
+        idx.sorted[#idx.sorted + 1] = k
+        if #k > idx.maxlen then idx.maxlen = #k end
+    end
+    table.sort(idx.sorted)
+    return idx
+end
+
+local function index_for(filepath, now)
+    local idx = map_index[filepath]
+    if idx ~= nil and now - idx.built_at < MAP_INDEX_TTL then
+        return idx
+    end
+    local fresh = build_index(filepath)
+    if fresh ~= nil then
+        map_index[filepath] = fresh
+        return fresh
+    end
+    return idx
+end
+
+local function exact_lookup(filepath, key, now)
+    local idx = index_for(filepath, now)
+    if not idx then return nil end
+    return idx.values[key]
+end
+
+-- Longest-prefix match: probe key prefixes from longest to shortest against
+-- the hash. Cost is O(#key) hash lookups, independent of map size, and a
+-- miss is as cheap as a hit (a sorted-array walk-back degenerates to O(n)
+-- on misses, which multi-candidate requests hit for every candidate).
 -- Returns value and match length (0 if no match).
-local function prefix_lookup(filepath, key)
-    local r = get_ref(filepath)
-    if not r then return nil, 0 end
-    local best_v, best_len = nil, 0
-    for k, v in pairs(r) do
-        if #k > best_len and key:sub(1, #k) == k then
-            best_v, best_len = v, #k
+local function prefix_lookup(filepath, key, now)
+    local idx = index_for(filepath, now)
+    if not idx then return nil, 0 end
+    local values = idx.values
+    local maxlen = idx.maxlen
+    if maxlen > #key then maxlen = #key end
+    for len = maxlen, 1, -1 do
+        local v = values[key:sub(1, len)]
+        if v ~= nil then
+            return v, len
         end
     end
-    return best_v, best_len
+    return nil, 0
 end
 
-local function regex_lookup(filepath, key)
-    local r = get_ref(filepath)
-    if not r then return nil end
-    for k, v in pairs(r) do
+local function regex_lookup(filepath, key, now)
+    local idx = index_for(filepath, now)
+    if not idx then return nil end
+    for _, k in ipairs(idx.sorted) do
         local ok, m = pcall(string.match, key, k)
-        if ok and m then return v end
+        if ok and m then return idx.values[k] end
     end
     return nil
 end
@@ -295,6 +343,7 @@ local function find_route(txn, maps_dir)
     local prefix_file = maps_dir .. "/path_prefix.map"
     local regex_file  = maps_dir .. "/path_regex.map"
 
+    local now = now_s()
     local blr_parts  = {}
     local best_val   = nil
     local best_score = -1e9
@@ -307,16 +356,16 @@ local function find_route(txn, maps_dir)
             table.insert(blr_parts, blr)
 
             local m, score
-            m = exact_lookup(exact_file, blr)
+            m = exact_lookup(exact_file, blr, now)
             if m then
                 score = SCORE_EXACT
             else
-                local pv, plen = prefix_lookup(prefix_file, blr)
+                local pv, plen = prefix_lookup(prefix_file, blr, now)
                 if pv then
                     -- plen includes lr; subtract to get path-only specificity.
                     m, score = pv, plen - #lr
                 else
-                    local rv = regex_lookup(regex_file, blr)
+                    local rv = regex_lookup(regex_file, blr, now)
                     if rv then m, score = rv, SCORE_REGEX end
                 end
             end
