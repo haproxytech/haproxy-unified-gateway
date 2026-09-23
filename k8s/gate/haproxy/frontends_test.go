@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/haproxytech/client-native/v6/models"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
@@ -69,6 +70,147 @@ func TestTLSPassthroughRulesScopeConsistency(t *testing.T) {
 					acl.ACLName, acl.Criterion, refScope, varName, wantScope)
 			}
 		}
+	}
+}
+
+// httpFastPathRules is a shared fixture for the fast-path rule-set tests.
+func httpFastPathRules(t *testing.T) ([]*models.HTTPRequestRule, map[string]*models.ACL) {
+	t.Helper()
+	httpRules, aclList := httpFrontendRules(
+		"/maps/fe/listener_exact_match.map",
+		"/maps/fe/listener_wildcard_match.map",
+		"/maps/fe/listener_route_exact_match.map",
+		"/maps/fe/listener_route_wildcard_match.map",
+		"/maps/fe/path_exact.map",
+		"/maps/fe/path_prefix.map",
+		"/maps/fe/path_regex.map",
+		"/maps/fe",
+	)
+	acls := map[string]*models.ACL{}
+	for _, a := range aclList {
+		acls[a.ACLName] = a
+	}
+	return httpRules, acls
+}
+
+func TestHTTPFrontendRulesFastPathACLs(t *testing.T) {
+	_, acls := httpFastPathRules(t)
+	want := map[string]string{
+		"lr_exact_single": "-m reg ^[^,]+$",
+		"lr_wild_single":  "-m reg ^[^,]+$",
+		"lr_exact_found":  "-m found",
+		"lr_wild_found":   "-m found",
+		"fast_path":       "-m found",
+	}
+	for name, value := range want {
+		acl, ok := acls[name]
+		if !ok {
+			t.Fatalf("missing ACL %q", name)
+		}
+		if acl.Value != value {
+			t.Errorf("ACL %q value = %q, want %q", name, acl.Value, value)
+		}
+	}
+	for _, name := range []string{"route_is_json", "_preload_path_exact", "_preload_path_prefix", "_preload_path_regex"} {
+		if _, ok := acls[name]; !ok {
+			t.Fatalf("missing ACL %q", name)
+		}
+	}
+}
+
+// The two candidate-pick rules must be mutually exclusive: each requires its
+// own source to be a single entry and the other source to be absent, so
+// txn.lr being set marks the fast path as active.
+func TestHTTPFrontendRulesFastPathCandidatePick(t *testing.T) {
+	httpRules, _ := httpFastPathRules(t)
+	want := map[string]string{
+		"lr_exact_single !lr_wild_found": "var(txn.selected_listener_route)",
+		"lr_wild_single !lr_exact_found": "var(txn.selected_listener_route_wildcard)",
+	}
+	seen := map[string]bool{}
+	for _, r := range httpRules {
+		if r.Type != "set-var" || r.VarName != "lr" {
+			continue
+		}
+		expr, ok := want[r.CondTest]
+		if !ok {
+			t.Errorf("unexpected condition on txn.lr rule: %q", r.CondTest)
+			continue
+		}
+		if r.VarExpr != expr {
+			t.Errorf("txn.lr rule with condition %q has expr %q, want %q", r.CondTest, r.VarExpr, expr)
+		}
+		seen[r.CondTest] = true
+	}
+	for cond := range want {
+		if !seen[cond] {
+			t.Errorf("missing candidate-pick rule with condition %q", cond)
+		}
+	}
+}
+
+// The lookup chain must mirror lua find_route specificity: exact first, then
+// longest prefix (map_beg), then regex — with base_listener_route kept for
+// logging parity with the Lua fallback.
+func TestHTTPFrontendRulesFastPathLookupChain(t *testing.T) {
+	httpRules, _ := httpFastPathRules(t)
+	var chain []*models.HTTPRequestRule
+	var blr bool
+	for _, r := range httpRules {
+		switch {
+		case r.Type == "set-var" && r.VarName == "base_listener_route" && r.CondTest == "fast_path":
+			blr = true
+		case r.Type == "set-var" && r.CondTest == "fast_path" && strings.HasPrefix(r.VarName, "route"):
+			chain = append(chain, r)
+		}
+	}
+	if !blr {
+		t.Error("fast path must set txn.base_listener_route")
+	}
+	if len(chain) != 3 {
+		t.Fatalf("expected 3 fast-path lookup rules, got %d", len(chain))
+	}
+	wantExpr := []string{"map(", "map_beg(", "map_reg("}
+	wantVar := []string{"route", "route,ifnotexists", "route,ifnotexists"}
+	for i, r := range chain {
+		if r.VarName != wantVar[i] || !strings.Contains(r.VarExpr, wantExpr[i]) {
+			t.Errorf("lookup rule %d: var=%q expr=%q, want var=%q containing %q",
+				i, r.VarName, r.VarExpr, wantVar[i], wantExpr[i])
+		}
+	}
+}
+
+// find_route must only run off the fast path; lua.route stays gated on
+// route_is_json; and the whole fast-path block must sit between the
+// listener-route selection and lua.route.
+func TestHTTPFrontendRulesFastPathOrderingAndFallback(t *testing.T) {
+	httpRules, _ := httpFastPathRules(t)
+	var wildSet, lrPick, routeLua int = -1, -1, -1
+	for i, r := range httpRules {
+		switch {
+		case r.Type == "lua" && r.LuaAction == "find_route":
+			if r.Cond != "if" || r.CondTest != "!fast_path" {
+				t.Errorf("find_route fallback must run only when the fast path is inactive, got cond=%q test=%q", r.Cond, r.CondTest)
+			}
+		case r.Type == "lua" && r.LuaAction == "route":
+			if r.CondTest != "route_is_json" {
+				t.Errorf("lua.route must stay gated on route_is_json, got %q", r.CondTest)
+			}
+			routeLua = i
+		case r.Type == "set-var" && r.VarName == "selected_listener_route_wildcard":
+			wildSet = i
+		case r.Type == "set-var" && r.VarName == "lr" && lrPick == -1:
+			lrPick = i
+		}
+	}
+	if wildSet == -1 || lrPick == -1 || routeLua == -1 {
+		t.Fatal("missing listener-route selection, txn.lr pick or lua.route rules")
+	}
+	if wildSet > lrPick {
+		t.Errorf("txn.lr pick (rule %d) must come after listener-route selection (rule %d)", lrPick, wildSet)
+	}
+	if routeLua < lrPick {
+		t.Errorf("lua.route (rule %d) must come after the fast-path rules (rule %d)", routeLua, lrPick)
 	}
 }
 

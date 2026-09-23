@@ -218,115 +218,16 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 		)
 
 	default:
-		httpRules = []*models.HTTPRequestRule{
-			{ // http-request set-var(txn.path) path
-				Type:     "set-var",
-				VarName:  "path",
-				VarScope: "txn",
-				VarExpr:  "path",
-			},
-			{ // http-request set-var(txn.host) req.hdr(Host),host_only
-				Type:     "set-var",
-				VarName:  "host",
-				VarScope: "txn",
-				VarExpr:  "req.hdr(Host),host_only",
-			},
-			{
-				// http-request set-var(txn.hostreversed) req.hdr(Host),host_only,lua.reverse_host
-				Type:     "set-var",
-				VarName:  "hostreversed",
-				VarScope: "txn",
-				VarExpr:  "req.hdr(Host),host_only,lua.reverse_host",
-			},
-			{ // http-request set-var(txn.base) var(txn.host),concat("",txn.path)
-				Type:     "set-var",
-				VarName:  "base",
-				VarScope: "txn",
-				VarExpr:  "var(txn.host),concat(\"\",txn.path)",
-			},
-			// -------------------
-			// Look for listener name: selected_listener_name
-			{
-				// listener-name exact match
-				// http-request set-var(txn.selected-listener-name) var(txn.host),map(listener_exact_match)
-				Type:     "set-var",
-				VarName:  "selected_listener_name",
-				VarScope: "txn",
-				VarExpr:  "var(txn.host),map(" + listenerExactMatchMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "listener exact match selection"},
-			},
-			{
-				// http-request set-var(txn.selected-listener-name,ifnotexists) var(txn.hostreversed),map_beg(listener_wildcard_match)
-				Type:     "set-var",
-				VarName:  "selected_listener_name,ifnotexists",
-				VarScope: "txn",
-				VarExpr:  "var(txn.hostreversed),map_beg(" + listenerWildcardMatchMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "listener wildcard match selection"},
-			},
-			// {
-			// 	Type:      "lua",
-			// 	LuaAction: "find_listener_route",
-			// },
-			// -------------------
-			// Look for route name: selected_listener_route
-			{
-				//  listener-route-name exact match
-				// http-request set-var(txn.tmp_exact)                   var(txn.selected_listener_name),concat("/",txn.host)
-				// http-request set-var(txn.selected_listener_route)    var(txn.tmp_exact),map(listener_route_exact_match)
-				Type:     "set-var",
-				VarName:  "tmp_exact",
-				VarScope: "txn",
-				VarExpr:  "var(txn.selected_listener_name),concat(\"/\",txn.host)",
-			},
-			{
-				Type:     "set-var",
-				VarName:  "selected_listener_route",
-				VarScope: "txn",
-				VarExpr:  "var(txn.tmp_exact),map(" + listenerRouteExactMatchMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "listener-route exact match selection"},
-			},
-			{
-				//  listener-route-name wildcard match
-				// http-request set-var(txn.tmp_wild)                            var(txn.selected_listener_name),concat("/",txn.hostreversed)
-				// http-request set-var(txn.selected_listener_route_wildcard)   var(txn.tmp_wild),map_beg(listener_route_wildcard_match)
-				Type:     "set-var",
-				VarName:  "tmp_wild",
-				VarScope: "txn",
-				VarExpr:  "var(txn.selected_listener_name),concat(\"/\",txn.hostreversed)",
-			},
-			{
-				Type:     "set-var",
-				VarName:  "selected_listener_route_wildcard",
-				VarScope: "txn",
-				VarExpr:  "var(txn.tmp_wild),map_beg(" + listenerRouteWildcardMatchMap.Path.FullPath() + ")",
-				Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
-			},
-			// -------------------
-			// Lookups based on the selected listener routes (selected_listener_route
-			// and selected_listener_route_wildcard) in the final routing maps.
-			// Both may be comma-separated when multiple HTTPRoutes match the same
-			// listener+host. find_route loops over every candidate from both vars,
-			// appends txn.path, and picks the best match: path specificity is the
-			// primary score (exact > longest prefix > regex); exact-host beats
-			// wildcard-host as the tiebreaker.
-			{
-				// http-request lua.find_route <maps_dir>
-				Type:      "lua",
-				LuaAction: "find_route",
-				LuaParams: pathExactMap.Path.Dir,
-				Metadata:  map[string]any{"hug": "lua find_route: BLR computation + path map lookup"},
-			},
-			{
-				// http-request lua.route if route_is_json
-				Type:      "lua",
-				LuaAction: "route",
-				Cond:      "if",
-				CondTest:  "route_is_json",
-				Metadata: map[string]any{
-					"hug": "lua routing",
-				},
-			},
-		}
+		httpRules, aclList = httpFrontendRules(
+			listenerExactMatchMap.Path.FullPath(),
+			listenerWildcardMatchMap.Path.FullPath(),
+			listenerRouteExactMatchMap.Path.FullPath(),
+			listenerRouteWildcardMatchMap.Path.FullPath(),
+			pathExactMap.Path.FullPath(),
+			pathPrefixMap.Path.FullPath(),
+			pathRegexMap.Path.FullPath(),
+			pathExactMap.Path.Dir,
+		)
 		backendSwitchingRules = []*models.BackendSwitchingRule{
 			{
 				Name:     "%[var(txn.backend)]",
@@ -335,36 +236,6 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 			},
 			{
 				Name: "%[var(txn.route)]",
-			},
-		}
-		aclList = []*models.ACL{
-			{ // acl route_is_json var(txn.route),bytes(0,1) -m str {
-				ACLName:   "route_is_json",
-				Criterion: "var(txn.route),bytes(0,1)",
-				Value:     "-m str {",
-				Metadata: map[string]any{
-					"hug": "for lua routing",
-				},
-			},
-			// Preload path maps at config-parse time so lua.find_route can
-			// reach them via core.get_patref. These ACLs are never evaluated.
-			{
-				ACLName:   "_preload_path_exact",
-				Criterion: "str(_),map(" + pathExactMap.Path.FullPath() + ")",
-				Value:     "-m found",
-				Metadata:  map[string]any{"hug": "preload path_exact.map for lua.find_route"},
-			},
-			{
-				ACLName:   "_preload_path_prefix",
-				Criterion: "str(_),map_beg(" + pathPrefixMap.Path.FullPath() + ")",
-				Value:     "-m found",
-				Metadata:  map[string]any{"hug": "preload path_prefix.map for lua.find_route"},
-			},
-			{
-				ACLName:   "_preload_path_regex",
-				Criterion: "str(_),map_reg(" + pathRegexMap.Path.FullPath() + ")",
-				Value:     "-m found",
-				Metadata:  map[string]any{"hug": "preload path_regex.map for lua.find_route"},
 			},
 		}
 	}
@@ -441,6 +312,264 @@ func (b *HaproxyConfMgrImpl) deleteFrontendForVirtualListener(virtualListenerNam
 		delete(b.firstSync.frontends, feName)
 	}
 	return nil
+}
+
+// httpFrontendRules returns the HTTP request rules and ACLs implementing host,
+// listener, listener-route and path selection for HTTP(S) frontends.
+//
+// Selection of listener and listener-route is fully native (map/map_beg).
+// Path lookup has two tiers:
+//
+//   - fast path: when exactly one candidate listener-route exists (single
+//     entry, no comma, from either the exact- or wildcard-host source), the
+//     lookup reduces to native map/map_beg/map_reg on the concatenated
+//     candidate+path key. Orders of magnitude cheaper than the Lua scans.
+//   - fallback: lua.find_route scores every candidate from both sources
+//     (path specificity first: exact > longest prefix > regex; exact-host
+//     beats wildcard-host as tiebreaker).
+func httpFrontendRules(
+	listenerExactMatch, listenerWildcardMatch,
+	listenerRouteExactMatch, listenerRouteWildcardMatch,
+	pathExactMap, pathPrefixMap, pathRegexMap, mapsDir string,
+) ([]*models.HTTPRequestRule, []*models.ACL) {
+	httpRules := []*models.HTTPRequestRule{
+		{ // http-request set-var(txn.path) path
+			Type:     "set-var",
+			VarName:  "path",
+			VarScope: "txn",
+			VarExpr:  "path",
+		},
+		{ // http-request set-var(txn.host) req.hdr(Host),host_only
+			Type:     "set-var",
+			VarName:  "host",
+			VarScope: "txn",
+			VarExpr:  "req.hdr(Host),host_only",
+		},
+		{
+			// http-request set-var(txn.hostreversed) req.hdr(Host),host_only,lua.reverse_host
+			Type:     "set-var",
+			VarName:  "hostreversed",
+			VarScope: "txn",
+			VarExpr:  "req.hdr(Host),host_only,lua.reverse_host",
+		},
+		{ // http-request set-var(txn.base) var(txn.host),concat("",txn.path)
+			Type:     "set-var",
+			VarName:  "base",
+			VarScope: "txn",
+			VarExpr:  "var(txn.host),concat(\"\",txn.path)",
+		},
+		// -------------------
+		// Look for listener name: selected_listener_name
+		{
+			// listener-name exact match
+			// http-request set-var(txn.selected-listener-name) var(txn.host),map(listener_exact_match)
+			Type:     "set-var",
+			VarName:  "selected_listener_name",
+			VarScope: "txn",
+			VarExpr:  "var(txn.host),map(" + listenerExactMatch + ")",
+			Metadata: map[string]any{"hug": "listener exact match selection"},
+		},
+		{
+			// http-request set-var(txn.selected-listener-name,ifnotexists) var(txn.hostreversed),map_beg(listener_wildcard_match)
+			Type:     "set-var",
+			VarName:  "selected_listener_name,ifnotexists",
+			VarScope: "txn",
+			VarExpr:  "var(txn.hostreversed),map_beg(" + listenerWildcardMatch + ")",
+			Metadata: map[string]any{"hug": "listener wildcard match selection"},
+		},
+		// -------------------
+		// Look for route name: selected_listener_route
+		{
+			//  listener-route-name exact match
+			// http-request set-var(txn.tmp_exact)                   var(txn.selected_listener_name),concat("/",txn.host)
+			// http-request set-var(txn.selected_listener_route)    var(txn.tmp_exact),map(listener_route_exact_match)
+			Type:     "set-var",
+			VarName:  "tmp_exact",
+			VarScope: "txn",
+			VarExpr:  "var(txn.selected_listener_name),concat(\"/\",txn.host)",
+		},
+		{
+			Type:     "set-var",
+			VarName:  "selected_listener_route",
+			VarScope: "txn",
+			VarExpr:  "var(txn.tmp_exact),map(" + listenerRouteExactMatch + ")",
+			Metadata: map[string]any{"hug": "listener-route exact match selection"},
+		},
+		{
+			//  listener-route-name wildcard match
+			// http-request set-var(txn.tmp_wild)                            var(txn.selected_listener_name),concat("/",txn.hostreversed)
+			// http-request set-var(txn.selected_listener_route_wildcard)   var(txn.tmp_wild),map_beg(listener_route_wildcard_match)
+			Type:     "set-var",
+			VarName:  "tmp_wild",
+			VarScope: "txn",
+			VarExpr:  "var(txn.selected_listener_name),concat(\"/\",txn.hostreversed)",
+		},
+		{
+			Type:     "set-var",
+			VarName:  "selected_listener_route_wildcard",
+			VarScope: "txn",
+			VarExpr:  "var(txn.tmp_wild),map_beg(" + listenerRouteWildcardMatch + ")",
+			Metadata: map[string]any{"hug": "listener-route wildcard match selection"},
+		},
+		// -------------------
+		// Fast path: pick the single candidate and resolve it with native
+		// map converters. The two lr rules are mutually exclusive, so
+		// txn.lr being set marks the fast path as active.
+		{
+			// http-request set-var(txn.lr) var(txn.selected_listener_route) if lr_exact_single !lr_wild_found
+			Type:     "set-var",
+			VarName:  "lr",
+			VarScope: "txn",
+			VarExpr:  "var(txn.selected_listener_route)",
+			Cond:     "if",
+			CondTest: "lr_exact_single !lr_wild_found",
+			Metadata: map[string]any{"hug": "fast path: single exact-host candidate"},
+		},
+		{
+			// http-request set-var(txn.lr) var(txn.selected_listener_route_wildcard) if lr_wild_single !lr_exact_found
+			Type:     "set-var",
+			VarName:  "lr",
+			VarScope: "txn",
+			VarExpr:  "var(txn.selected_listener_route_wildcard)",
+			Cond:     "if",
+			CondTest: "lr_wild_single !lr_exact_found",
+			Metadata: map[string]any{"hug": "fast path: single wildcard-host candidate"},
+		},
+		{
+			// http-request set-var(txn.blr) var(txn.lr),concat("",txn.path)
+			Type:     "set-var",
+			VarName:  "blr",
+			VarScope: "txn",
+			VarExpr:  "var(txn.lr),concat(\"\",txn.path)",
+			Cond:     "if",
+			CondTest: "fast_path",
+			Metadata: map[string]any{"hug": "fast path: BLR computation"},
+		},
+		{
+			Type:     "set-var",
+			VarName:  "base_listener_route",
+			VarScope: "txn",
+			VarExpr:  "var(txn.blr)",
+			Cond:     "if",
+			CondTest: "fast_path",
+			Metadata: map[string]any{"hug": "fast path: base listener route for logs"},
+		},
+		{
+			// Specificity order mirrors lua find_route: exact beats any
+			// prefix, which beats regex (map_beg is longest-prefix).
+			Type:     "set-var",
+			VarName:  "route",
+			VarScope: "txn",
+			VarExpr:  "var(txn.blr),map(" + pathExactMap + ")",
+			Cond:     "if",
+			CondTest: "fast_path",
+			Metadata: map[string]any{"hug": "fast path: exact path match"},
+		},
+		{
+			Type:     "set-var",
+			VarName:  "route,ifnotexists",
+			VarScope: "txn",
+			VarExpr:  "var(txn.blr),map_beg(" + pathPrefixMap + ")",
+			Cond:     "if",
+			CondTest: "fast_path",
+			Metadata: map[string]any{"hug": "fast path: longest prefix match"},
+		},
+		{
+			Type:     "set-var",
+			VarName:  "route,ifnotexists",
+			VarScope: "txn",
+			VarExpr:  "var(txn.blr),map_reg(" + pathRegexMap + ")",
+			Cond:     "if",
+			CondTest: "fast_path",
+			Metadata: map[string]any{"hug": "fast path: regex match"},
+		},
+		// -------------------
+		// Multi-candidate fallback: find_route loops over every candidate
+		// from both sources, appends txn.path, and picks the best match.
+		{
+			// http-request lua.find_route <maps_dir> if !fast_path
+			Type:      "lua",
+			LuaAction: "find_route",
+			LuaParams: mapsDir,
+			Cond:      "if",
+			CondTest:  "!fast_path",
+			Metadata:  map[string]any{"hug": "lua find_route: multi-candidate scoring + path map lookup"},
+		},
+		{
+			// http-request lua.route if route_is_json
+			Type:      "lua",
+			LuaAction: "route",
+			Cond:      "if",
+			CondTest:  "route_is_json",
+			Metadata: map[string]any{
+				"hug": "lua routing",
+			},
+		},
+	}
+	aclList := []*models.ACL{
+		{ // acl route_is_json var(txn.route),bytes(0,1) -m str {
+			ACLName:   "route_is_json",
+			Criterion: "var(txn.route),bytes(0,1)",
+			Value:     "-m str {",
+			Metadata: map[string]any{
+				"hug": "for lua routing",
+			},
+		},
+		// Fast-path detection: a candidate list without commas is a single
+		// candidate (route names cannot contain commas).
+		{
+			// acl lr_exact_single var(txn.selected_listener_route) -m reg ^[^,]+$
+			ACLName:   "lr_exact_single",
+			Criterion: "var(txn.selected_listener_route)",
+			Value:     "-m reg ^[^,]+$",
+			Metadata:  map[string]any{"hug": "single exact-host candidate"},
+		},
+		{
+			ACLName:   "lr_wild_single",
+			Criterion: "var(txn.selected_listener_route_wildcard)",
+			Value:     "-m reg ^[^,]+$",
+			Metadata:  map[string]any{"hug": "single wildcard-host candidate"},
+		},
+		{
+			ACLName:   "lr_exact_found",
+			Criterion: "var(txn.selected_listener_route)",
+			Value:     "-m found",
+			Metadata:  map[string]any{"hug": "exact-host candidates present"},
+		},
+		{
+			ACLName:   "lr_wild_found",
+			Criterion: "var(txn.selected_listener_route_wildcard)",
+			Value:     "-m found",
+			Metadata:  map[string]any{"hug": "wildcard-host candidates present"},
+		},
+		{
+			ACLName:   "fast_path",
+			Criterion: "var(txn.lr)",
+			Value:     "-m found",
+			Metadata:  map[string]any{"hug": "native fast-path lookup active"},
+		},
+		// Preload path maps at config-parse time so lua.find_route can
+		// reach them via core.get_patref. These ACLs are never evaluated.
+		{
+			ACLName:   "_preload_path_exact",
+			Criterion: "str(_),map(" + pathExactMap + ")",
+			Value:     "-m found",
+			Metadata:  map[string]any{"hug": "preload path_exact.map for lua.find_route"},
+		},
+		{
+			ACLName:   "_preload_path_prefix",
+			Criterion: "str(_),map_beg(" + pathPrefixMap + ")",
+			Value:     "-m found",
+			Metadata:  map[string]any{"hug": "preload path_prefix.map for lua.find_route"},
+		},
+		{
+			ACLName:   "_preload_path_regex",
+			Criterion: "str(_),map_reg(" + pathRegexMap + ")",
+			Value:     "-m found",
+			Metadata:  map[string]any{"hug": "preload path_regex.map for lua.find_route"},
+		},
+	}
+	return httpRules, aclList
 }
 
 func (b *HaproxyConfMgrImpl) deleteFrontend(feName string) error {
