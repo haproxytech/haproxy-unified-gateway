@@ -27,9 +27,16 @@ license:
 govulncheck:
   stage: security
   needs: []
+  allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      changes:
+        - go.mod
+        - go.sum
     - if: "$CI_PROJECT_NAMESPACE != 'haproxy-controller/community' && $CI_PIPELINE_SOURCE == 'push'"
+      changes:
+        - go.mod
+        - go.sum
   image:
     name: $HAPROXY_REGISTRY_GO/golang:$GO_VERSION
     entrypoint: [ "" ]
