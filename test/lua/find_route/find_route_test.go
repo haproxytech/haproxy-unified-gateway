@@ -18,6 +18,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/haproxytech/haproxy-unified-gateway/test/lua/internal/harness"
 )
@@ -114,8 +115,11 @@ func TestFindRoute_NoInputs(t *testing.T) {
 }
 
 func TestFindRoute_RuntimeSocketUpdate(t *testing.T) {
-	// `set map` over the runtime socket changes routing on the NEXT request,
-	// proving find_route reads the live in-memory pat_ref (not the disk file).
+	// `set map` over the runtime socket proves find_route reads the live
+	// in-memory pat_ref (not the disk file). Lookups are served from
+	// per-thread indexes with a TTL, so updates land within the TTL rather
+	// than on the very next request.
+	const indexTTL = 2 * time.Second // route.lua MAP_INDEX_TTL is 1s
 	h := harness.New(t, "haproxy.cfg")
 
 	_, body := h.Get(t, "/exact", "X-LR-Exact", "lr1")
@@ -128,6 +132,7 @@ func TestFindRoute_RuntimeSocketUpdate(t *testing.T) {
 		t.Fatalf("set map failed: %s", out)
 	}
 
+	time.Sleep(indexTTL)
 	_, body = h.Get(t, "/exact", "X-LR-Exact", "lr1")
 	if got := parseRoute(body); got != "be_runtime_overridden" {
 		t.Errorf("after set map: got route=%q want be_runtime_overridden\nbody: %s", got, body)
@@ -137,6 +142,7 @@ func TestFindRoute_RuntimeSocketUpdate(t *testing.T) {
 	if strings.Contains(out, "error") {
 		t.Fatalf("add map failed: %s", out)
 	}
+	time.Sleep(indexTTL)
 	_, body = h.Get(t, "/runtime/anything", "X-LR-Exact", "lr1")
 	if got := parseRoute(body); got != "be_runtime_added" {
 		t.Errorf("after add map: got route=%q want be_runtime_added\nbody: %s", got, body)
