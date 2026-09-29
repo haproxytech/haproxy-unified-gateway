@@ -151,6 +151,9 @@ func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 	}
 
 	routeValueName := listenerKeyName + "/" + routeKey.String()
+	// The creation timestamp orders the comma-joined listener-route value:
+	// spec tie-break is oldest route first, then ns/name.
+	routeCreatedAt := route.K8sResource.CreationTimestamp.Time
 	exactEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
 	wildcardEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
 
@@ -160,7 +163,7 @@ func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 		// by lua.reverse_host, so map_beg() will match any incoming host.
 		entryKey := maps.EntryKey{Hostname: listenerKeyName + "/."}
 		wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
-			routeValueName: {ValueName: routeValueName},
+			routeValueName: {ValueName: routeValueName, CreatedAt: routeCreatedAt},
 		}
 	}
 
@@ -171,12 +174,12 @@ func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 			reversedKey := reverseDomain(wildcardSuffix)
 			entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + reversedKey}
 			wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
-				routeValueName: {ValueName: routeValueName},
+				routeValueName: {ValueName: routeValueName, CreatedAt: routeCreatedAt},
 			}
 		} else {
 			entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + hostname}
 			exactEntries[entryKey] = map[string]*maps.WeightedValue{
-				routeValueName: {ValueName: routeValueName},
+				routeValueName: {ValueName: routeValueName, CreatedAt: routeCreatedAt},
 			}
 		}
 	}
@@ -361,13 +364,14 @@ func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
 	}
 
 	routeValueName := listenerKeyName + "/" + routeKey.String()
+	routeCreatedAt := route.K8sResource.CreationTimestamp.Time
 	exactEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
 	wildcardEntries := map[maps.EntryKey]map[string]*maps.WeightedValue{}
 
 	if len(route.K8sResource.Spec.Hostnames) == 0 {
 		entryKey := maps.EntryKey{Hostname: listenerKeyName + "/."}
 		wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
-			routeValueName: {ValueName: routeValueName},
+			routeValueName: {ValueName: routeValueName, CreatedAt: routeCreatedAt},
 		}
 	}
 
@@ -378,12 +382,12 @@ func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
 			reversedKey := reverseDomain(wildcardSuffix)
 			entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + reversedKey}
 			wildcardEntries[entryKey] = map[string]*maps.WeightedValue{
-				routeValueName: {ValueName: routeValueName},
+				routeValueName: {ValueName: routeValueName, CreatedAt: routeCreatedAt},
 			}
 		} else {
 			entryKey := maps.EntryKey{Hostname: listenerKeyName + "/" + hostname}
 			exactEntries[entryKey] = map[string]*maps.WeightedValue{
-				routeValueName: {ValueName: routeValueName},
+				routeValueName: {ValueName: routeValueName, CreatedAt: routeCreatedAt},
 			}
 		}
 	}
