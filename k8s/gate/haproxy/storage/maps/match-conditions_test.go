@@ -279,6 +279,37 @@ func TestBuildPlainRouteValueOrderedByRouteAge(t *testing.T) {
 	}
 }
 
+// Equal-count candidates from one rule (e.g. two alternative header values in
+// the same match list) must still emit in a stable order: the data plane does
+// not care, but map contents would otherwise churn on every reconcile because
+// the group order comes from map iteration.
+func TestBuildRouteValueOrderIsDeterministic(t *testing.T) {
+	desired := map[string]*WeightedValue{
+		"h=color:e:blue\x000\x00be1": {
+			ValueName:  "be1",
+			Conditions: &MatchConditions{Headers: []MatchCond{{Name: "color", Type: MatchCondExact, Value: "blue"}}},
+			RuleIdx:    0,
+		},
+		"h=color:e:green\x000\x00be1": {
+			ValueName:  "be1",
+			Conditions: &MatchConditions{Headers: []MatchCond{{Name: "color", Type: MatchCondExact, Value: "green"}}},
+			RuleIdx:    0,
+		},
+		"h=color:e:red\x000\x00be1": {
+			ValueName:  "be1",
+			Conditions: &MatchConditions{Headers: []MatchCond{{Name: "color", Type: MatchCondExact, Value: "red"}}},
+			RuleIdx:    0,
+		},
+	}
+
+	want := "~1;h=color:e:blue>be1;h=color:e:green>be1;h=color:e:red>be1"
+	for i := range 50 {
+		if got := BuildRouteValue(desired); got != want {
+			t.Fatalf("iteration %d: got %q, want %q", i, got, want)
+		}
+	}
+}
+
 func TestBuildRouteValueConditional(t *testing.T) {
 	mkConds := func(hs ...MatchCond) *MatchConditions {
 		if len(hs) == 0 {

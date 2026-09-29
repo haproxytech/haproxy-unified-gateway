@@ -72,7 +72,6 @@ func (m *MapFileState) ProcessMapFiles() {
 						ValueName:  intentValueForBackendName.ValueName,
 						Conditions: intentValueForBackendName.Conditions,
 						RuleIdx:    intentValueForBackendName.RuleIdx,
-						MatchIdx:   intentValueForBackendName.MatchIdx,
 						CreatedAt:  intentValueForBackendName.CreatedAt,
 					}
 				}
@@ -109,7 +108,6 @@ func (m *MapFileState) ProcessMapFiles() {
 				Weight:     copyWeight(collectedIntents.Weight),
 				Conditions: collectedIntents.Conditions,
 				RuleIdx:    collectedIntents.RuleIdx,
-				MatchIdx:   collectedIntents.MatchIdx,
 				CreatedAt:  collectedIntents.CreatedAt,
 				Operation: func() Operation {
 					// Deduced operation in ordered precedence
@@ -142,7 +140,6 @@ func (m *MapFileState) ProcessMapFiles() {
 					Weight:     copyWeight(collectedIntents.Weight),
 					Conditions: collectedIntents.Conditions,
 					RuleIdx:    collectedIntents.RuleIdx,
-					MatchIdx:   collectedIntents.MatchIdx,
 					CreatedAt:  collectedIntents.CreatedAt,
 				}
 			case Delete:
@@ -268,8 +265,7 @@ type WeightedValue struct {
 	ValueName  string
 	// RuleIdx ranks candidates from the same route: more conditions first,
 	// then lower rule index (spec: first matching rule wins ties).
-	RuleIdx  int
-	MatchIdx int
+	RuleIdx int
 }
 
 func (wb WeightedValue) String() string {
@@ -287,7 +283,6 @@ func (wb WeightedValue) Copy() *WeightedValue {
 		Weight:     &weight,
 		Conditions: conditions,
 		RuleIdx:    wb.RuleIdx,
-		MatchIdx:   wb.MatchIdx,
 		CreatedAt:  wb.CreatedAt,
 	}
 }
@@ -343,7 +338,6 @@ type CollectedBackendIntents struct {
 	// conditions, rule index and backend name.
 	ValueName string
 	RuleIdx   int
-	MatchIdx  int
 	PresentOperations
 }
 
@@ -458,7 +452,6 @@ func (m *MapFileState) ApplyDesiredBackends(
 				Weight:     copyWeight(desiredBackend.Weight),
 				Conditions: desiredBackend.Conditions,
 				RuleIdx:    desiredBackend.RuleIdx,
-				MatchIdx:   desiredBackend.MatchIdx,
 				CreatedAt:  desiredBackend.CreatedAt,
 				Operation:  Create,
 			}
@@ -649,7 +642,13 @@ func BuildRouteValue(desired map[string]*WeightedValue) string {
 		if aQuery != bQuery {
 			return bQuery - aQuery
 		}
-		return a.ruleIdx - b.ruleIdx
+		if a.ruleIdx != b.ruleIdx {
+			return a.ruleIdx - b.ruleIdx
+		}
+		// Two matches of one rule can differ only by their conditions while
+		// sharing a rank. Break the tie on the signature so the emitted value
+		// does not depend on map iteration order.
+		return strings.Compare(a.sig, b.sig)
 	})
 
 	var b strings.Builder

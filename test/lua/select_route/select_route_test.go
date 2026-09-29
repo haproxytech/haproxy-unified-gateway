@@ -29,7 +29,9 @@
 package select_route_test
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/haproxytech/haproxy-unified-gateway/test/lua/internal/harness"
@@ -123,5 +125,49 @@ func TestSelectRoute(t *testing.T) {
 				t.Errorf("body = %q, want %q", body, c.wantBody)
 			}
 		})
+	}
+}
+
+// A conditional value pushed over the runtime socket must survive the CLI
+// protocol: the runtime API splits commands on ';', so the controller escapes
+// the delimiters. Map files loaded at boot take raw values; only the CLI path
+// needs the escaped form. This is the conformance failure scenario: requests
+// 404'd because the stored value was truncated at the first ';'.
+func TestSelectRoute_RuntimeSocketPush(t *testing.T) {
+	h := harness.New(t, "haproxy.cfg")
+
+	// Resolve the path_prefix map id from "show map".
+	out := h.Socket(t, "show map")
+	id := ""
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.Contains(line, "path_prefix.map)") {
+			id = "#" + strings.TrimSpace(strings.SplitN(strings.TrimSpace(line), " ", 2)[0])
+			break
+		}
+	}
+	if id == "" {
+		t.Fatalf("path_prefix.map not registered:\n%s", out)
+	}
+
+	// Push exactly what the controller sends: escaped ';'-delimited value.
+	cmd := fmt.Sprintf("add map %s l1/r1/live ~1\\;h=version:e:live>be_one", id)
+	if resp := h.Socket(t, cmd); strings.Contains(resp, "Unknown command") {
+		t.Fatalf("runtime add map rejected the escaped value:\n%s", resp)
+	}
+
+	// The stored value must be the full candidate list, not "~1".
+	got := h.Socket(t, "get map "+id+" l1/r1/live")
+	if !strings.Contains(got, `value="~1;h=version:e:live>be_one"`) {
+		t.Fatalf("stored value truncated or wrong:\n%s", got)
+	}
+
+	_, body := h.Get(t, "/live", "Host", "example.org", "Version", "live")
+	if body != "be_one" {
+		t.Errorf("body = %q, want be_one", body)
+	}
+	// No unconditional fallback in the pushed value: no header, no route.
+	status, body := h.Get(t, "/live", "Host", "example.org")
+	if status != 404 || body != "NOT FOUND" {
+		t.Errorf("status = %d body = %q, want 404 NOT FOUND", status, body)
 	}
 }

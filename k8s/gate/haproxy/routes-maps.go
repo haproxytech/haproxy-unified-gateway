@@ -526,7 +526,7 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 			for entryKey, entryValue := range mapData.Entries {
 				key := escapeSlashForRuntime(entryKey.Hostname)
 				if entryKey.Path != "" {
-					key += entryKey.Path
+					key += escapeSlashForRuntime(entryKey.Path)
 				}
 				routeValue := mapData.BuildValue(entryValue.DesiredValue)
 				// if routeValue is empty, delete the entry
@@ -556,10 +556,10 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 				// else update the entry
 				b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "Set map [runtime] entry", slog.String("map", mapData.Path.FileName), slog.String("key", key))
 
-				err := runtimeClient.SetMapEntry(mapID, key, routeValue)
+				err := runtimeClient.SetMapEntry(mapID, key, escapeValueForRuntime(routeValue))
 				if err != nil {
 					if strings.Contains(err.Error(), "entry not found") {
-						err = runtimeClient.AddMapEntry(mapID, key, routeValue)
+						err = runtimeClient.AddMapEntry(mapID, key, escapeValueForRuntime(routeValue))
 					}
 					if err != nil {
 						metrics.MapStorageOperations.WithLabelValues("runtime_set", "error").Inc()
@@ -601,8 +601,21 @@ func (b *RouteMgrImpl) getMapID(fullPath string) (string, error) {
 	return "", nil
 }
 
+// escapeSlashForRuntime escapes CLI metacharacters in a map key: the runtime
+// API splits commands on ';' and consumes a lone '\' before other characters,
+// so a key containing either would be truncated or altered on the wire.
 func escapeSlashForRuntime(key string) string {
-	return re.ReplaceAllStringFunc(key, func(s string) string {
+	escaped := re.ReplaceAllStringFunc(key, func(s string) string {
 		return `\` + s
 	})
+	return strings.ReplaceAll(escaped, `;`, `\;`)
+}
+
+// escapeValueForRuntime escapes a map value for the runtime CLI. On-disk map
+// files take raw values; only the CLI protocol needs escaping. Conditional
+// route values are ';'-delimited candidate lists, so without this the stored
+// value would be cut at the first delimiter.
+func escapeValueForRuntime(value string) string {
+	escaped := strings.ReplaceAll(value, `\`, `\\`)
+	return strings.ReplaceAll(escaped, `;`, `\;`)
 }

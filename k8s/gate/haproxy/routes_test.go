@@ -229,3 +229,42 @@ func TestResolveEntryLazyInit(t *testing.T) {
 		t.Error("second resolveEntry call returned a fresh map, wanted the same instance")
 	}
 }
+
+// The runtime CLI splits commands on ';' and consumes a lone '\' before other
+// characters. Map keys and values must therefore escape both, or the stored
+// entry is truncated at the first ';' — which is how conditional route
+// values, being ';'-delimited candidate lists, first broke in conformance.
+func TestEscapeForRuntime(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain key", "l1/r1/", "l1/r1/"},
+		{"conditional value", "~1;h=version:e:one>be1;>be2", `~1\;h=version:e:one>be1\;>be2`},
+		{"semicolon in path", "l1/r1/api;v1/", `l1/r1/api\;v1/`},
+		{"json value", `{"a":"wr","l":"be1:1"}`, `{"a":"wr","l":"be1:1"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Values escape backslashes; keys keep the historical
+			// backslash handling and only gain ';' escaping.
+			if got := escapeValueForRuntime(tt.in); got != tt.want {
+				t.Errorf("escapeValueForRuntime(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEscapeValueForRuntimeBackslash(t *testing.T) {
+	// A backslash must survive the CLI's own unescaping.
+	if got := escapeValueForRuntime(`a\b;c`); got != `a\\b\;c` {
+		t.Errorf("got %q, want %q", got, `a\\b\;c`)
+	}
+}
+
+func TestEscapeSlashForRuntimeSemicolon(t *testing.T) {
+	if got := escapeSlashForRuntime("l1/r1/a;b"); got != `l1/r1/a\;b` {
+		t.Errorf("got %q, want %q", got, `l1/r1/a\;b`)
+	}
+}
