@@ -21,7 +21,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	futils "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/fileutils"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
@@ -66,7 +68,13 @@ func (m *MapFileState) ProcessMapFiles() {
 			for intentBackendName, intentValueForBackendName := range intentValueFromResourceOrigin {
 				// If no previous intent for the same backend name, we create it
 				if backendsOp[intentBackendName] == nil {
-					backendsOp[intentBackendName] = &CollectedBackendIntents{}
+					backendsOp[intentBackendName] = &CollectedBackendIntents{
+						ValueName:  intentValueForBackendName.ValueName,
+						Conditions: intentValueForBackendName.Conditions,
+						RuleIdx:    intentValueForBackendName.RuleIdx,
+						MatchIdx:   intentValueForBackendName.MatchIdx,
+						CreatedAt:  intentValueForBackendName.CreatedAt,
+					}
 				}
 				backendsOpValue := backendsOp[intentBackendName]
 				// We collect the operations
@@ -97,14 +105,12 @@ func (m *MapFileState) ProcessMapFiles() {
 		for backendName, collectedIntents := range backendsOp {
 			// DiffValue
 			diffValue := &IntentValue{
-				ValueName: backendName,
-				Weight: func() *int32 {
-					if collectedIntents.Weight != nil {
-						weight := *collectedIntents.Weight
-						return &weight
-					}
-					return nil
-				}(),
+				ValueName:  collectedIntents.ValueName,
+				Weight:     copyWeight(collectedIntents.Weight),
+				Conditions: collectedIntents.Conditions,
+				RuleIdx:    collectedIntents.RuleIdx,
+				MatchIdx:   collectedIntents.MatchIdx,
+				CreatedAt:  collectedIntents.CreatedAt,
 				Operation: func() Operation {
 					// Deduced operation in ordered precedence
 					// Ex: an update is prior to a delete
@@ -132,14 +138,12 @@ func (m *MapFileState) ProcessMapFiles() {
 			switch entryValue.DiffValue[backendName].Operation {
 			case Create, Update:
 				entryValue.DesiredValue[backendName] = &WeightedValue{
-					ValueName: backendName,
-					Weight: func() *int32 {
-						if diffValue.Weight != nil {
-							weight := *diffValue.Weight
-							return &weight
-						}
-						return nil
-					}(),
+					ValueName:  collectedIntents.ValueName,
+					Weight:     copyWeight(collectedIntents.Weight),
+					Conditions: collectedIntents.Conditions,
+					RuleIdx:    collectedIntents.RuleIdx,
+					MatchIdx:   collectedIntents.MatchIdx,
+					CreatedAt:  collectedIntents.CreatedAt,
 				}
 			case Delete:
 				delete(entryValue.DesiredValue, backendName)
@@ -211,8 +215,8 @@ func (ro ResourceOrigin) String() string {
 }
 
 type IntentValue struct {
-	WeightedValue
 	Operation
+	WeightedValue
 }
 
 func (i IntentValue) String() string {
@@ -220,11 +224,9 @@ func (i IntentValue) String() string {
 }
 
 func (i IntentValue) Copy() *IntentValue {
-	weight := utils.PointerDefaultValueIfNil(i.WeightedValue.Weight)
 	return &IntentValue{
-		ValueName: i.WeightedValue.ValueName,
-		Weight:    &weight,
-		Operation: i.Operation,
+		WeightedValue: *i.WeightedValue.Copy(),
+		Operation:     i.Operation,
 	}
 }
 
@@ -252,8 +254,22 @@ type EntryValue struct {
 }
 
 type WeightedValue struct {
+	// CreatedAt orders comma-joined listener-route values: the spec breaks
+	// cross-route ties by oldest route first, then ns/name. Zero for maps
+	// that never hold several routes per value.
+	CreatedAt time.Time
 	Weight    *int32
-	ValueName string
+	// Conditions, when non-empty, restrict this candidate to requests
+	// satisfying them. Two rules of the same route can share one map entry,
+	// so the key of the enclosing map carries the encoded conditions and the
+	// rule index to keep their candidates apart; ValueName stays the real
+	// backend name.
+	Conditions *MatchConditions
+	ValueName  string
+	// RuleIdx ranks candidates from the same route: more conditions first,
+	// then lower rule index (spec: first matching rule wins ties).
+	RuleIdx  int
+	MatchIdx int
 }
 
 func (wb WeightedValue) String() string {
@@ -262,10 +278,27 @@ func (wb WeightedValue) String() string {
 
 func (wb WeightedValue) Copy() *WeightedValue {
 	weight := utils.PointerDefaultValueIfNil(wb.Weight)
-	return &WeightedValue{
-		ValueName: wb.ValueName,
-		Weight:    &weight,
+	var conditions *MatchConditions
+	if wb.Conditions != nil {
+		conditions = wb.Conditions.copy()
 	}
+	return &WeightedValue{
+		ValueName:  wb.ValueName,
+		Weight:     &weight,
+		Conditions: conditions,
+		RuleIdx:    wb.RuleIdx,
+		MatchIdx:   wb.MatchIdx,
+		CreatedAt:  wb.CreatedAt,
+	}
+}
+
+// copy returns a shallow copy: condition slices are treated as read-only.
+func (mc *MatchConditions) copy() *MatchConditions {
+	if mc == nil {
+		return nil
+	}
+	c := *mc
+	return &c
 }
 
 func (ev EntryValue) CopyDesiredValue() map[string]*WeightedValue {
@@ -302,7 +335,15 @@ type PresentOperations struct {
 }
 
 type CollectedBackendIntents struct {
-	Weight *int32
+	CreatedAt  time.Time
+	Weight     *int32
+	Conditions *MatchConditions
+	// Carried from the intents so DesiredValue keeps the real backend name and
+	// the candidate ranking fields, even when the map key is a composite of
+	// conditions, rule index and backend name.
+	ValueName string
+	RuleIdx   int
+	MatchIdx  int
 	PresentOperations
 }
 
@@ -398,7 +439,7 @@ func (m *MapFileState) ApplyDesiredBackends(
 	for backendName, currentIntent := range currentByBackend {
 		if _, stillDesired := desired[backendName]; !stillDesired {
 			currentByBackend[backendName] = &IntentValue{
-				ValueName: backendName,
+				ValueName: currentIntent.ValueName,
 				Weight:    currentIntent.Weight,
 				Operation: Delete,
 			}
@@ -413,9 +454,13 @@ func (m *MapFileState) ApplyDesiredBackends(
 		case !exists:
 			// CREATE
 			currentByBackend[backendName] = &IntentValue{
-				ValueName: backendName,
-				Weight:    copyWeight(desiredBackend.Weight),
-				Operation: Create,
+				ValueName:  desiredBackend.ValueName,
+				Weight:     copyWeight(desiredBackend.Weight),
+				Conditions: desiredBackend.Conditions,
+				RuleIdx:    desiredBackend.RuleIdx,
+				MatchIdx:   desiredBackend.MatchIdx,
+				CreatedAt:  desiredBackend.CreatedAt,
+				Operation:  Create,
 			}
 
 		case weightsEqual(currentIntent.Weight, desiredBackend.Weight):
@@ -523,36 +568,143 @@ func (m *MapFileState) BuildValue(desired map[string]*WeightedValue) string {
 	return BuildRouteValue(desired)
 }
 
+// BuildRouteValue renders the map-file value for the given desired state.
+//
+// Legacy entries (no conditions anywhere) keep the historical format: a bare
+// backend name, or the weighted-random JSON.
+//
+// Entries with at least one conditional candidate use the conditional format,
+// parsed by lua select_route / find_route:
+//
+//	~1;<conds>>target;<conds>>target;...
+//
+// Candidates are ordered by the Gateway API precedence rules after path
+// (already the map key): method, header count, query count, then rule order —
+// so the first passing candidate is the spec-correct one. An unconditional
+// candidate sorts last and acts as fallback. Duplicate signatures from later
+// rules are dropped (spec: first matching rule wins ties).
 func BuildRouteValue(desired map[string]*WeightedValue) string {
 	if len(desired) == 0 {
 		return ""
 	}
 
-	if len(desired) == 1 {
-		for name := range desired {
-			return name
+	hasCond := false
+	for _, v := range desired {
+		if !v.Conditions.IsEmpty() {
+			hasCond = true
+			break
 		}
 	}
-
-	backendNames := make([]string, 0, len(desired))
-	for name := range desired {
-		backendNames = append(backendNames, name)
+	if !hasCond {
+		return buildWeightedValue(desired)
 	}
-	slices.Sort(backendNames)
+
+	type candGroup struct {
+		conds    *MatchConditions
+		backends map[string]*WeightedValue
+		sig      string
+		ruleIdx  int
+	}
+	groups := map[string]*candGroup{}
+	for _, v := range desired {
+		sig := v.Conditions.Encode()
+		groupKey := sig + "\x00" + strconv.Itoa(v.RuleIdx)
+		group := groups[groupKey]
+		if group == nil {
+			group = &candGroup{
+				sig:      sig,
+				conds:    v.Conditions,
+				ruleIdx:  v.RuleIdx,
+				backends: map[string]*WeightedValue{},
+			}
+			groups[groupKey] = group
+		}
+		existing := group.backends[v.ValueName]
+		if existing == nil {
+			weight := copyWeight(v.Weight)
+			group.backends[v.ValueName] = &WeightedValue{ValueName: v.ValueName, Weight: weight}
+			continue
+		}
+		// Same rule + signature: OR'ed matches, weights add up.
+		newWeight := utils.PointerDefaultValueIfNil(existing.Weight) + utils.PointerDefaultValueIfNil(v.Weight)
+		existing.Weight = &newWeight
+	}
+
+	ordered := make([]*candGroup, 0, len(groups))
+	for _, g := range groups {
+		ordered = append(ordered, g)
+	}
+	slices.SortFunc(ordered, func(a, b *candGroup) int {
+		aMethod, aHdrs, aQuery := a.conds.Counts()
+		bMethod, bHdrs, bQuery := b.conds.Counts()
+		if aMethod != bMethod {
+			if aMethod {
+				return -1
+			}
+			return 1
+		}
+		if aHdrs != bHdrs {
+			return bHdrs - aHdrs
+		}
+		if aQuery != bQuery {
+			return bQuery - aQuery
+		}
+		return a.ruleIdx - b.ruleIdx
+	})
+
+	var b strings.Builder
+	b.WriteString("~1")
+	seen := map[string]bool{}
+	for _, g := range ordered {
+		if seen[g.sig] {
+			// Same conditions from a later rule: shadowed by the first rule.
+			continue
+		}
+		seen[g.sig] = true
+		target := buildWeightedValue(g.backends)
+		if target == "" {
+			continue
+		}
+		b.WriteString(";")
+		b.WriteString(g.sig)
+		b.WriteString(">")
+		b.WriteString(target)
+	}
+	return b.String()
+}
+
+// buildWeightedValue renders one candidate target: a bare backend name when
+// the group has a single backend, the weighted-random JSON otherwise. It
+// always uses ValueName: map keys may be condition/rule composites.
+func buildWeightedValue(desired map[string]*WeightedValue) string {
+	if len(desired) == 0 {
+		return ""
+	}
+
+	type namedWeight struct {
+		name   string
+		weight int32
+	}
+	backends := make([]namedWeight, 0, len(desired))
+	for _, v := range desired {
+		backends = append(backends, namedWeight{name: v.ValueName, weight: utils.PointerDefaultValueIfNil(v.Weight)})
+	}
+	slices.SortFunc(backends, func(a, b namedWeight) int {
+		return strings.Compare(a.name, b.name)
+	})
+
+	if len(backends) == 1 {
+		return backends[0].name
+	}
 
 	var b strings.Builder
 	b.WriteString(`{"a":"wr","l":"`)
 
-	for i, name := range backendNames {
+	for i, bw := range backends {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		w := desired[name].Weight
-		weight := int32(0)
-		if w != nil {
-			weight = *w
-		}
-		_, _ = fmt.Fprintf(&b, "%s:%d", name, weight)
+		_, _ = fmt.Fprintf(&b, "%s:%d", bw.name, bw.weight)
 	}
 
 	b.WriteString(`"}`)
@@ -561,15 +713,34 @@ func BuildRouteValue(desired map[string]*WeightedValue) string {
 
 // BuildPlainRouteValue returns names as a plain comma-separated string (no weights, no JSON).
 // Used for listener maps where the value must be a literal string, not a weighted backend list.
+// It uses ValueName rather than the map key so composite keys cannot leak. The
+// Gateway API tie-break orders cross-route candidates by oldest route first,
+// then "{namespace}/{name}", so equal timestamps fall back to the name order.
 func BuildPlainRouteValue(desired map[string]*WeightedValue) string {
 	if len(desired) == 0 {
 		return ""
 	}
-	names := make([]string, 0, len(desired))
-	for name := range desired {
-		names = append(names, name)
+	type named struct {
+		createdAt time.Time
+		name      string
 	}
-	slices.Sort(names)
+	values := make([]named, 0, len(desired))
+	for _, v := range desired {
+		values = append(values, named{name: v.ValueName, createdAt: v.CreatedAt})
+	}
+	slices.SortFunc(values, func(a, b named) int {
+		if !a.createdAt.Equal(b.createdAt) {
+			if a.createdAt.Before(b.createdAt) {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.name, b.name)
+	})
+	names := make([]string, 0, len(values))
+	for _, v := range values {
+		names = append(names, v.name)
+	}
 	return strings.Join(names, ",")
 }
 

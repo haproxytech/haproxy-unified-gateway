@@ -549,19 +549,19 @@ func TestMapFileState_BackendDeletions(t *testing.T) {
 			},
 		},
 		// ------------------------------------------------
-		// 1 hostname, 2 identical backends, différent weight, suppression partielle
+		// 1 hostname, 2 backends, different weights, partial deletion
 		{
 			name: "1 hostname, 2 identical backends different weights, delete one",
 			setupFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
 					map[string]*WeightedValue{
 						"be1": {ValueName: "be1", Weight: new(int32(2))},
-						"be2": {ValueName: "be1", Weight: new(int32(5))},
+						"be2": {ValueName: "be2", Weight: new(int32(5))},
 					})
 			},
 			deleteFn: func(m *MapFileState, ek EntryKey) {
 				m.ApplyDesiredBackends(ek, ResourceOrigin{"default", "res1"},
-					map[string]*WeightedValue{"be2": {ValueName: "be1", Weight: new(int32(5))}})
+					map[string]*WeightedValue{"be2": {ValueName: "be2", Weight: new(int32(5))}})
 			},
 			expectVals: map[EntryKey]string{
 				{Hostname: "example.com"}:               "be2",
