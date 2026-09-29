@@ -17,6 +17,7 @@ import (
 	"context"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/haproxytech/haproxy-unified-gateway/hug/reload"
@@ -157,20 +158,28 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(origin maps.ResourceOrigin, rout
 ) error {
 	desired := newDesiredBackendsMaps()
 
-	for _, rule := range route.Rules {
+	for ruleIdx, rule := range route.Rules {
 		// Rules with a RequestRedirect filter map directly to a redirect pseudo-backend.
 		// Handle this before the rule.Valid check since redirect rules may have no
 		// backendRefs (which causes rule.Valid to be false).
 		if hasRedirectFilter(rule.K8sResource.Filters) {
 			// Skip rules that have incompatible filter combinations (e.g. URLRewrite + RequestRedirect).
 			// checkFilters() will have set Valid=false and generated an IncompatibleFilters condition.
-			if !rule.CheckFilters.Valid {
+			if !rule.CheckFilters.Valid || !rule.CheckMatches.Valid {
 				continue
 			}
 			redirectBeName := b.topManager.getRedirectBackendName(rule.K8sResource.Filters)
 			for _, match := range rule.K8sResource.Matches {
 				bucket, _ := desired.resolveEntry(routeValueName, match)
-				bucket[redirectBeName] = &maps.WeightedValue{ValueName: redirectBeName}
+				conds, err := maps.NormalizeHTTPRouteMatch(match)
+				if err != nil {
+					continue
+				}
+				bucket[desiredValueKey(conds, ruleIdx, redirectBeName)] = &maps.WeightedValue{
+					ValueName:  redirectBeName,
+					Conditions: conditionsOrNil(conds),
+					RuleIdx:    ruleIdx,
+				}
 			}
 			continue
 		}
@@ -212,11 +221,18 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(origin maps.ResourceOrigin, rout
 			}
 			for _, match := range rule.K8sResource.Matches {
 				bucket, _ := desired.resolveEntry(routeValueName, match)
-				existing := bucket[backendName]
+				conds, err := maps.NormalizeHTTPRouteMatch(match)
+				if err != nil {
+					continue
+				}
+				key := desiredValueKey(conds, ruleIdx, backendName)
+				existing := bucket[key]
 				if existing == nil {
-					bucket[backendName] = &maps.WeightedValue{
-						ValueName: backendName,
-						Weight:    backend.Weight,
+					bucket[key] = &maps.WeightedValue{
+						ValueName:  backendName,
+						Weight:     backend.Weight,
+						Conditions: conditionsOrNil(conds),
+						RuleIdx:    ruleIdx,
 					}
 					continue
 				}
@@ -231,6 +247,23 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(origin maps.ResourceOrigin, rout
 	mapPrefix.ApplyRoute(origin, desired.prefix)
 	mapRegex.ApplyRoute(origin, desired.regex)
 	return nil
+}
+
+// desiredValueKey identifies a candidate within a map entry bucket: several
+// rules of the same route share one entry key, so the encoded conditions and
+// the rule index keep their candidates apart. The backend name is kept last
+// so ValueName stays clean for output.
+func desiredValueKey(conds maps.MatchConditions, ruleIdx int, backendName string) string {
+	return conds.Encode() + "\x00" + strconv.Itoa(ruleIdx) + "\x00" + backendName
+}
+
+// conditionsOrNil drops the empty value so unconditional candidates keep the
+// legacy map-value format.
+func conditionsOrNil(conds maps.MatchConditions) *maps.MatchConditions {
+	if conds.IsEmpty() {
+		return nil
+	}
+	return &conds
 }
 
 // desiredBackendsMaps groups the three (hostname, path) → backends maps that

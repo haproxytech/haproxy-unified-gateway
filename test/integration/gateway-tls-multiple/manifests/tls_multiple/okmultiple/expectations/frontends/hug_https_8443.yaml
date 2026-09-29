@@ -4,6 +4,11 @@ acl_list:
   metadata:
     hug: for lua routing
   value: -m str {
+- acl_name: route_is_cond
+  criterion: var(txn.route),bytes(0,1)
+  metadata:
+    hug: conditional route value
+  value: -m str ~
 - acl_name: lr_exact_single
   criterion: var(txn.selected_listener_route)
   metadata:
@@ -175,6 +180,13 @@ http_request_rule_list:
   lua_params: /tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443
   metadata:
     hug: 'lua find_route: multi-candidate scoring + path map lookup'
+  type: lua
+- cond: if
+  cond_test: route_is_cond
+  lua_action: select_route
+  lua_params: /tmp/hug/e2e-tests-gateway-tls-multiple/maps/hug_https_8443
+  metadata:
+    hug: 'lua select_route: conditional match evaluation'
   type: lua
 - cond: if
   cond_test: route_is_json

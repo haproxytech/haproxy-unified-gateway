@@ -214,6 +214,48 @@ func TestHTTPFrontendRulesFastPathOrderingAndFallback(t *testing.T) {
 	}
 }
 
+// select_route must run after find_route (both lookup paths share the
+// evaluator) and before lua.route, so a conditional candidate resolving to a
+// weighted list still reaches the routing algorithm. It must be gated on
+// route_is_cond, which the find_route path never triggers because it fully
+// resolves conditional values itself.
+func TestHTTPFrontendRulesSelectRouteOrdering(t *testing.T) {
+	httpRules, acls := httpFastPathRules(t)
+	var findRoute, selectRoute, routeLua int = -1, -1, -1
+	for i, r := range httpRules {
+		switch {
+		case r.Type == "lua" && r.LuaAction == "find_route":
+			findRoute = i
+		case r.Type == "lua" && r.LuaAction == "select_route":
+			if r.Cond != "if" || r.CondTest != "route_is_cond" {
+				t.Errorf("select_route must be gated on route_is_cond, got cond=%q test=%q", r.Cond, r.CondTest)
+			}
+			selectRoute = i
+		case r.Type == "lua" && r.LuaAction == "route":
+			routeLua = i
+		}
+	}
+	if findRoute == -1 || selectRoute == -1 || routeLua == -1 {
+		t.Fatal("missing find_route, select_route or lua.route rules")
+	}
+	if !(findRoute < selectRoute && selectRoute < routeLua) {
+		t.Errorf("expected find_route < select_route < lua.route, got %d < %d < %d", findRoute, selectRoute, routeLua)
+	}
+
+	foundACL := false
+	for _, acl := range acls {
+		if acl.ACLName == "route_is_cond" {
+			foundACL = true
+			if acl.Criterion != "var(txn.route),bytes(0,1)" || acl.Value != "-m str ~" {
+				t.Errorf("route_is_cond must match the first byte of txn.route against '~', got %q %q", acl.Criterion, acl.Value)
+			}
+		}
+	}
+	if !foundACL {
+		t.Error("route_is_cond ACL missing")
+	}
+}
+
 // TestTLSPassthroughRulesRouteIsJSONReadsSessScope is an explicit regression
 // test for the blocker where the route_is_json ACL read var(txn.sni_match)
 // while the rule set writes sess.sni_match.

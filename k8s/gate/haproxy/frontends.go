@@ -496,6 +496,17 @@ func httpFrontendRules(
 			Metadata:  map[string]any{"hug": "lua find_route: multi-candidate scoring + path map lookup"},
 		},
 		{
+			// http-request lua.select_route <maps_dir> if route_is_cond
+			// Resolves conditional map values (headers, method, query params).
+			// Runs after find_route so both lookup paths share the evaluator.
+			Type:      "lua",
+			LuaAction: "select_route",
+			LuaParams: mapsDir,
+			Cond:      "if",
+			CondTest:  "route_is_cond",
+			Metadata:  map[string]any{"hug": "lua select_route: conditional match evaluation"},
+		},
+		{
 			// http-request lua.route if route_is_json
 			Type:      "lua",
 			LuaAction: "route",
@@ -513,6 +524,16 @@ func httpFrontendRules(
 			Value:     "-m str {",
 			Metadata: map[string]any{
 				"hug": "for lua routing",
+			},
+		},
+		{ // acl route_is_cond var(txn.route),bytes(0,1) -m str ~
+			// Conditional values start with "~1;"; backend names and JSON
+			// targets never start with "~".
+			ACLName:   "route_is_cond",
+			Criterion: "var(txn.route),bytes(0,1)",
+			Value:     "-m str ~",
+			Metadata: map[string]any{
+				"hug": "conditional route value",
 			},
 		},
 		// Fast-path detection: a candidate list without commas is a single
