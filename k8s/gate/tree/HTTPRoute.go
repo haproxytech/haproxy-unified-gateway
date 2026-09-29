@@ -497,6 +497,57 @@ func (r *HTTPRoute) mergeFilterConditions() {
 	})
 }
 
+// mergeMatchConditions applies match-validation failures collected by
+// checkMatches() to the route conditions for every parent ref, with the same
+// all-invalid vs partially-invalid split as mergeFilterConditions.
+func (r *HTTPRoute) mergeMatchConditions() {
+	type invalidRule struct {
+		conds generic.Conditions
+		index int
+	}
+	var invalidRules []invalidRule
+	for i, rule := range r.Rules {
+		if !rule.CheckMatches.Valid && len(rule.CheckMatches.Conditions) > 0 {
+			invalidRules = append(invalidRules, invalidRule{index: i, conds: rule.CheckMatches.Conditions})
+		}
+	}
+	if len(invalidRules) == 0 {
+		return
+	}
+
+	var conds generic.Conditions
+	if len(invalidRules) == len(r.Rules) {
+		// All rules invalid — route is fully invalid.
+		var msg strings.Builder
+		for i, ir := range invalidRules {
+			if i > 0 {
+				msg.WriteString("; ")
+			}
+			reason := ir.conds.GetMessage(generic.ConditionType(gatewayv1.RouteConditionAccepted))
+			msg.WriteString(fmt.Sprintf("rule %d: %s", ir.index, reason))
+		}
+		conds = rc.ConditionKOAcceptedUnsupportedValue(msg.String())
+	} else {
+		// Only a portion of rules are invalid — drop them and signal PartiallyInvalid.
+		var msg strings.Builder
+		msg.WriteString("Dropped Rule")
+		for _, ir := range invalidRules {
+			reason := ir.conds.GetMessage(generic.ConditionType(gatewayv1.RouteConditionAccepted))
+			msg.WriteString(fmt.Sprintf(" (rule %d: %s)", ir.index, reason))
+		}
+		conds = rc.ConditionPartiallyInvalidUnsupportedValue(msg.String())
+	}
+
+	r.Conditions.Conditions.Iterate(func(key string, _ generic.Conditions) bool {
+		parentRefKey, err := utils.KeyToParentRef(key)
+		if err != nil {
+			return true
+		}
+		r.Conditions.MergeOverrideConditionsForParentRef(parentRefKey, conds)
+		return true
+	})
+}
+
 func (r *HTTPRoute) mergeBackendConditions() {
 	// Complete the RouteConditions with the BackendRef check results
 	// The rules checks result will apply to each parent

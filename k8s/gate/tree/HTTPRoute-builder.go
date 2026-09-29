@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
@@ -75,9 +77,10 @@ func (b *HTTPRouteBuilderImpl) computeGateTreeUpdates() {
 			b.buildRules(httpRoute)
 		}
 
-		// Merge the backendRef conditions, then filter conditions
+		// Merge the backendRef conditions, then filter and match conditions
 		httpRoute.mergeBackendConditions()
 		httpRoute.mergeFilterConditions()
+		httpRoute.mergeMatchConditions()
 		httpRoute.Conditions.SetGeneration(httpRoute.K8sResource.Generation)
 	}
 }
@@ -185,5 +188,26 @@ func (b *HTTPRouteBuilderImpl) buildRules(httpRoute *HTTPRoute) {
 	for _, rule := range httpRoute.Rules {
 		rule.checkBackendRef(httpRoute, *b.ControllerStore, b.referenceGrantManager)
 		rule.checkFilters()
+		rule.checkMatches()
+	}
+
+	// Per-rule caps cannot see the aggregate: several rules can share one map
+	// entry, so the route total bounds the final map value.
+	routeMatchSize := 0
+	for _, rule := range httpRoute.Rules {
+		for _, match := range rule.K8sResource.Matches {
+			if conds, err := maps.NormalizeHTTPRouteMatch(match); err == nil {
+				routeMatchSize += len(conds.Encode())
+			}
+		}
+	}
+	if routeMatchSize > maps.MaxEncodedMatchSizePerRoute {
+		cond := rc.ConditionKOAcceptedUnsupportedValue(fmt.Sprintf(
+			"route matches encode to %d bytes, above the %d-byte limit",
+			routeMatchSize, maps.MaxEncodedMatchSizePerRoute))
+		for _, rule := range httpRoute.Rules {
+			rule.CheckMatches = CheckResult{Valid: false, Conditions: cond}
+			rule.Valid = false
+		}
 	}
 }

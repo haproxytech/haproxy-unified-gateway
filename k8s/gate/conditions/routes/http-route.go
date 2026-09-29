@@ -132,6 +132,32 @@ func ConditionPartiallyInvalidIncompatibleFilters(msg string) genericconditions.
 	}
 }
 
+// ConditionKOAcceptedUnsupportedValue sets Accepted: False with the
+// UnsupportedValue reason, for match values the implementation cannot program.
+func ConditionKOAcceptedUnsupportedValue(msg string) genericconditions.Conditions {
+	return genericconditions.Conditions{
+		genericconditions.ConditionType(gatewayv1.RouteConditionAccepted): {
+			Type:    genericconditions.ConditionType(gatewayv1.RouteConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(gatewayv1.RouteReasonUnsupportedValue),
+			Message: msg,
+		},
+	}
+}
+
+// ConditionPartiallyInvalidUnsupportedValue sets PartiallyInvalid: True with
+// Accepted left untouched. The message must start with "Dropped Rule" per the spec.
+func ConditionPartiallyInvalidUnsupportedValue(msg string) genericconditions.Conditions {
+	return genericconditions.Conditions{
+		genericconditions.ConditionType(gatewayv1.RouteConditionPartiallyInvalid): {
+			Type:    genericconditions.ConditionType(gatewayv1.RouteConditionPartiallyInvalid),
+			Status:  metav1.ConditionTrue,
+			Reason:  string(gatewayv1.RouteReasonUnsupportedValue),
+			Message: msg,
+		},
+	}
+}
+
 func ConditionOKResolvedRef() genericconditions.Conditions {
 	return genericconditions.Conditions{
 		genericconditions.ConditionType(gatewayv1.RouteConditionResolvedRefs): {

@@ -14,8 +14,11 @@
 package tree
 
 import (
+	"fmt"
+
 	genericconditions "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -31,6 +34,10 @@ type HTTPRouteRule struct {
 	// CheckFilters holds the result of filter validation for this rule.
 	// An invalid result prevents backend creation and surfaces a status condition.
 	CheckFilters CheckResult
+	// CheckMatches holds the result of match-condition validation (method,
+	// headers, query params). An invalid result prevents the rule from being
+	// programmed and surfaces a status condition.
+	CheckMatches CheckResult
 	Valid        bool
 }
 
@@ -125,6 +132,37 @@ func (r *HTTPRouteRule) checkFilters() {
 	}
 
 	r.CheckFilters = CheckResult{Valid: true}
+}
+
+// checkMatches validates the rule's match conditions (method, headers, query
+// params): regex values must compile, and the encoded conditions must stay
+// under the map-value size caps (HAProxy truncates values above ~16KB, which
+// would silently drop candidates). An invalid rule is not programmed and gets
+// a status condition explaining why.
+func (r *HTTPRouteRule) checkMatches() {
+	perRuleSize := 0
+	for _, match := range r.K8sResource.Matches {
+		conds, err := maps.NormalizeHTTPRouteMatch(match)
+		if err != nil {
+			r.CheckMatches = CheckResult{
+				Valid:      false,
+				Conditions: rc.ConditionKOAcceptedUnsupportedValue(err.Error()),
+			}
+			r.Valid = false
+			return
+		}
+		perRuleSize += len(conds.Encode())
+	}
+	if perRuleSize > maps.MaxEncodedMatchSizePerRule {
+		r.CheckMatches = CheckResult{
+			Valid: false,
+			Conditions: rc.ConditionKOAcceptedUnsupportedValue(fmt.Sprintf(
+				"rule matches encode to %d bytes, above the %d-byte limit", perRuleSize, maps.MaxEncodedMatchSizePerRule)),
+		}
+		r.Valid = false
+		return
+	}
+	r.CheckMatches = CheckResult{Valid: true}
 }
 
 // validateFilterList checks a single filter slice for incompatible combinations.
