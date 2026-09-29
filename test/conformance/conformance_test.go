@@ -96,6 +96,10 @@ func TestConformance(t *testing.T) {
 		features.SupportGatewayAddressEmpty,
 		features.SupportGatewayHTTPListenerIsolation,
 		features.SupportGatewayPort8080,
+		// Extended: HTTPRoute method and query-param matching, enabled by the
+		// same conditional-candidate machinery as header matching.
+		features.SupportHTTPRouteMethodMatching,
+		features.SupportHTTPRouteQueryParamMatching,
 	)
 
 	conformanceProfiles := sets.New(

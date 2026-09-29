@@ -80,12 +80,9 @@ conformance-MR-GW-API-1_5_0:
     # Example: "run=hug-4ff08ccae6d535c8"  (sha derived from gateway ns/name)
     HUG_LABEL_COLLECT_LOGS: ""
     CONFORMANCE_SKIP_TESTS: "\
-      HTTPRouteHeaderMatching,\
       HTTPRouteInvalidBackendRefUnknownKind,\
       HTTPRouteInvalidCrossNamespaceBackendRef,\
       HTTPRouteInvalidNonExistentBackendRef,\
-      HTTPRouteMatching,\
-      HTTPRouteMatchingAcrossRoutes,\
       HTTPRouteRedirectHostAndStatus,\
       HTTPRouteRedirectPortAndScheme,\
       HTTPRouteServiceTypes,\
