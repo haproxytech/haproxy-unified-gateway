@@ -1,0 +1,52 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-match-conditions
+spec:
+  parentRefs:
+  - name: hug-gateway
+    sectionName: http
+  hostnames:
+  - "offload.haproxy"
+  rules:
+  # rule 0: one header
+  - matches:
+    - headers:
+      - name: version
+        value: one
+    backendRefs:
+    - name: http-echo
+      port: 80
+  # rule 1: two headers, one of them a regex
+  - matches:
+    - headers:
+      - name: version
+        value: two
+      - name: color
+        type: RegularExpression
+        value: "^(blue|green)$"
+    backendRefs:
+    - name: http-echo
+      port: 443
+  # rule 2: method match
+  - matches:
+    - method: POST
+    backendRefs:
+    - name: http-echo
+      port: 80
+  # rule 3: query param match
+  - matches:
+    - queryParams:
+      - name: animal
+        value: whale
+    backendRefs:
+    - name: http-echo
+      port: 443
+  # rule 4: unconditional catch-all
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: http-echo
+      port: 80

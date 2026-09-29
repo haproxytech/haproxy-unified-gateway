@@ -1,0 +1,2 @@
+e2e-tests-httproute-match-conditions/hug-gateway_http/invalid.haproxy e2e-tests-httproute-match-conditions/hug-gateway_http/e2e-tests-httproute-match-conditions/route-invalid-regex
+e2e-tests-httproute-match-conditions/hug-gateway_http/offload.haproxy e2e-tests-httproute-match-conditions/hug-gateway_http/e2e-tests-httproute-match-conditions/route-match-conditions

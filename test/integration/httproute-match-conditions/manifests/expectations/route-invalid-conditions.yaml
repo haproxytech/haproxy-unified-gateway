@@ -1,0 +1,24 @@
+parents:
+- conditions:
+  - message: Route Accepted
+    observedGeneration: 1
+    reason: Accepted
+    status: "True"
+    type: Accepted
+  - message: References resolved
+    observedGeneration: 1
+    reason: ResolvedRefs
+    status: "True"
+    type: ResolvedRefs
+  - message: 'Dropped Rule (rule 1: invalid header "version" regex "one(?=two)":
+      error parsing regexp: invalid or unsupported Perl syntax: `(?=`)'
+    observedGeneration: 1
+    reason: UnsupportedValue
+    status: "True"
+    type: PartiallyInvalid
+  controllerName: gate.haproxy.org/hug
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: hug-gateway
+    sectionName: http

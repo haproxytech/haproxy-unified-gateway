@@ -1,0 +1,31 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-invalid-regex
+spec:
+  parentRefs:
+  - name: hug-gateway
+    sectionName: http
+  # Distinct hostname from route-match-conditions: the listener-route map
+  # value would otherwise be a comma list whose order depends on the two
+  # routes' creation timestamps (second granularity, not deterministic).
+  hostnames:
+  - "invalid.haproxy"
+  rules:
+  # rule 0 is valid and stays programmed
+  - matches:
+    - headers:
+      - name: version
+        value: one
+    backendRefs:
+    - name: http-echo
+      port: 80
+  # rule 1 uses a PCRE-only construct the supported regex dialect rejects
+  - matches:
+    - headers:
+      - name: version
+        type: RegularExpression
+        value: "one(?=two)"
+    backendRefs:
+    - name: http-echo
+      port: 443
