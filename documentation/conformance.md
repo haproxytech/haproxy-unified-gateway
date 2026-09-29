@@ -107,14 +107,18 @@ The conformance report is the artifact implementations submit to the upstream
 
 ## Supported features declared
 
-The test currently declares core features only:
-
 - `SupportGateway`
 - `SupportHTTPRoute`
 - `SupportReferenceGrant`
+- `SupportGatewayAddressEmpty`
+- `SupportGatewayHTTPListenerIsolation`
+- `SupportGatewayPort8080`
+- `SupportHTTPRouteMethodMatching` (Extended, in `GATEWAY-HTTP`)
+- `SupportHTTPRouteQueryParamMatching` (Extended, in `GATEWAY-HTTP`)
+- `SupportTLSRoute` when `HUG_TEST_TLS=1`
 
-Extended features (e.g. `HTTPRouteQueryParamMatching`, `HTTPRoutePathRewrite`)
-can be added to `test/conformance/conformance_test.go` as HUG gains support.
+Extended features can be added to `test/conformance/conformance_test.go`
+as HUG gains support.
 
 ---
 
