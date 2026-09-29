@@ -34,9 +34,11 @@ test/lua/
 ├── reverse_host/            reverse_host converter
 ├── find_route/              find_route action: exact / prefix / regex
 │   └── maps/fe/             per-frontend map fixtures
+├── find_route_e2e/          find_route against listener → path map fixtures
 ├── find_route_unregistered/ find_route degrades gracefully when maps aren't preloaded
 ├── route_action/            route action: weighted-random & failover algorithms
-└── route_cli/               register_cli commands (dump cache / clear cache)
+├── route_cli/               register_cli commands (dump cache / clear cache)
+└── select_route/            select_route action: header / method / query matching
 ```
 
 Per-feature directory layout:

@@ -1,0 +1,2 @@
+l1/r1/api ~1;h=admin:e:yes>be_admin
+l1/r1/ ~1;m=POST,h=version:e:one>be_post_ver;m=POST>be_post;h=color:e:orange,h=version:e:two>be_orange;h=version:e:one>be_one;h=color:e:orange%20extra>be_spaced;h=version:e:two>be_two;h=color:e:blue>be_blue;h=color:e:green>be_green;h=version:r:%5Ev%5B0-9%5D%2B%24>be_vregex;h=version:e:split>{"a":"wr","l":"be_one:1,be_two:1"};q=animal:e:whale>be_whale

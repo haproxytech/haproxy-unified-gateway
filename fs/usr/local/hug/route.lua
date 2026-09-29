@@ -69,6 +69,13 @@ end
 -- TODO: might need a "purge" strategy to avoid memory leak
 local cache = {}
 
+-- Cache for parsed conditional map values ("~1;..."), see parse_cond.
+local cond_cache = {}
+
+-- Compiled map regexes, keyed by pattern, declared here so the cache-clearing
+-- task can see it (see get_regex below).
+local regex_cache = {}
+
 -- Per-thread path map indexes, maintained by the find_route section below;
 -- declared here so the cache-clearing task can see it.
 local map_index = {}
@@ -169,6 +176,8 @@ local function clear_cache()
         local count = count_keys(cache)
         local str = core.concat()
         cache = {}
+        cond_cache = {}
+        regex_cache = {}
         -- Also drop map indexes, so deleted frontends do not leak memory.
         map_index = {}
         -- str:add('cleared ')
@@ -183,6 +192,8 @@ core.register_task(clear_cache)
 local function cli_clear_cache(applet, arg1, arg2, arg3, arg4)
     local count = count_keys(cache)
     cache = {}
+    cond_cache = {}
+    regex_cache = {}
     local str = core.concat()
     str:add('cleared ')
     str:add(count)
@@ -223,6 +234,181 @@ end
 -- Register the function to be called from HAProxy
 core.register_action("route", { "http-req" }, route)
 
+-- ---------------------------------------------------------------------------
+-- Match-condition evaluation (headers, method, query params)
+--
+-- Map values containing at least one conditional candidate are written by the
+-- controller as "~1;<conds>>target;<conds>>target;..." with candidates in
+-- precedence order, so the first passing candidate is the correct one.
+-- Conditions inside a candidate are ANDed; empty conditions make the
+-- candidate the unconditional fallback (always last).
+-- ---------------------------------------------------------------------------
+
+-- Percent-decode names/values encoded by the controller so map values never
+-- contain structural delimiters or whitespace.
+local function pct_decode(s)
+    return (s:gsub("%%(%x%x)", function(h)
+        return string.char(tonumber(h, 16))
+    end))
+end
+
+local function compile_regex(pattern)
+    -- Regex.new returns (status, regex|error); a failed compile never matches.
+    local ok, st, re = pcall(Regex.new, pattern, true)
+    if ok and st then
+        return re
+    end
+    return nil
+end
+
+-- parse_cond turns a "~1;..." value into a list of candidates:
+--   { target, nm, nh, nq, conds = { {kind,name,type,value,re} ... } }
+-- Results are cached per raw value string.
+local function parse_cond(value)
+    local cached = cond_cache[value]
+    if cached ~= nil then
+        return cached
+    end
+    local cands = {}
+    for cand_str in value:gmatch("[^;]+") do
+        local cond_str, target = cand_str:match("^(.-)>(.*)$")
+        if target ~= nil and target ~= "" then
+            local cand = { target = target, nm = false, nh = 0, nq = 0, conds = {} }
+            if cond_str ~= "" then
+                for c in cond_str:gmatch("[^,]+") do
+                    local kind, rest = c:match("^(.)=(.*)$")
+                    if kind == "m" then
+                        cand.nm = true
+                        cand.conds[#cand.conds + 1] = { kind = "m", value = pct_decode(rest) }
+                    elseif kind == "h" or kind == "q" then
+                        local name, t, val = rest:match("^([^:]+):(%a):(.*)$")
+                        if name ~= nil then
+                            local cond = {
+                                kind = kind,
+                                name = pct_decode(name),
+                                type = t,
+                                value = pct_decode(val),
+                            }
+                            if t == "r" then
+                                cond.re = compile_regex(cond.value)
+                                if cond.re == nil then
+                                    core.Alert("select_route: cannot compile regex: " .. cond.value)
+                                end
+                            end
+                            if kind == "h" then
+                                cand.nh = cand.nh + 1
+                            else
+                                cand.nq = cand.nq + 1
+                            end
+                            cand.conds[#cand.conds + 1] = cond
+                        end
+                    end
+                end
+            end
+            cands[#cands + 1] = cand
+        end
+    end
+    cond_cache[value] = cands
+    return cands
+end
+
+-- Request context, built lazily so unconditional routes pay nothing.
+local function request_headers(txn, ctx)
+    if ctx.hdrs == nil then
+        local norm = {}
+        -- Header names are stored lowercased by HAProxy; normalize anyway so
+        -- the lookup cannot miss on case.
+        for k, v in pairs(txn.http:req_get_headers()) do
+            norm[k:lower()] = v
+        end
+        ctx.hdrs = norm
+    end
+    return ctx.hdrs
+end
+
+-- Query parameters, decoded (percent-escapes, '+' as space); names are
+-- case-sensitive. A repeated parameter matches any occurrence.
+local function request_params(txn, ctx)
+    if ctx.params == nil then
+        local params = {}
+        local qs = txn.f:query()
+        if qs and qs ~= "" then
+            for pair in qs:gmatch("[^&]+") do
+                local name, value = pair:match("^([^=]*)=?(.*)$")
+                local n = pct_decode(name:gsub("%+", " "))
+                local list = params[n]
+                if list == nil then
+                    list = {}
+                    params[n] = list
+                end
+                list[#list + 1] = pct_decode(value:gsub("%+", " "))
+            end
+        end
+        ctx.params = params
+    end
+    return ctx.params
+end
+
+local function request_method(txn, ctx)
+    if ctx.method == nil then
+        ctx.method = txn.f:method()
+    end
+    return ctx.method
+end
+
+local function cond_matches(txn, cond, ctx)
+    if cond.kind == "m" then
+        return request_method(txn, ctx) == cond.value
+    end
+    local vals
+    if cond.kind == "h" then
+        vals = request_headers(txn, ctx)[cond.name]
+    elseif cond.kind == "q" then
+        vals = request_params(txn, ctx)[cond.name]
+    else
+        return false
+    end
+    if vals == nil then
+        return false
+    end
+    for _, v in pairs(vals) do
+        if cond.type == "r" then
+            -- Unanchored search; anchor with ^...$ for exact matches.
+            if cond.re ~= nil and cond.re:exec(v) then
+                return true
+            end
+        elseif v == cond.value then
+            return true
+        end
+    end
+    return false
+end
+
+local function eval_cands(txn, conds, ctx)
+    for _, cond in ipairs(conds) do
+        if not cond_matches(txn, cond, ctx) then
+            return false
+        end
+    end
+    return true
+end
+
+-- resolve_value returns the effective target of a raw map value plus the
+-- candidate's condition counts, used for cross-candidate precedence scoring.
+-- Returns nil when the value is conditional and no candidate passes.
+local function resolve_value(txn, value, ctx)
+    if value:sub(1, 2) ~= "~1" then
+        return { target = value, nm = false, nh = 0, nq = 0 }
+    end
+    for _, cand in ipairs(parse_cond(value)) do
+        if eval_cands(txn, cand.conds, ctx) then
+            return { target = cand.target, nm = cand.nm, nh = cand.nh, nq = cand.nq }
+        end
+    end
+    return nil
+end
+
+
 -- Path maps are pre-loaded by HAProxy via dummy ACLs in haproxy.cfg, so
 -- core.get_patref returns a handle to the live in-memory pat_ref.
 -- Iterating the patref costs ~0.4us per entry (each pairs() step crosses
@@ -233,6 +419,27 @@ core.register_action("route", { "http-req" }, route)
 local MAP_INDEX_TTL = 1
 
 local patref_cache = {}
+
+-- get_regex returns the compiled form of a map regex pattern, from the
+-- regex_cache declared at the top of the file. Map keys are POSIX ERE
+-- written by the controller; Lua patterns cannot express them (no
+-- alternation), so the HAProxy engine must compile and run them. A failed
+-- compile is cached as false and never matches.
+local function get_regex(pattern)
+    local cached = regex_cache[pattern]
+    if cached ~= nil then
+        if cached == false then return nil end
+        return cached
+    end
+    local ok, st, re = pcall(Regex.new, pattern, true)
+    if ok and st then
+        regex_cache[pattern] = re
+        return re
+    end
+    regex_cache[pattern] = false
+    core.Warning("find_route: cannot compile path regex: " .. pattern)
+    return nil
+end
 
 local function get_ref(filepath)
     local r = patref_cache[filepath]
@@ -289,46 +496,86 @@ local function exact_lookup(filepath, key, now)
     return idx.values[key]
 end
 
--- Longest-prefix match: probe key prefixes from longest to shortest against
--- the hash. Cost is O(#key) hash lookups, independent of map size, and a
--- miss is as cheap as a hit (a sorted-array walk-back degenerates to O(n)
--- on misses, which multi-candidate requests hit for every candidate).
--- Returns value and match length (0 if no match).
-local function prefix_lookup(filepath, key, now)
-    local idx = index_for(filepath, now)
-    if not idx then return nil, 0 end
-    local values = idx.values
-    local maxlen = idx.maxlen
-    if maxlen > #key then maxlen = #key end
-    for len = maxlen, 1, -1 do
-        local v = values[key:sub(1, len)]
-        if v ~= nil then
-            return v, len
+-- Scoring constants: exact > any prefix length > regex > nothing.
+local SCORE_EXACT = 1e9
+local SCORE_REGEX = -1
+
+-- Walk the three path maps for one listener-route candidate in specificity
+-- order (exact, prefixes longest-first, regex), returning the first entry
+-- whose value is either unconditional or has a passing conditional candidate.
+-- Failed conditional entries fall through to less specific entries, as the
+-- spec requires (a non-matching rule must not shadow a less specific one).
+local function resolve_passing(txn, files, blr, lr_len, ctx, now)
+    local v = exact_lookup(files.exact, blr, now)
+    local r = v and resolve_value(txn, v, ctx)
+    if r then
+        r.score = SCORE_EXACT
+        return r
+    end
+
+    local idx = index_for(files.prefix, now)
+    if idx ~= nil then
+        local maxlen = idx.maxlen
+        if maxlen > #blr then
+            maxlen = #blr
+        end
+        for len = maxlen, 1, -1 do
+            v = idx.values[blr:sub(1, len)]
+            if v ~= nil then
+                r = resolve_value(txn, v, ctx)
+                if r then
+                    -- len includes lr; subtract to get path-only specificity.
+                    r.score = len - lr_len
+                    return r
+                end
+            end
         end
     end
-    return nil, 0
-end
 
-local function regex_lookup(filepath, key, now)
-    local idx = index_for(filepath, now)
-    if not idx then return nil end
-    for _, k in ipairs(idx.sorted) do
-        local ok, m = pcall(string.match, key, k)
-        if ok and m then return idx.values[k] end
+    idx = index_for(files.regex, now)
+    if idx ~= nil then
+        for _, k in ipairs(idx.sorted) do
+            local re = get_regex(k)
+            if re ~= nil and re:exec(blr) then
+                r = resolve_value(txn, idx.values[k], ctx)
+                if r then
+                    r.score = SCORE_REGEX
+                    return r
+                end
+            end
+        end
     end
     return nil
 end
 
--- Scoring constants: exact > any prefix length > regex > nothing.
-local SCORE_EXACT = 1e9
-local SCORE_REGEX = -1
+-- Spec precedence after path specificity and host: method, header count,
+-- query count. Equal ranks keep the first candidate considered (list order).
+local function cand_better(a, b)
+    if a.score ~= b.score then
+        return a.score > b.score
+    end
+    if a.host ~= b.host then
+        return a.host > b.host
+    end
+    if a.nm ~= b.nm then
+        return a.nm
+    end
+    if a.nh ~= b.nh then
+        return a.nh > b.nh
+    end
+    if a.nq ~= b.nq then
+        return a.nq > b.nq
+    end
+    return false
+end
 
 -- find_route picks the most specific route across two candidate sources:
 --   txn.selected_listener_route          → routes attached via exact hostname
 --   txn.selected_listener_route_wildcard → routes attached via wildcard hostname
 -- Each may be comma-separated. We score every candidate against the path maps;
 -- path specificity is primary (exact > longest prefix > regex), exact-host
--- breaks ties over wildcard-host (Gateway API: same path, more specific host wins).
+-- breaks ties over wildcard-host, then method, header count and query count
+-- decide, per the Gateway API match precedence rules.
 -- maps_dir: maps directory for this frontend (e.g. /usr/local/hug/maps/hug_http_80)
 local HOST_EXACT, HOST_WILD = 2, 1
 
@@ -339,15 +586,16 @@ local function find_route(txn, maps_dir)
 
     if lr_exact == "" and lr_wild == "" then return end
 
-    local exact_file  = maps_dir .. "/path_exact.map"
-    local prefix_file = maps_dir .. "/path_prefix.map"
-    local regex_file  = maps_dir .. "/path_regex.map"
+    local files = {
+        exact  = maps_dir .. "/path_exact.map",
+        prefix = maps_dir .. "/path_prefix.map",
+        regex  = maps_dir .. "/path_regex.map",
+    }
 
     local now = now_s()
-    local blr_parts  = {}
-    local best_val   = nil
-    local best_score = -1e9
-    local best_host  = 0
+    local ctx = {}
+    local blr_parts = {}
+    local best = nil
 
     local function consider(lr_str, host_rank)
         if lr_str == "" then return end
@@ -355,26 +603,12 @@ local function find_route(txn, maps_dir)
             local blr = lr .. path
             table.insert(blr_parts, blr)
 
-            local m, score
-            m = exact_lookup(exact_file, blr, now)
-            if m then
-                score = SCORE_EXACT
-            else
-                local pv, plen = prefix_lookup(prefix_file, blr, now)
-                if pv then
-                    -- plen includes lr; subtract to get path-only specificity.
-                    m, score = pv, plen - #lr
-                else
-                    local rv = regex_lookup(regex_file, blr, now)
-                    if rv then m, score = rv, SCORE_REGEX end
+            local r = resolve_passing(txn, files, blr, #lr, ctx, now)
+            if r ~= nil then
+                r.host = host_rank
+                if best == nil or cand_better(r, best) then
+                    best = r
                 end
-            end
-
-            if m and (score > best_score or
-                     (score == best_score and host_rank > best_host)) then
-                best_val   = m
-                best_score = score
-                best_host  = host_rank
             end
         end
     end
@@ -383,12 +617,52 @@ local function find_route(txn, maps_dir)
     consider(lr_wild,  HOST_WILD)
 
     txn:set_var("txn.base_listener_route", table.concat(blr_parts, ","))
-    if best_val ~= nil then
-        txn:set_var("txn.route", best_val)
+    if best ~= nil then
+        txn:set_var("txn.route", best.target)
     end
 end
 
 core.register_action("find_route", { "http-req" }, find_route, 1)
+
+-- select_route resolves a conditional map value ("~1;...") left in txn.route
+-- by the native fast-path map converters, which cannot evaluate conditions.
+-- Candidates are tried in order; when all fail, the remaining path maps
+-- (shorter prefixes, then regex) are retried for the same listener-route,
+-- mirroring the ifnotexists chain the fast path could not redo natively.
+local function select_route(txn, maps_dir)
+    local raw = txn.f:var("txn.route")
+    if raw == nil or raw:sub(1, 2) ~= "~1" then
+        return
+    end
+
+    local ctx = {}
+    for _, cand in ipairs(parse_cond(raw)) do
+        if eval_cands(txn, cand.conds, ctx) then
+            txn:set_var("txn.route", cand.target)
+            return
+        end
+    end
+
+    local lr = txn.f:var("txn.lr")
+    local path = txn.f:var("txn.path")
+    if lr ~= nil and lr ~= "" and path ~= nil then
+        local files = {
+            exact  = maps_dir .. "/path_exact.map",
+            prefix = maps_dir .. "/path_prefix.map",
+            regex  = maps_dir .. "/path_regex.map",
+        }
+        local r = resolve_passing(txn, files, lr .. path, #lr, ctx, now_s())
+        if r ~= nil then
+            txn:set_var("txn.route", r.target)
+            return
+        end
+    end
+
+    -- No candidate matched: leave no route so the request 404s.
+    txn:set_var("txn.route", nil)
+end
+
+core.register_action("select_route", { "http-req" }, select_route, 1)
 
 -- Register a converter to reverse the host string (e.g. "www.example.com" becomes ".com.example.www")
 core.register_converters("reverse_host", function(val)

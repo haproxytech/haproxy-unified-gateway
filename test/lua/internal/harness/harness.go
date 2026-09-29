@@ -227,11 +227,18 @@ func startHaproxy(t *testing.T, cfgPath, rendered string, h *Harness) {
 // handled specially (Go's Header.Set("Host",…) is silently ignored).
 func (h *Harness) Get(t *testing.T, urlPath string, hdrs ...string) (status int, body string) {
 	t.Helper()
+	return h.Do(t, "GET", urlPath, hdrs...)
+}
+
+// Do sends a request with an arbitrary method. Repeated header keys are
+// preserved (Header.Add), so multi-value semantics can be tested.
+func (h *Harness) Do(t *testing.T, method, urlPath string, hdrs ...string) (status int, body string) {
+	t.Helper()
 	// http (not https) is correct: the connection is a unix socket; "x" is a
 	// placeholder host the server never sees. The transport's DialContext
 	// ignores it and dials h.HTTPSock instead.
 	//revive:disable-next-line:unsecure-url-scheme
-	req, err := http.NewRequest("GET", "http://x"+urlPath, nil)
+	req, err := http.NewRequest(method, "http://x"+urlPath, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +246,7 @@ func (h *Harness) Get(t *testing.T, urlPath string, hdrs ...string) (status int,
 		if strings.EqualFold(hdrs[i], "Host") {
 			req.Host = hdrs[i+1]
 		} else {
-			req.Header.Set(hdrs[i], hdrs[i+1])
+			req.Header.Add(hdrs[i], hdrs[i+1])
 		}
 	}
 	resp, err := h.client.Do(req)

@@ -1,0 +1,11 @@
+# name  host  path  header  want_route
+# Both routes attach to example.org (comma list → multi-candidate → find_route).
+# r1: path / (unconditional → be_part1_path, version=one → be_part1_ver)
+# r2: /v2 path prefix → be_part2_v2, version=two → be_part2_ver
+
+root_no_header        example.org  /     -            be_part1_path
+root_version_one      example.org  /     Version:one  be_part1_ver
+root_version_two      example.org  /     Version:two  be_part2_ver
+v2_longer_prefix      example.org  /v2   -            be_part2_v2
+v2_sub_path           example.org  /v2/x -            be_part2_v2
+v2_version_header     example.org  /v2   Version:one  be_part2_v2

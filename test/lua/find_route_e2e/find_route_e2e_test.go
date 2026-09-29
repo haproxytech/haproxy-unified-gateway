@@ -45,6 +45,14 @@ var scenarios = []string{
 	"wildcard_route",
 }
 
+// headerScenarios use a 5-column cases file (name host path header want)
+// where header is "Name:value" or "-". They cover match-condition
+// precedence across routes: both routes attach to the same host, so the
+// comma-separated listener-route list forces the find_route path.
+var headerScenarios = []string{
+	"cross_route_header_count",
+}
+
 func parseRoute(body string) string {
 	for part := range strings.FieldsSeq(body) {
 		if after, ok := strings.CutPrefix(part, "route="); ok {
@@ -59,6 +67,54 @@ func TestFindRoute_E2E(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			h := harness.New(t, filepath.Join(scenario, "haproxy.cfg"))
 			runCases(t, h, filepath.Join(scenario, "testcases", "cases.map"))
+		})
+	}
+}
+
+func TestFindRoute_E2E_Headers(t *testing.T) {
+	for _, scenario := range headerScenarios {
+		t.Run(scenario, func(t *testing.T) {
+			h := harness.New(t, filepath.Join(scenario, "haproxy.cfg"))
+			runHeaderCases(t, h, filepath.Join(scenario, "testcases", "cases.map"))
+		})
+	}
+}
+
+// runHeaderCases reads a 5-column testcases file (name host path header want).
+// The header column is "Name:value" or "-"; want "-" means no route.
+func runHeaderCases(t *testing.T, h *harness.Harness, casesFile string) {
+	t.Helper()
+	raw, err := os.ReadFile(casesFile)
+	if err != nil {
+		t.Fatalf("read %s: %v", casesFile, err)
+	}
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		f := strings.Fields(line)
+		if len(f) != 5 {
+			t.Fatalf("malformed line in %s (want 5 fields): %q", casesFile, line)
+		}
+		name, host, path, header, wantRoute := f[0], f[1], f[2], f[3], f[4]
+		if wantRoute == "-" {
+			wantRoute = ""
+		}
+		t.Run(name, func(t *testing.T) {
+			var hdrs []string
+			if header != "-" {
+				name, value, ok := strings.Cut(header, ":")
+				if !ok {
+					t.Fatalf("malformed header %q", header)
+				}
+				hdrs = []string{name, value}
+			}
+			_, body := h.Get(t, path, append([]string{"Host", host}, hdrs...)...)
+			if got := parseRoute(body); got != wantRoute {
+				t.Errorf("host=%q path=%q header=%q\n got  route=%q\n want route=%q\n body: %s",
+					host, path, header, got, wantRoute, body)
+			}
 		})
 	}
 }
