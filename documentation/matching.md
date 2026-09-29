@@ -83,5 +83,7 @@ natively without any Lua on the request path.
 Known divergences from the spec (also tracked in the repository docs):
 
 - hostname precedence vs path specificity ordering,
-- `PathPrefix` matches by characters, not path elements, and a trailing `/`
-  is not ignored.
+- `PathPrefix` matches by characters, not path elements: a request to
+  `/v2example` matches the prefix `/v2`, where the spec requires element
+  boundaries. This is why the `HTTPRouteMatching` conformance suite stays
+  skipped; the four other match suites run and pass.
