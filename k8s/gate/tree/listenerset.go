@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -34,8 +35,15 @@ import (
 // and silently drops unexported state.
 type ListenerSet struct {
 	K8sResource *gatewayv1.ListenerSet
+	// Conditions are this ListenerSet's own Accepted and Programmed conditions.
+	// Rebuilt from scratch every cycle by the verdict builder: a status is a
+	// conclusion about the whole tree, and the previous one is not an input to it.
+	Conditions generic.Conditions
 	// TreeStatus
 	TreeStatus TreeUpdate[ListenerSet]
+	// Entries is status.listeners: one record per entry this ListenerSet declares,
+	// in spec order, with the conditions its contributed listener was judged on.
+	Entries []ListenerEntryStatus
 	// Attachment is what the contribution pass decided: whether this ListenerSet's
 	// listeners entered the parent Gateway's merged list, and if not, whether the
 	// refusal is this controller's to report. Written once per cycle by the
@@ -43,6 +51,24 @@ type ListenerSet struct {
 	// that reports it must not re-derive it, or the status and the data plane could
 	// disagree.
 	Attachment listenerSetAttachment
+}
+
+// ListenerEntryStatus is a ListenerSet's status.listeners record for one of its
+// entries.
+//
+// A tree type rather than gatewayv1.ListenerEntryStatus so that conditions stay
+// generic.Conditions inside the tree and the conversion to the API type happens
+// once, where the status is written.
+//
+// Name keys a listType=map within this ListenerSet's own status, which is safe:
+// names are unique within the resource declaring them. It is deliberately not the
+// merged list that the parent Gateway publishes, where the same bare name can
+// legally appear twice -- that is why the Gateway publishes only its own listeners.
+type ListenerEntryStatus struct {
+	Name           gatewayv1.SectionName
+	Conditions     generic.Conditions
+	SupportedKinds []gatewayv1.RouteGroupKind
+	AttachedRoutes int32
 }
 
 func NewListenerSet(k8sObject *gatewayv1.ListenerSet) *ListenerSet {

@@ -796,6 +796,21 @@ func (l *Listener) conditionsInOwnVocabulary(verdict conditions.ListenerConditio
 	return conditions.NewGatewayListenerConditions(verdict, msg)
 }
 
+// programmedCondition returns this listener's Programmed condition, read in
+// whichever vocabulary the listener is reported in.
+//
+// The two condition types are distinct Go types with the same value today, so the
+// branch is written out rather than assumed: reading an entry's Programmed
+// condition with the Gateway's type would compile and would keep working until the
+// day one of the two diverges.
+func (l *Listener) programmedCondition() (generic.Condition, bool) {
+	conditionType := generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
+	if l.FromListenerSet() {
+		conditionType = generic.ConditionType(gatewayv1.ListenerEntryConditionProgrammed)
+	}
+	return l.Conditions.GetCondition(conditionType)
+}
+
 // referenceGrantFrom is the "from" side of the ReferenceGrant question this
 // listener's object references ask: which document is reaching out.
 //

@@ -101,8 +101,6 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 
 	referenceGrantBuilder := tree.NewReferenceGrantBuilder(controllerStore, referenceGrantManager)
 
-	listenerSetContributionBuilder := tree.NewListenerSetContributionBuilder(controllerStore)
-
 	treeBuilder := GateTreeBuilder{
 		cfg:              cfg,
 		referenceManager: referenceManager,
@@ -115,8 +113,12 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 			// assembles each Gateway's merged listener list from that mirror, which
 			// therefore has to be current by then. Deliberately not a pre-builder --
 			// see ListenerSetContributionBuilder.
-			listenerSetContributionBuilder,
+			tree.NewListenerSetContributionBuilder(controllerStore),
 			gatewayBuilder,
+			// After gatewayBuilder, the pass that judged every listener and built the
+			// parent's conditions: a ListenerSet's verdicts are a roll-up of that
+			// output, so they cannot be read before it.
+			tree.NewListenerSetVerdictBuilder(controllerStore),
 			virtualListenerBuilder,
 			certificateBuilder,
 			serviceBuilder,

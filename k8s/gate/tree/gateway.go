@@ -78,6 +78,16 @@ type Gateway struct {
 	// derived from this list once per cycle -- one writer, nothing to keep in sync --
 	// rather than a second source of truth.
 	Listeners []*Listener
+	// AttachedListenerSets is the number of ListenerSets that attached to this
+	// Gateway and were accepted -- what Gateway.status.attachedListenerSets must
+	// report.
+	//
+	// Recomputed tree-wide every cycle by the ListenerSet verdict builder, because
+	// the count is a roll-up of a policy (the Gateway's allowedListeners), of each
+	// ListenerSet's attachment and of each ListenerSet's own acceptance: it is the
+	// end of the evaluation chain Gateway -> ListenerSet -> count, and clearing it
+	// before the roll-up is what keeps a ListenerSet deleted in this cycle out of it.
+	AttachedListenerSets int32
 	// Valid shows whether the Gateway is valid.
 	Valid bool
 	// Ingress Frontend equivalent
@@ -152,6 +162,7 @@ func (g *Gateway) reset() {
 	g.CheckConflict = CheckResult{}
 	g.Valid = false
 	g.Listeners = nil
+	g.AttachedListenerSets = 0
 }
 
 func (g *Gateway) SetAsManaged(logger *slog.Logger, cs ControllerStore) {
