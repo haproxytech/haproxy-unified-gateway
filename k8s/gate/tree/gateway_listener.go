@@ -749,8 +749,9 @@ func (l *Listener) conflictVerdict(conflicts conflictKinds) conditions.ListenerC
 }
 
 // conditionsFor renders a verdict in the vocabulary of whatever declared this
-// listener. Every check goes through it, so it is also the single place where the
-// choice of vocabulary will be made once ListenerSets contribute entries.
+// listener. Every check goes through it, so it is the single place where the
+// choice of vocabulary is made: a contributed entry is reported with the
+// ListenerEntry constants, a listener the Gateway declares with the Gateway ones.
 //
 // A verdict the vocabulary cannot spell is a programming error -- the tables are
 // total over the verdicts, which a test enforces -- and it must not be answered
@@ -766,12 +767,12 @@ func (l *Listener) conflictVerdict(conflicts conflictKinds) conditions.ListenerC
 // deliberately not a panic: an internal inconsistency about how to word a status
 // is not a reason to stop serving traffic.
 func (l *Listener) conditionsFor(verdict conditions.ListenerConditionVerdict, msg string) generic.Conditions {
-	rendered, err := conditions.NewGatewayListenerConditions(verdict, msg)
+	rendered, err := l.conditionsInOwnVocabulary(verdict, msg)
 	if err == nil {
 		return rendered
 	}
 
-	rejected, fallbackErr := conditions.NewGatewayListenerConditions(
+	rejected, fallbackErr := l.conditionsInOwnVocabulary(
 		conditions.VerdictUnreportable,
 		fmt.Sprintf("listener %s cannot be reported: %s", l.Key(), err),
 	)
@@ -781,6 +782,18 @@ func (l *Listener) conditionsFor(verdict conditions.ListenerConditionVerdict, ms
 		return generic.Conditions{}
 	}
 	return rejected
+}
+
+// conditionsInOwnVocabulary is the dispatch by origin, and the only place the two
+// listener vocabularies are told apart. The two families hold the same values
+// today, which is exactly why the branch must be explicit here rather than
+// inherited by accident at every call site: Reason is a bare string once rendered,
+// so a mix-up is invisible afterwards.
+func (l *Listener) conditionsInOwnVocabulary(verdict conditions.ListenerConditionVerdict, msg string) (generic.Conditions, error) {
+	if l.FromListenerSet() {
+		return conditions.NewListenerEntryConditions(verdict, msg)
+	}
+	return conditions.NewGatewayListenerConditions(verdict, msg)
 }
 
 // referenceGrantFrom is the "from" side of the ReferenceGrant question this
