@@ -730,3 +730,153 @@ func TestBothConflictKindsAccumulateOnOneListener(t *testing.T) {
 	assert.Equal(t, protocolConflict, conflictsOnPort80[gatewayListenerKey(gwKey, "https-first")],
 		"the first claimant of a hostname in its own category conflicts on protocol only")
 }
+
+// A ListenerSet entry is compared in the scope of the Gateway that serves it, and
+// the precedence order of the merged list decides which claimant keeps a hostname or
+// fixes a port's category. Neither property is observable through a Gateway's own
+// listeners alone: for those, the serving Gateway and the declaring resource are the
+// same object, and their order is spec order. Both failure modes are silent -- no
+// conflict at all in one case, the wrong listener marked in the other -- so each
+// assertion below names the listener that must win rather than only that a conflict
+// exists.
+func TestListenerSetEntriesAreComparedInTheirServingGatewayScope(t *testing.T) {
+	t1 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	t2 := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	gw1Key := client.ObjectKey{Namespace: "default", Name: "gw1"}
+	gw2Key := client.ObjectKey{Namespace: "default", Name: "gw2"}
+
+	ptr := func(s string) *string { return &s }
+
+	hostnameOf := func(s *string) *gatewayv1.Hostname {
+		if s == nil {
+			return nil
+		}
+		h := gatewayv1.Hostname(*s)
+		return &h
+	}
+
+	mkGateway := func(key client.ObjectKey, created time.Time, listeners ...gatewayv1.Listener) *Gateway {
+		treeGw := &Gateway{K8sResource: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              key.Name,
+				Namespace:         key.Namespace,
+				CreationTimestamp: metav1.NewTime(created),
+			},
+			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
+		}}
+		treeGw.constructOwnListeners()
+		return treeGw
+	}
+
+	ownListener := func(name string, port int, protocol gatewayv1.ProtocolType, hostname *string) gatewayv1.Listener {
+		return gatewayv1.Listener{
+			Name:     gatewayv1.SectionName(name),
+			Port:     gatewayv1.PortNumber(port),
+			Protocol: protocol,
+			Hostname: hostnameOf(hostname),
+		}
+	}
+
+	// mkEntry is one entry a ListenerSet contributes to a Gateway's merged list.
+	mkEntry := func(gatewayKey, listenerSetKey client.ObjectKey, name string, port int, protocol gatewayv1.ProtocolType, hostname *string) *Listener {
+		return &Listener{
+			ListenerKey: listenerSetListenerKey(gatewayKey, listenerSetKey, gatewayv1.SectionName(name)),
+			K8sListenerSetListenerEntry: &gatewayv1.ListenerEntry{
+				Name:     gatewayv1.SectionName(name),
+				Port:     gatewayv1.PortNumber(port),
+				Protocol: protocol,
+				Hostname: hostnameOf(hostname),
+			},
+			OwnerKind: kindListenerSet,
+		}
+	}
+
+	// merge hands the contributions to the Gateway the way the builder does, so their
+	// position -- the Gateway's own listeners first, then the contributions in the
+	// order given -- is the one production produces.
+	merge := func(gw *Gateway, contributions ...*Listener) *Gateway {
+		gw.constructListeners(contributions)
+		return gw
+	}
+
+	type conflictResults struct {
+		conflicts              map[gatewayv1.PortNumber]conflictsByListener
+		protocolCategoryByPort map[gatewayv1.PortNumber]protocols.ProtocolCategory
+	}
+
+	run := func(t *testing.T, gateways ...*Gateway) conflictResults {
+		t.Helper()
+		b := &GatewayBuilderImpl{ControllerStore: &ControllerStore{
+			GateTree: &GateTree{Gateways: make(map[client.ObjectKey]*Gateway, len(gateways))},
+		}}
+		for _, gw := range gateways {
+			b.GateTree.Gateways[client.ObjectKeyFromObject(gw.K8sResource)] = gw
+		}
+		b.resetListenerConflicts()
+		b.computeListenerConflicts()
+		return conflictResults{
+			conflicts:              b.ControllerStore.conflictsByPort,
+			protocolCategoryByPort: b.ControllerStore.protocolCategoryByPort,
+		}
+	}
+
+	conflictsOf := func(t *testing.T, results conflictResults, port int, key listenerKey) conflictKinds {
+		t.Helper()
+		onPort, ok := results.conflicts[gatewayv1.PortNumber(port)]
+		require.Truef(t, ok, "no conflict table for port %d", port)
+		kinds, ok := onPort[key]
+		require.Truef(t, ok, "no entry for %s on port %d -- the table is total over the listeners", key, port)
+		return kinds
+	}
+
+	t.Run("sibling ListenerSets of one Gateway conflict, the older keeping the hostname", func(t *testing.T) {
+		older := mkEntry(gw1Key, client.ObjectKey{Namespace: "tenant", Name: "ls-old"}, "http", 80, gatewayv1.HTTPProtocolType, ptr("foo.com"))
+		younger := mkEntry(gw1Key, client.ObjectKey{Namespace: "tenant", Name: "ls-new"}, "http", 80, gatewayv1.HTTPProtocolType, ptr("foo.com"))
+		gw1 := merge(mkGateway(gw1Key, t1), older, younger)
+
+		results := run(t, gw1)
+
+		assert.Equal(t, noConflict, conflictsOf(t, results, 80, older.Key()))
+		assert.Equal(t, hostnameConflict, conflictsOf(t, results, 80, younger.Key()),
+			"the claim is keyed on the serving Gateway: were it the declaring ListenerSet, the two would be different owners, neither would conflict, and the map file would settle it by last writer")
+	})
+
+	t.Run("two Gateways claiming one hostname do not conflict", func(t *testing.T) {
+		gw1 := merge(mkGateway(gw1Key, t1, ownListener("http", 80, gatewayv1.HTTPProtocolType, ptr("foo.com"))))
+		gw2 := merge(mkGateway(gw2Key, t2, ownListener("http", 80, gatewayv1.HTTPProtocolType, ptr("foo.com"))))
+
+		results := run(t, gw1, gw2)
+
+		assert.Equal(t, noConflict, conflictsOf(t, results, 80, gatewayListenerKey(gw1Key, "http")))
+		assert.Equal(t, noConflict, conflictsOf(t, results, 80, gatewayListenerKey(gw2Key, "http")),
+			"the claim carries the serving Gateway: without it, two Gateways would be made to conflict, which the API's per-Gateway addresses model does not")
+	})
+
+	t.Run("the Gateway's own listener keeps the hostname against an entry", func(t *testing.T) {
+		// The Gateway is the newer object, so a precedence read from creation
+		// timestamps would hand the hostname to the entry. The API gives the parent's
+		// own listeners the highest priority regardless, and constructListeners says
+		// so by putting them first unconditionally.
+		entry := mkEntry(gw1Key, client.ObjectKey{Namespace: "tenant", Name: "ls-old"}, "http", 80, gatewayv1.HTTPProtocolType, ptr("foo.com"))
+		gw1 := merge(mkGateway(gw1Key, t2, ownListener("http", 80, gatewayv1.HTTPProtocolType, ptr("foo.com"))), entry)
+
+		results := run(t, gw1)
+
+		assert.Equal(t, noConflict, conflictsOf(t, results, 80, gatewayListenerKey(gw1Key, "http")))
+		assert.Equal(t, hostnameConflict, conflictsOf(t, results, 80, entry.Key()),
+			"the parent's own listeners win whatever the timestamps say")
+	})
+
+	t.Run("the Gateway's own listener fixes the port's category", func(t *testing.T) {
+		entry := mkEntry(gw1Key, client.ObjectKey{Namespace: "tenant", Name: "ls-old"}, "http", 443, gatewayv1.HTTPProtocolType, nil)
+		gw1 := merge(mkGateway(gw1Key, t1, ownListener("https", 443, gatewayv1.HTTPSProtocolType, nil)), entry)
+
+		results := run(t, gw1)
+
+		assert.Equal(t, protocols.ProtocolCategorySecure, results.protocolCategoryByPort[443],
+			"the first listener in precedence order decides, and it is the Gateway's own")
+		assert.Equal(t, noConflict, conflictsOf(t, results, 443, gatewayListenerKey(gw1Key, "https")))
+		assert.Equal(t, protocolConflict, conflictsOf(t, results, 443, entry.Key()))
+	})
+}
