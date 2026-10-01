@@ -374,20 +374,112 @@ func TestListenerSetVerdictKeepsSiblingEntriesApart(t *testing.T) {
 // cycle's contributions once a ListenerSet stops contributing.
 func TestListenerSetVerdictCountIsRecomputed(t *testing.T) {
 	f := newVerdictFixture(t, true)
-	f.addListenerSet("tenant", "ls", attachmentAllowed, 3, "http")
+	f.addListenerSet("tenant", "kept", attachmentAllowed, 3, "http")
+	dropped := f.addListenerSet("tenant", "dropped", attachmentAllowed, 3, "http")
+	f.addContributedEntry("tenant", "kept", "http", true, metav1.ConditionTrue)
+	f.addContributedEntry("tenant", "dropped", "http", true, metav1.ConditionTrue)
+
+	f.builder.ComputeTreeUpdates()
+	require.Equal(t, int32(2), f.gw.AttachedListenerSets)
+
+	f.gw.AttachedListenerSets = 5 // simulate a stale value from an earlier cycle
+	dropped.Attachment = attachmentNotAllowed
+
+	f.builder.ComputeTreeUpdates()
+
+	// A second contributor stays counted, so this is not satisfied by the reset
+	// alone: the count reflects this cycle's set, and the stale value is gone.
+	assert.Equal(t, int32(1), f.gw.AttachedListenerSets)
+	assert.Empty(t, dropped.Entries)
+}
+
+// Allowed with an accepted parent but no entry in the merged list: the spec
+// requires at least one entry, so this is an inconsistency rather than a state.
+// Accepted is vacuously true and Programmed stays Unknown, because nothing was in
+// fact programmed; the ListenerSet is still counted, since it was accepted.
+func TestListenerSetVerdictWithoutContributedEntries(t *testing.T) {
+	f := newVerdictFixture(t, true)
+	treeLs := f.addListenerSet("tenant", "ls", attachmentAllowed, 3, "http")
+
+	f.builder.ComputeTreeUpdates()
+
+	accepted := conditionOf(t, treeLs.Conditions, string(gatewayv1.ListenerSetConditionAccepted))
+	assert.Equal(t, metav1.ConditionTrue, accepted.Status)
+	assert.Equal(t, string(gatewayv1.ListenerSetReasonAccepted), accepted.Reason)
+
+	programmed := conditionOf(t, treeLs.Conditions, string(gatewayv1.ListenerSetConditionProgrammed))
+	assert.Equal(t, metav1.ConditionUnknown, programmed.Status)
+	assert.Equal(t, string(gatewayv1.ListenerSetReasonPending), programmed.Reason)
+
+	assert.Empty(t, treeLs.Entries)
+	assert.Equal(t, int32(1), f.gw.AttachedListenerSets)
+}
+
+// A ListenerSet that stops being reported (its parentRef now names another
+// controller) keeps no status from the cycles it was reported in: the verdict is
+// rebuilt from scratch, so the silent case is silent rather than stale. This pins
+// the current behaviour; whether "stay quiet" should instead leave the previous
+// status untouched is a decision for the patcher (step 11).
+func TestListenerSetVerdictUnreportedClearsPreviousStatus(t *testing.T) {
+	f := newVerdictFixture(t, true)
+	treeLs := f.addListenerSet("tenant", "ls", attachmentAllowed, 3, "http")
 	f.addContributedEntry("tenant", "ls", "http", true, metav1.ConditionTrue)
 
 	f.builder.ComputeTreeUpdates()
-	require.Equal(t, int32(1), f.gw.AttachedListenerSets)
+	require.NotEmpty(t, treeLs.Conditions)
+	require.Len(t, treeLs.Entries, 1)
 
-	f.gw.AttachedListenerSets = 5 // simulate a stale value from an earlier cycle
+	treeLs.Attachment = attachmentUnreported
+	f.builder.ComputeTreeUpdates()
 
-	treeLs := f.store.GateTree.ListenerSets[types.NamespacedName{Namespace: "tenant", Name: "ls"}]
-	treeLs.Attachment = attachmentNotAllowed
+	assert.Empty(t, treeLs.Conditions)
+	assert.Empty(t, treeLs.Entries)
+	assert.Zero(t, f.gw.AttachedListenerSets)
+}
+
+// The ListenerSet's own conditions are published in its status and compared
+// against that object's metadata.generation, so they must observe it -- not the
+// parent Gateway's, which is what BuildConditions stamps on every listener.
+func TestListenerSetVerdictStampsOwnGeneration(t *testing.T) {
+	f := newVerdictFixture(t, true)
+	treeLs := f.addListenerSet("tenant", "ls", attachmentAllowed, 42, "http")
+	f.addContributedEntry("tenant", "ls", "http", true, metav1.ConditionTrue)
 
 	f.builder.ComputeTreeUpdates()
 
-	assert.Zero(t, f.gw.AttachedListenerSets)
+	require.NotEmpty(t, treeLs.Conditions)
+	for conditionType, condition := range treeLs.Conditions {
+		assert.Equalf(t, int64(42), condition.ObservedGeneration,
+			"condition %s must observe the ListenerSet's generation", conditionType)
+	}
+	assert.Equal(t, int64(7), f.gw.K8sResource.Generation)
+}
+
+// programmedCondition reads the Programmed condition through the origin's
+// vocabulary. The two condition types hold the same value today, so this cannot
+// fail while they agree; it exists so the day they diverge, the read is already
+// written in the right vocabulary rather than inherited by accident.
+func TestProgrammedConditionUsesOwnVocabulary(t *testing.T) {
+	f := newVerdictFixture(t, true)
+
+	entry := f.addContributedEntry("tenant", "ls", "http", true, metav1.ConditionTrue)
+	entryCondition, ok := entry.programmedCondition()
+	require.True(t, ok)
+	assert.Equal(t, metav1.ConditionTrue, entryCondition.Status)
+
+	gwListener := &Listener{
+		ListenerKey:        gatewayListenerKey(f.gwKey, "http"),
+		K8sGatewayListener: &gatewayv1.Listener{Name: "http", Port: 8080, Protocol: gatewayv1.HTTPProtocolType},
+		OwnerKind:          kindGateway,
+		Conditions:         make(generic.Conditions),
+	}
+	rendered, err := conditions.NewGatewayListenerConditions(conditions.VerdictProgrammed, "")
+	require.NoError(t, err)
+	gwListener.Conditions.MergeOverrideConditions(rendered)
+
+	gwCondition, ok := gwListener.programmedCondition()
+	require.True(t, ok)
+	assert.Equal(t, metav1.ConditionTrue, gwCondition.Status)
 }
 
 // Every check goes through Listener.conditionsFor, so that is where the two
