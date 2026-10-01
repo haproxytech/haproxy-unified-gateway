@@ -96,6 +96,15 @@ func (b *ListenerSetVerdictBuilder) computeListenerSetVerdict(treeLs *ListenerSe
 		return
 	}
 
+	// The conditions are published in the ListenerSet's own status and compared
+	// against THAT object's metadata.generation, not the parent Gateway's.
+	// BuildConditions stamps every listener with the generation of the Gateway it is
+	// served on -- right for a listener the Gateway declares, wrong here -- and
+	// listenerConditionsForStatus applies the same correction to the per-entry
+	// conditions. Stamping on the way out keeps it to one place that no branch can
+	// skip; SetGeneration is a no-op on the empty conditions the silent cases leave.
+	defer func() { treeLs.Conditions.SetGeneration(treeLs.K8sResource.GetGeneration()) }()
+
 	if treeLs.Attachment == attachmentNotAllowed {
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetAcceptedNotAllowed())
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedInvalid())
