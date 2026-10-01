@@ -213,6 +213,17 @@ func (b *GatewayBuilderImpl) detectProtocolConflicts(listenersByPort map[gateway
 // controller actually builds. The objection is not that it would invent a conflict
 // but that it lets one Gateway invalidate another's claim, which is a decision about
 // what this controller promises its tenants -- deliberately not taken here.
+//
+// It says nothing about precedence, which is the other half of the question: the
+// field decides *whom* a listener is compared with, never *who wins*. Precedence is
+// the order of the merged list, and it is settled once, upstream. The contribution
+// pass orders the ListenerSets (oldest first, ties on "{namespace}/{name}") and
+// Gateway.constructListeners puts the Gateway's own listeners before them
+// unconditionally -- the API gives the parent's own listeners the highest priority
+// whatever the timestamps say. groupListenersByPort preserves that order, and this
+// pass reads it as "the first claimant keeps the claim". Nothing here re-sorts by
+// origin, and nothing should: a second sort would be a second statement of the same
+// contract, free to drift from the first.
 type hostnameClaim struct {
 	gatewayKey client.ObjectKey
 	hostname   string
@@ -221,7 +232,10 @@ type hostnameClaim struct {
 }
 
 // detectHostnameConflicts marks every listener whose hostname claim is already
-// taken, the first claimant keeping it.
+// taken, the first claimant in the merged list's precedence order keeping it.
+//
+// That order is the only thing deciding who wins: see hostnameClaim for why the
+// claim key carries the scope and the order carries the precedence.
 //
 // It only ever adds a kind. The entry it writes into was built by the protocol
 // pass, so no protocol verdict can be overwritten here -- which is the other half
