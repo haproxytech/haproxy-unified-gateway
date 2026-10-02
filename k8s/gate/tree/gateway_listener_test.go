@@ -333,7 +333,7 @@ func TestCheckPort_BuildConditions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			l, gw := newListenerForPortTest(tc.port)
 			l.checkPort(tc.binder)
-			l.BuildConditions(gw)
+			l.BuildConditions(gw, listenerPreviousStatus{})
 
 			assert.Equal(t, tc.wantValid, l.Valid, "Valid")
 			assert.Equal(t, tc.wantAccepted, l.Accepted, "Accepted field")
@@ -556,7 +556,7 @@ func TestUnknownConflictKindLeavesListenerRejected(t *testing.T) {
 	assert.NotEmpty(t, l.CheckConflict.Conditions,
 		"an entry with no verdict is what silently made the listener acceptable")
 
-	l.BuildConditions(&Gateway{K8sResource: &gatewayv1.Gateway{}})
+	l.BuildConditions(&Gateway{K8sResource: &gatewayv1.Gateway{}}, listenerPreviousStatus{})
 
 	assert.False(t, l.Valid, "a listener nothing serves must not be reported as programmable")
 	assert.False(t, l.Accepted)

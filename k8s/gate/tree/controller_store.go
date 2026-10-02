@@ -22,6 +22,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -172,4 +173,75 @@ func (b *ControllerStore) GetGatewayForListener(listener *Listener) *Gateway {
 	}
 
 	return b.GateTree.Gateways[listener.Key().GatewayKey]
+}
+
+// previousStatusOf returns what the resource declaring this listener published about it
+// last time. See listenerPreviousStatus for why it is the declaring resource and not the
+// Gateway the listener is served on.
+func (b *ControllerStore) previousStatusOf(listener *Listener) listenerPreviousStatus {
+	if listener.FromListenerSet() {
+		return listenerSetPreviousStatus(b.GateTree.ListenerSets[listener.Key().ListenerSetKey], listener.Name())
+	}
+	return gatewayPreviousStatus(b.GateTree.Gateways[listener.Key().GatewayKey], listener.Name())
+}
+
+// gatewayPreviousStatus reads one listener's published status out of a Gateway's
+// status.listeners, keyed by the name a Gateway declares its listeners under.
+func gatewayPreviousStatus(treeGw *Gateway, name gatewayv1.SectionName) listenerPreviousStatus {
+	if treeGw == nil || treeGw.K8sResource == nil {
+		return listenerPreviousStatus{}
+	}
+
+	previous := listenerPreviousStatus{
+		generation:        treeGw.K8sResource.Generation,
+		creationTimestamp: treeGw.K8sResource.CreationTimestamp,
+	}
+	for _, status := range treeGw.K8sResource.Status.Listeners {
+		if status.Name != name {
+			continue
+		}
+		previous.programmed, previous.hasProgrammed = conditionOfType(
+			status.Conditions, string(gatewayv1.ListenerConditionProgrammed),
+		)
+		break
+	}
+	return previous
+}
+
+// listenerSetPreviousStatus reads one entry's published status out of a ListenerSet's
+// status.listeners -- its own vocabulary, and its own generation: an entry's conditions
+// are published on the ListenerSet and compared against that object, never against the
+// Gateway it attaches to.
+func listenerSetPreviousStatus(treeLs *ListenerSet, name gatewayv1.SectionName) listenerPreviousStatus {
+	if treeLs == nil || treeLs.K8sResource == nil {
+		return listenerPreviousStatus{}
+	}
+
+	previous := listenerPreviousStatus{
+		generation:        treeLs.K8sResource.Generation,
+		creationTimestamp: treeLs.K8sResource.CreationTimestamp,
+	}
+	for _, status := range treeLs.K8sResource.Status.Listeners {
+		if status.Name != name {
+			continue
+		}
+		previous.programmed, previous.hasProgrammed = conditionOfType(
+			status.Conditions, string(gatewayv1.ListenerEntryConditionProgrammed),
+		)
+		break
+	}
+	return previous
+}
+
+// conditionOfType finds one condition type in the conditions of a status.listeners
+// entry. The type is a parameter and not a constant because the two status lists belong
+// to different vocabularies: Programmed is spelled with two distinct Go types, and the
+// bare string that comes out cannot tell them apart afterwards.
+func conditionOfType(conditions []metav1.Condition, conditionType string) (metav1.Condition, bool) {
+	for _, condition := range conditions {
+		if condition.Type == conditionType {
+			return condition, true
+		}
+	}
+	return metav1.Condition{}, false
 }

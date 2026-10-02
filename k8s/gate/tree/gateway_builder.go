@@ -152,7 +152,7 @@ func (b *GatewayBuilderImpl) computeGateTreeUpdates() {
 			// If not managed, then we should not update the status
 			// Build Listener conditions
 			for _, listener := range treeGw.Listeners {
-				listener.BuildConditions(treeGw)
+				listener.BuildConditions(treeGw, b.previousStatusOf(listener))
 			}
 			treeGw.checkListenerConflicts(b.ControllerStore.conflictsByPort)
 			treeGw.BuildConditions()

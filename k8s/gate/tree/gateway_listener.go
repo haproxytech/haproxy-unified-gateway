@@ -624,7 +624,11 @@ func (*Listener) isSupportedCertKindGroup(certRef gatewayv1.SecretObjectReferenc
 	return supportedKind && supportedGroup
 }
 
-func (l *Listener) BuildConditions(treeGw *Gateway) {
+// BuildConditions settles the final conditions of a listener. previousStatus is what the
+// resource declaring it published about it last time -- the Gateway for a listener of
+// its own spec, the ListenerSet for an entry -- since that is where the condition it
+// preserves lives and what its observedGeneration must match.
+func (l *Listener) BuildConditions(treeGw *Gateway, previousStatus listenerPreviousStatus) {
 	l.Conditions = make(generic.Conditions)
 	l.Conditions.MergeOverrideConditions(l.CheckRouteGroupKind.Conditions)
 	l.Conditions.MergeOverrideConditions(l.CheckProtocol.Conditions)
@@ -664,45 +668,86 @@ func (l *Listener) BuildConditions(treeGw *Gateway) {
 	}
 
 	if shouldProgramm {
-		// If the Gateway k8s resource already has a listener Programmed condition  Status!=Pending and the same
-		// ObservedGeneration as the gateway, do not reset the status to Pending.
-		// Probable cause is a startup phase where HAProxy is already programmed.
-		existingProgrammed := false
-		for _, listenerStatus := range treeGw.K8sResource.Status.Listeners {
-			if listenerStatus.Name != l.Name() {
-				continue
-			}
-			for _, cond := range listenerStatus.Conditions {
-				if cond.Type != string(gatewayv1.ListenerConditionProgrammed) {
-					continue
-				}
-				if cond.Status == metav1.ConditionUnknown {
-					// If the condition is in Unknown status, we consider that the listener is not programmed
-					// and we set the condition to Pending to trigger a status update when the controller will process this listener.
-					continue
-				}
-
-				if cond.ObservedGeneration == treeGw.K8sResource.GetGeneration() &&
-					!cond.LastTransitionTime.Time.Before(treeGw.K8sResource.GetCreationTimestamp().Time) {
-					l.Conditions[generic.ConditionType(gatewayv1.ListenerConditionProgrammed)] = generic.Condition{
-						Type:               generic.ConditionType(gatewayv1.ListenerConditionProgrammed),
-						Status:             cond.Status,
-						Reason:             cond.Reason,
-						Message:            cond.Message,
-						ObservedGeneration: cond.ObservedGeneration,
-					}
-					existingProgrammed = true
-				}
-			}
-		}
-		if !existingProgrammed {
+		// Preserve the Programmed condition the declaring resource already published
+		// rather than resetting the listener to Pending: at startup HAProxy may already
+		// be programmed, and both the reported status and the frontend builders treat
+		// Unknown as a change, so a spurious Pending costs a status round-trip and a
+		// redundant apply.
+		if preserved, ok := previousStatus.freshProgrammed(); ok {
+			l.Conditions[l.programmedConditionType()] = preserved
+		} else {
 			l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictProgrammingPending, ""))
 		}
 	}
 
 	l.Valid = shouldProgramm
 	l.Accepted = isAccepted
+	// Still the Gateway's generation, even for an entry. The HAProxy feedback path
+	// compares what it wrote against this value before overwriting it, and it still
+	// reports per Gateway, so stamping an entry with its ListenerSet's generation here
+	// would make its feedback look permanently stale. Both sides move together when
+	// the feedback learns to report per origin.
 	l.Conditions.SetGeneration(treeGw.K8sResource.GetGeneration())
+}
+
+// listenerPreviousStatus is what the resource declaring a listener published about it
+// last time: the Programmed condition it carries in its own status.listeners, and the
+// identity of that resource -- its generation and creation timestamp -- which is what
+// makes the condition current or stale.
+//
+// Resolved from the declaring resource, never from the Gateway the listener is served
+// on. A listener name is unique only within the resource that declares it, and the API
+// explicitly allows an entry to share a name with a Gateway listener, so looking an
+// entry up in its parent Gateway's status finds a homonym: a condition about a
+// different object, adopted as though it described this one.
+type listenerPreviousStatus struct {
+	creationTimestamp metav1.Time
+	programmed        metav1.Condition
+	generation        int64
+	hasProgrammed     bool
+}
+
+// freshProgrammed returns the Programmed condition to preserve instead of resetting the
+// listener to Pending, when the declaring resource published one that still describes
+// it.
+//
+// "Still describes it" is the observedGeneration contract: stamped with the resource's
+// current generation, and written after that resource was created. Anything older is
+// discarded -- the resource moved, so the condition may no longer hold -- and the caller
+// re-derives Pending.
+func (p listenerPreviousStatus) freshProgrammed() (generic.Condition, bool) {
+	if !p.hasProgrammed {
+		return generic.Condition{}, false
+	}
+	if p.programmed.Status == metav1.ConditionUnknown {
+		// Unknown is not programmed: the caller re-derives Pending for it.
+		return generic.Condition{}, false
+	}
+	if p.programmed.ObservedGeneration != p.generation {
+		return generic.Condition{}, false
+	}
+	if p.programmed.LastTransitionTime.Time.Before(p.creationTimestamp.Time) {
+		return generic.Condition{}, false
+	}
+	return generic.Condition{
+		Type:               generic.ConditionType(p.programmed.Type),
+		Status:             p.programmed.Status,
+		Reason:             p.programmed.Reason,
+		Message:            p.programmed.Message,
+		ObservedGeneration: p.programmed.ObservedGeneration,
+	}, true
+}
+
+// programmedConditionType is the Programmed condition type in the vocabulary this
+// listener is reported in. The two vocabularies hold the same value today, so the
+// branch is written out rather than inferred: a condition type is a bare string once
+// rendered, and reading an entry's through the Gateway's would keep working until the
+// day the two diverge.
+func (l *Listener) programmedConditionType() generic.ConditionType {
+	if l.FromListenerSet() {
+		return generic.ConditionType(gatewayv1.ListenerEntryConditionProgrammed)
+	}
+	return generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
 }
 
 func (l *Listener) resetChecks() {
@@ -798,17 +843,8 @@ func (l *Listener) conditionsInOwnVocabulary(verdict conditions.ListenerConditio
 
 // programmedCondition returns this listener's Programmed condition, read in
 // whichever vocabulary the listener is reported in.
-//
-// The two condition types are distinct Go types with the same value today, so the
-// branch is written out rather than assumed: reading an entry's Programmed
-// condition with the Gateway's type would compile and would keep working until the
-// day one of the two diverges.
 func (l *Listener) programmedCondition() (generic.Condition, bool) {
-	conditionType := generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
-	if l.FromListenerSet() {
-		conditionType = generic.ConditionType(gatewayv1.ListenerEntryConditionProgrammed)
-	}
-	return l.Conditions.GetCondition(conditionType)
+	return l.Conditions.GetCondition(l.programmedConditionType())
 }
 
 // referenceGrantFrom is the "from" side of the ReferenceGrant question this
