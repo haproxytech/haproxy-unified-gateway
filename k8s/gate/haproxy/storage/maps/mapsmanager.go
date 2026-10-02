@@ -589,7 +589,9 @@ func BuildRouteValue(desired map[string]*WeightedValue) string {
 		}
 	}
 	if !hasCond {
-		return buildWeightedValue(desired)
+		// Identical unconditional matches resolve first-rule-wins, so keep
+		// only the earliest rule's candidates in the legacy formats.
+		return buildWeightedValue(earliestRuleCandidates(desired))
 	}
 
 	type candGroup struct {
@@ -670,6 +672,28 @@ func BuildRouteValue(desired map[string]*WeightedValue) string {
 		b.WriteString(target)
 	}
 	return b.String()
+}
+
+// earliestRuleCandidates keeps only the candidates of the earliest rule:
+// identical unconditional matches resolve first-rule-wins, not a blend.
+// Entries never mix resource origins here, and origins that set no rule
+// index (SNI maps) all share 0, so they keep aggregating as before.
+func earliestRuleCandidates(desired map[string]*WeightedValue) map[string]*WeightedValue {
+	minIdx := 0
+	seenAny := false
+	for _, v := range desired {
+		if !seenAny || v.RuleIdx < minIdx {
+			minIdx = v.RuleIdx
+			seenAny = true
+		}
+	}
+	earliest := make(map[string]*WeightedValue, len(desired))
+	for k, v := range desired {
+		if v.RuleIdx == minIdx {
+			earliest[k] = v
+		}
+	}
+	return earliest
 }
 
 // buildWeightedValue renders one candidate target: a bare backend name when
