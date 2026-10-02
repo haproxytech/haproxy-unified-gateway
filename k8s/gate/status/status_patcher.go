@@ -114,11 +114,12 @@ func newGatewayStatusPatcher(gw *tree.Gateway, addresses []gatewayv1.GatewayStat
 	}
 
 	return &gatewayStatusPatcher{
-		conditions:       gw.Conditions,
-		listenerStatuses: listenerStatuses,
-		addresses:        addresses,
-		logger:           logger,
-		extractGVK:       extractGVK,
+		conditions:           gw.Conditions,
+		listenerStatuses:     listenerStatuses,
+		addresses:            addresses,
+		attachedListenerSets: gw.AttachedListenerSets,
+		logger:               logger,
+		extractGVK:           extractGVK,
 	}
 }
 
@@ -130,6 +131,11 @@ type gatewayStatusPatcher struct {
 	extractGVK       utilsk8s.ExtractGVK
 	listenerStatuses []gatewayv1.ListenerStatus
 	addresses        []gatewayv1.GatewayStatusAddress
+	// attachedListenerSets is a copy, not a pointer into the tree: the field is
+	// counted up and reset in place on the same tree Gateway every cycle, while the
+	// write below runs asynchronously, after the batch. Only the object handed to the
+	// API server gets a pointer to it.
+	attachedListenerSets int32
 }
 
 func (sp *gatewayStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
@@ -144,7 +150,18 @@ func (sp *gatewayStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
 	if !ListenerStatusesEqual(sp.listenerStatuses, gw.Status.Listeners) {
 		return false, nil
 	}
+	if !attachedListenerSetsEqual(gw.Status.AttachedListenerSets, sp.attachedListenerSets) {
+		return false, nil
+	}
 	return gatewayAddressesEqual(sp.addresses, gw.Status.Addresses), nil
+}
+
+// attachedListenerSetsEqual compares the count we computed against the published
+// one. An absent field is not equal to zero: it means "no controller reported a
+// count", which is a different claim from "no ListenerSet is attached", so a
+// Gateway that has never been given one is published once and then compares equal.
+func attachedListenerSetsEqual(published *int32, computed int32) bool {
+	return published != nil && *published == computed
 }
 
 func ListenerStatusesEqual(a, b []gatewayv1.ListenerStatus) bool {
@@ -177,10 +194,15 @@ func (sp *gatewayStatusPatcher) SetStatus(obj client.Object) error {
 	}
 	metav1conds := sp.conditions.ToMetav1Conditions()
 
+	// A fresh pointer per call: the API status holds a pointer, the patcher holds a
+	// value, and handing out the patcher's own field would let the published status
+	// alias a snapshot shared with the next cycle.
+	attachedListenerSets := sp.attachedListenerSets
 	gw.Status = gatewayv1.GatewayStatus{
-		Conditions: metav1conds,
-		Listeners:  sp.listenerStatuses,
-		Addresses:  sp.addresses,
+		Conditions:           metav1conds,
+		Listeners:            sp.listenerStatuses,
+		Addresses:            sp.addresses,
+		AttachedListenerSets: &attachedListenerSets,
 	}
 
 	sp.logger.LogAttrs(context.Background(), slog.LevelDebug, "[UPDATE] Gateway Status",
@@ -227,6 +249,110 @@ func sortListenerStatusByName(listeners []gatewayv1.ListenerStatus) {
 			return 1
 		}
 		return 0
+	})
+}
+
+// ---------------------------
+// ListenerSet
+func newListenerSetStatusPatcher(ls *tree.ListenerSet, extractGVK utilsk8s.ExtractGVK, logger *slog.Logger) StatusPatcher {
+	entries := make([]gatewayv1.ListenerEntryStatus, 0, len(ls.Entries))
+	for _, entry := range ls.Entries {
+		entries = append(entries, gatewayv1.ListenerEntryStatus{
+			Name:           entry.Name,
+			Conditions:     entry.Conditions.ToMetav1Conditions(),
+			SupportedKinds: entry.SupportedKinds,
+			AttachedRoutes: entry.AttachedRoutes,
+		})
+	}
+
+	return &listenerSetStatusPatcher{
+		conditions: ls.Conditions,
+		entries:    entries,
+		logger:     logger,
+		extractGVK: extractGVK,
+	}
+}
+
+var _ StatusPatcher = &listenerSetStatusPatcher{}
+
+type listenerSetStatusPatcher struct {
+	conditions generic.Conditions
+	logger     *slog.Logger
+	extractGVK utilsk8s.ExtractGVK
+	// entries is status.listeners: one record per entry the ListenerSet declares,
+	// already carrying the conditions its contributed listener was judged on and the
+	// ListenerSet's own generation -- the verdict builder stamped both, because it is
+	// the pass that knows which resource owns them.
+	entries []gatewayv1.ListenerEntryStatus
+}
+
+func (sp *listenerSetStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
+	ls, ok := obj.(*gatewayv1.ListenerSet)
+	if !ok {
+		return false, fmt.Errorf("wrong type %T", obj)
+	}
+	clusterConds := generic.NewConditionsFromMetav1Conditions(ls.Status.Conditions)
+	if !sp.conditions.Equal(clusterConds) {
+		return false, nil
+	}
+	return listenerEntryStatusesEqual(sp.entries, ls.Status.Listeners), nil
+}
+
+func (sp *listenerSetStatusPatcher) SetStatus(obj client.Object) error {
+	ls, ok := obj.(*gatewayv1.ListenerSet)
+	if !ok {
+		return fmt.Errorf("wrong type %T", obj)
+	}
+
+	ls.Status = gatewayv1.ListenerSetStatus{
+		Conditions: sp.conditions.ToMetav1Conditions(),
+		Listeners:  sp.entries,
+	}
+
+	sp.logger.LogAttrs(context.Background(), slog.LevelDebug, "[UPDATE] ListenerSet Status",
+		logging.LogAttrResource(ls, sp.extractGVK(ls)))
+	sp.logger.LogAttrs(context.Background(), slog.LevelDebug, fmt.Sprintf("listener entry status: %v", ls.Status.Listeners))
+
+	return nil
+}
+
+// listenerEntryStatusesEqual compares two status.listeners lists regardless of
+// order, the list being a set by name (`listMapKey=name`). It sorts copies rather
+// than the slices it is given, so the live object's order is left alone.
+//
+// Deliberately not folded into ListenerStatusesEqual although the two API types are
+// structurally identical: a ListenerStatus reports a listener a Gateway declares, a
+// ListenerEntryStatus an entry a ListenerSet contributes, and their condition
+// vocabularies already differ. Sharing the comparison would absorb a divergence in
+// one of the two types instead of failing to compile against it.
+func listenerEntryStatusesEqual(a, b []gatewayv1.ListenerEntryStatus) bool {
+	sortedA := slices.Clone(a)
+	sortedB := slices.Clone(b)
+	sortListenerEntryStatusByName(sortedA)
+	sortListenerEntryStatusByName(sortedB)
+	return slices.EqualFunc(sortedA, sortedB, listenerEntryStatusEqual)
+}
+
+func listenerEntryStatusEqual(a, b gatewayv1.ListenerEntryStatus) bool {
+	if a.Name != b.Name {
+		return false
+	}
+	if a.AttachedRoutes != b.AttachedRoutes {
+		return false
+	}
+	aConds := generic.NewConditionsFromMetav1Conditions(a.Conditions)
+	bConds := generic.NewConditionsFromMetav1Conditions(b.Conditions)
+	if !aConds.Equal(bConds) {
+		return false
+	}
+	return cmp.Equal(a.SupportedKinds, b.SupportedKinds)
+}
+
+// sortListenerEntryStatusByName sorts a slice of ListenerEntryStatus in place, in
+// ascending order based on the `Name` field.
+func sortListenerEntryStatusByName(entries []gatewayv1.ListenerEntryStatus) {
+	slices.SortFunc(entries, func(a, b gatewayv1.ListenerEntryStatus) int {
+		return strings.Compare(string(a.Name), string(b.Name))
 	})
 }
 

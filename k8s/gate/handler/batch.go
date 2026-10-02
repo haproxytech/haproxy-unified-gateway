@@ -235,7 +235,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 	// ---------------
 	h.statusOnce.Do(func() { h.statusUpdater.Start(ctx) })
 	// Prepare the status updates from the Tree
-	statusUpdates := h.statusUpdater.PrepareStatusUpdate(ctx, gatetree.GatewayClasses, gatetree.Gateways, gatetree.HTTPRoutes, gatetree.TLSRoutes)
+	statusUpdates := h.statusUpdater.PrepareStatusUpdate(ctx, gatetree.GatewayClasses, gatetree.Gateways, gatetree.HTTPRoutes, gatetree.TLSRoutes, gatetree.ListenerSets)
 	// Now process them
 	h.statusUpdater.UpdateStatus(ctx, statusUpdates)
 

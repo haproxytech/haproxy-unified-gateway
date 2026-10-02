@@ -54,7 +54,8 @@ type StatusUpdater interface {
 		gatewayClasses map[types.NamespacedName]*tree.GatewayClass,
 		gateways map[types.NamespacedName]*tree.Gateway,
 		httpRoutes map[types.NamespacedName]*tree.HTTPRoute,
-		tlsRoutes map[types.NamespacedName]*tree.TLSRoute) PreparedStatusUpdates
+		tlsRoutes map[types.NamespacedName]*tree.TLSRoute,
+		listenerSets map[types.NamespacedName]*tree.ListenerSet) PreparedStatusUpdates
 	// UpdateStatus dispatches a previously prepared batch of writes to the
 	// background goroutine. Any stale pending batch is replaced by the new one.
 	UpdateStatus(ctx context.Context, updates PreparedStatusUpdates)
@@ -150,10 +151,12 @@ func (s *StatusUpdaterImpl) PrepareStatusUpdate(ctx context.Context,
 	gateways map[types.NamespacedName]*tree.Gateway,
 	httpRoutes map[types.NamespacedName]*tree.HTTPRoute,
 	tlsRoutes map[types.NamespacedName]*tree.TLSRoute,
+	listenerSets map[types.NamespacedName]*tree.ListenerSet,
 ) PreparedStatusUpdates {
 	var writes PreparedStatusUpdates
 	writes = append(writes, s.prepareGatewayClassUpdates(gatewayClasses)...)
 	writes = append(writes, s.prepareGatewayUpdates(ctx, gateways)...)
+	writes = append(writes, s.prepareListenerSetUpdates(ctx, listenerSets)...)
 	writes = append(writes, s.prepareHTTPRouteUpdates(httpRoutes)...)
 	writes = append(writes, s.prepareTLSRouteUpdates(tlsRoutes)...)
 	return writes
@@ -193,12 +196,21 @@ func (s *StatusUpdaterImpl) prepareGatewayUpdates(ctx context.Context, gateways 
 	controllerAddresses := s.fetchControllerAddresses(ctx)
 	var writes PreparedStatusUpdates
 	for _, gw := range gateways {
-		if gw.TreeStatus.Status == store.StatusDeleted || gw.TreeStatus.Status == "" {
+		if gw.TreeStatus.Status == store.StatusDeleted {
 			continue
 		}
 		// The synthetic ingress gateway is controller-owned and has no API object,
 		// so there is no cluster resource to patch a status on.
 		if gw.GatewayForIngress {
+			continue
+		}
+		// An unchanged Gateway is skipped on purpose: rewriting it costs a read and a
+		// comparison for a status that did not move. Its attachedListenerSets count is
+		// the exception, and it is a claim of another kind: it counts the ListenerSets
+		// attached to the Gateway, so it moves when one of them changes while the
+		// Gateway itself receives no event -- and nothing else would ever republish it,
+		// leaving a count that describes a past cycle on the resource for good.
+		if gw.TreeStatus.Status == "" && listenerSetCountIsPublished(gw) {
 			continue
 		}
 		s.config.logger.LogAttrs(
@@ -234,6 +246,59 @@ func (s *StatusUpdaterImpl) prepareGatewayUpdates(ctx context.Context, gateways 
 		})
 	}
 	return writes
+}
+
+func (s *StatusUpdaterImpl) prepareListenerSetUpdates(ctx context.Context, listenerSets map[types.NamespacedName]*tree.ListenerSet) PreparedStatusUpdates {
+	var writes PreparedStatusUpdates
+	// Every ListenerSet of the tree, not only those this batch received an event
+	// for: a status is a conclusion about the whole tree, and the verdict pass has
+	// already recomputed it for all of them. The write itself is skipped by
+	// StatusEqual when nothing moved, which is cheaper than deciding here which
+	// events could have changed a conclusion.
+	for _, ls := range listenerSets {
+		if ls == nil || ls.K8sResource == nil || ls.TreeStatus.Status == store.StatusDeleted {
+			continue
+		}
+		// The attachment names a resource of another controller, or none of ours:
+		// nothing is contributed and nothing is said. Publishing the empty
+		// conditions the silent cases leave behind would clear a status that is not
+		// ours to comment on.
+		if !ls.IsAttachmentReported() {
+			continue
+		}
+
+		nsName := types.NamespacedName{Name: ls.K8sResource.Name, Namespace: ls.K8sResource.Namespace}
+		params := StatusUpdateParams[*gatewayv1.ListenerSet]{
+			Object:        objtypes.ObjectTypeListenerSet,
+			NsName:        nsName,
+			StatusPatcher: newListenerSetStatusPatcher(ls, s.config.extractGVK, s.config.logger),
+			Getter:        s.config.client,
+			StatusUpdater: s.config.client.Status(),
+			Logger:        s.config.logger,
+			extractGVK:    s.config.extractGVK,
+		}
+		s.config.logger.LogAttrs(ctx, slog.LevelDebug, "[PREPARE] ListenerSet Status update",
+			logging.LogAttrKeyGVK(nsName, s.config.extractGVK(objtypes.ObjectTypeListenerSet)))
+
+		writes = append(writes, func(ctx context.Context) {
+			s.writeListenerSetStatus(ctx, params)
+		})
+	}
+	return writes
+}
+
+// listenerSetCountIsPublished reports whether the Gateway's published status already
+// carries the count its tree node holds.
+//
+// The comparison is against the resource the tree was built from, which is the last
+// version this controller read: no extra read is needed to decide whether the count is
+// worth republishing. An absent field is not the same claim as a zero count, so it is
+// republished too -- attachedListenerSetsEqual says why.
+func listenerSetCountIsPublished(gw *tree.Gateway) bool {
+	if gw == nil || gw.K8sResource == nil {
+		return true
+	}
+	return attachedListenerSetsEqual(gw.K8sResource.Status.AttachedListenerSets, gw.AttachedListenerSets)
 }
 
 func (s *StatusUpdaterImpl) prepareHTTPRouteUpdates(httpRoutes map[types.NamespacedName]*tree.HTTPRoute) PreparedStatusUpdates {

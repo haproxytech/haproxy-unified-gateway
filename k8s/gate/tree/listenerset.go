@@ -53,6 +53,21 @@ type ListenerSet struct {
 	Attachment listenerSetAttachment
 }
 
+// IsAttachmentReported reports whether this ListenerSet owes a status at all.
+//
+// False means the attachment names a resource of another controller, or none of
+// ours: nothing is contributed and nothing is said, because writing a status there
+// -- even an empty one -- would be commenting on someone else's resource. The
+// reader is the patcher, which has to skip such a ListenerSet rather than publish
+// the empty conditions the silent cases leave behind.
+//
+// A predicate rather than an exported comparison, because the three attachment
+// values are a vocabulary private to this package and the patcher only ever needs
+// the one distinction. Both reported outcomes answer true: a refusal is reported.
+func (ls *ListenerSet) IsAttachmentReported() bool {
+	return ls.Attachment != attachmentUnreported
+}
+
 // ListenerEntryStatus is a ListenerSet's status.listeners record for one of its
 // entries.
 //
