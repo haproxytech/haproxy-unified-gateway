@@ -163,8 +163,7 @@ func (b *RouteMgrImpl) onValidHTTPRouteUpserted(origin maps.ResourceOrigin, rout
 		// Handle this before the rule.Valid check since redirect rules may have no
 		// backendRefs (which causes rule.Valid to be false).
 		if hasRedirectFilter(rule.K8sResource.Filters) {
-			// Skip rules that have incompatible filter combinations (e.g. URLRewrite + RequestRedirect).
-			// checkFilters() will have set Valid=false and generated an IncompatibleFilters condition.
+			// Invalid filters or unprogrammable matches drop the rule with a status condition.
 			if !rule.CheckFilters.Valid || !rule.CheckMatches.Valid {
 				continue
 			}

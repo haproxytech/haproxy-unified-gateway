@@ -211,9 +211,9 @@ func (b *HaproxyConfMgrImpl) upsertHTTPRouteBackends(routeKey k8stypes.Namespace
 		// Handle this before the rule.Valid check since such rules may have no
 		// backendRefs (which would cause rule.Valid to be false).
 		if hasRedirectFilter(k8sRule.Filters) {
-			// Skip rules that have incompatible filter combinations (e.g. URLRewrite + RequestRedirect).
-			// checkFilters() will have set Valid=false and generated an IncompatibleFilters condition.
-			if !rule.CheckFilters.Valid {
+			// Same criteria as the route maps: invalid filters or matches
+			// must not create a redirect pseudo-backend either.
+			if !rule.CheckFilters.Valid || !rule.CheckMatches.Valid {
 				continue
 			}
 			beName := b.getRedirectBackendName(k8sRule.Filters)
