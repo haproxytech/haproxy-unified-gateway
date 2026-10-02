@@ -251,3 +251,80 @@ func newIngressBackendUnstructured(mode, balanceAlgorithm string) *unstructured.
 		},
 	}}
 }
+
+// A redirect rule dropped by match validation must not create or keep a
+// redirect pseudo-backend, mirroring what the route-map layer already does.
+func TestRedirectRuleWithInvalidMatchesKeepsNoBackend(t *testing.T) {
+	redirectFilters := []gatewayv1.HTTPRouteFilter{{
+		Type:            gatewayv1.HTTPRouteFilterRequestRedirect,
+		RequestRedirect: &gatewayv1.HTTPRequestRedirectFilter{},
+	}}
+	routeKey := k8stypes.NamespacedName{Namespace: "ns", Name: "route"}
+
+	newMgr := func() *HaproxyConfMgrImpl {
+		mgr := newTestBackendMgr(nil, nil)
+		mgr.params.LinkID = "hug"
+		mgr.backendOwners = NewBackendOwners()
+		mgr.backendsImpactedInCycle = BackendsImpactedInCycle{
+			Upserted:     map[string]map[client.ObjectKey]BackendImpactedInCycle{},
+			Deleted:      map[string]struct{}{},
+			Unreferenced: map[string]struct{}{},
+		}
+		return mgr
+	}
+	newRoute := func(matchesValid bool) *tree.HTTPRoute {
+		return &tree.HTTPRoute{
+			K8sResource: &gatewayv1.HTTPRoute{
+				Namespace: "ns", Name: "route", Generation: 1,
+			},
+			Valid: matchesValid,
+			Rules: []*tree.HTTPRouteRule{{
+				K8sResource:  gatewayv1.HTTPRouteRule{Filters: redirectFilters},
+				CheckFilters: tree.CheckResult{Valid: true},
+				CheckMatches: tree.CheckResult{Valid: matchesValid},
+				Valid:        matchesValid,
+			}},
+		}
+	}
+
+	t.Run("invalid matches create no redirect backend", func(t *testing.T) {
+		mgr := newMgr()
+		if err := mgr.upsertHTTPRouteBackends(routeKey, newRoute(false)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(mgr.backendsImpactedInCycle.Upserted) != 0 {
+			t.Errorf("expected no upserted backend, got %v", mgr.backendsImpactedInCycle.Upserted)
+		}
+		if owned := mgr.backendOwners.getBackendsReferencedByHTTPRoute(routeKey); len(owned) != 0 {
+			t.Errorf("expected no owned backend, got %v", owned)
+		}
+	})
+
+	t.Run("previously created redirect backend is released", func(t *testing.T) {
+		mgr := newMgr()
+		beName := mgr.getRedirectBackendName(redirectFilters)
+		if err := mgr.backendOwners.addHTTPRoute(beName, routeKey, newRoute(true).K8sResource); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := mgr.upsertHTTPRouteBackends(routeKey, newRoute(false)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, ok := mgr.backendsImpactedInCycle.Unreferenced[beName]; !ok {
+			t.Errorf("expected %q to be unreferenced", beName)
+		}
+		if owned := mgr.backendOwners.getBackendsReferencedByHTTPRoute(routeKey); len(owned) != 0 {
+			t.Errorf("expected the route to own no backend, got %v", owned)
+		}
+	})
+
+	t.Run("valid matches still create the redirect backend", func(t *testing.T) {
+		mgr := newMgr()
+		beName := mgr.getRedirectBackendName(redirectFilters)
+		if err := mgr.upsertHTTPRouteBackends(routeKey, newRoute(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, ok := mgr.backendsImpactedInCycle.Upserted[beName][routeKey]; !ok {
+			t.Errorf("expected the redirect backend %q to be upserted", beName)
+		}
+	})
+}

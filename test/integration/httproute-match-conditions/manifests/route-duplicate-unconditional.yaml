@@ -1,0 +1,20 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-dup-unconditional
+spec:
+  parentRefs:
+  - name: hug-gateway
+    sectionName: http
+  # Distinct hostname: its listener-route entry stays single-candidate.
+  hostnames:
+  - "dup.haproxy"
+  rules:
+  # Identical unconditional matches on the default "/" prefix: the first
+  # rule must win instead of the two backends blending into a random split.
+  - backendRefs:
+    - name: http-echo
+      port: 80
+  - backendRefs:
+    - name: http-echo
+      port: 443

@@ -38,6 +38,7 @@ func (s *MatchConditionsSuite) Test_MatchConditions() {
 		"gateway.yaml",
 		"gatewayclass.yaml",
 		"route.yaml",
+		"route-duplicate-unconditional.yaml",
 		"route-invalid-regex.yaml",
 	}
 	s.CreateFixtures(fixtureDirPath, manifests)
@@ -54,8 +55,13 @@ func (s *MatchConditionsSuite) Test_MatchConditions() {
 	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, "route-invalid-regex",
 		s.YamlToRouteConditions(path.Join(expectationsPath, "route-invalid-conditions.yaml")))
 
-	// Both routes attach to the http listener.
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "http", 2)
+	// Two rules with identical unconditional matches must resolve to the
+	// first rule's backend alone, not a random split between the two.
+	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, "route-dup-unconditional",
+		s.YamlToRouteConditions(path.Join(expectationsPath, "route-dup-conditions.yaml")))
+
+	// All three routes attach to the http listener.
+	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "http", 3)
 
 	// Map goldens: conditional path value + multi-candidate listener-route.
 	expectedMapsPath := path.Join(expectationsPath, "maps")

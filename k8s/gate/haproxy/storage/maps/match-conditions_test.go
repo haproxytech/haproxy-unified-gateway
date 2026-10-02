@@ -96,6 +96,33 @@ func TestNormalizeHTTPRouteMatch(t *testing.T) {
 			},
 		},
 		{
+			name: "duplicate query names keep the first entry",
+			match: gatewayv1.HTTPRouteMatch{
+				QueryParams: []gatewayv1.HTTPQueryParamMatch{
+					queryMatch("animal", "whale", nil),
+					queryMatch("animal", "dolphin", nil),
+				},
+			},
+			wantConds: MatchConditions{
+				Query: []MatchCond{{Name: "animal", Type: MatchCondExact, Value: "whale"}},
+			},
+		},
+		{
+			name: "query names differing in case stay distinct",
+			match: gatewayv1.HTTPRouteMatch{
+				QueryParams: []gatewayv1.HTTPQueryParamMatch{
+					queryMatch("animal", "whale", nil),
+					queryMatch("Animal", "dolphin", nil),
+				},
+			},
+			wantConds: MatchConditions{
+				Query: []MatchCond{
+					{Name: "Animal", Type: MatchCondExact, Value: "dolphin"},
+					{Name: "animal", Type: MatchCondExact, Value: "whale"},
+				},
+			},
+		},
+		{
 			name: "method is carried verbatim",
 			match: gatewayv1.HTTPRouteMatch{
 				Method: ptr(gatewayv1.HTTPMethod("POST")),
@@ -468,6 +495,78 @@ func TestBuildRouteValueConditional(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := BuildRouteValue(tt.desired); got != tt.want {
 				t.Errorf("BuildRouteValue() =\n%q\nwant\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Rules without conditions must resolve first-rule-wins when several of them
+// share one map entry, mirroring the conditional path: the spec grants
+// precedence to the first matching rule instead of blending backends. The
+// legacy bare/weighted formats are kept so the fast path still applies.
+func TestBuildRouteValueUnconditionalFirstRuleWins(t *testing.T) {
+	tests := []struct {
+		name    string
+		desired map[string]*WeightedValue
+		want    string
+	}{
+		{
+			name: "same backend in two rules stays a bare name",
+			desired: map[string]*WeightedValue{
+				"\x000\x00be": {ValueName: "be", Weight: new(int32(1)), RuleIdx: 0},
+				"\x001\x00be": {ValueName: "be", Weight: new(int32(1)), RuleIdx: 1},
+			},
+			want: "be",
+		},
+		{
+			name: "identical matches route to the first rule's backend",
+			desired: map[string]*WeightedValue{
+				"\x000\x00first": {ValueName: "first", Weight: new(int32(1)), RuleIdx: 0},
+				"\x001\x00later": {ValueName: "later", Weight: new(int32(1)), RuleIdx: 1},
+			},
+			want: "first",
+		},
+		{
+			name: "duplicate redirect rules keep one routable target",
+			// Two zero-weight targets leave the weighted-random selector
+			// without a destination, so requests 404 instead of redirecting.
+			desired: map[string]*WeightedValue{
+				"\x000\x00redirect": {ValueName: "redirect", RuleIdx: 0},
+				"\x001\x00redirect": {ValueName: "redirect", RuleIdx: 1},
+			},
+			want: "redirect",
+		},
+		{
+			name: "later rules cannot tilt the first rule's weights",
+			desired: map[string]*WeightedValue{
+				"\x000\x00a": {ValueName: "a", Weight: new(int32(1)), RuleIdx: 0},
+				"\x000\x00b": {ValueName: "b", Weight: new(int32(1)), RuleIdx: 0},
+				"\x001\x00a": {ValueName: "a", Weight: new(int32(98)), RuleIdx: 1},
+			},
+			want: `{"a":"wr","l":"a:1,b:1"}`,
+		},
+		{
+			name: "earliest surviving rule wins when rule 0 was dropped",
+			desired: map[string]*WeightedValue{
+				"\x001\x00be1": {ValueName: "be1", Weight: new(int32(1)), RuleIdx: 1},
+				"\x002\x00be2": {ValueName: "be2", Weight: new(int32(1)), RuleIdx: 2},
+			},
+			want: "be1",
+		},
+		{
+			name: "several backends of one rule keep the weighted list",
+			desired: map[string]*WeightedValue{
+				"\x000\x00be1": {ValueName: "be1", Weight: new(int32(1)), RuleIdx: 0},
+				"\x000\x00be2": {ValueName: "be2", Weight: new(int32(2)), RuleIdx: 0},
+			},
+			want: `{"a":"wr","l":"be1:1,be2:2"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BuildRouteValue(tt.desired); got != tt.want {
+				t.Errorf("BuildRouteValue() = %q, want %q", got, tt.want)
 			}
 		})
 	}
