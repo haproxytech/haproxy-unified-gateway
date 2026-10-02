@@ -83,16 +83,17 @@ func NormalizeHTTPRouteMatch(match gatewayv1.HTTPRouteMatch) (MatchConditions, e
 		mc.Method = string(*match.Method)
 	}
 
-	seen := map[string]bool{}
+	// Header names are case-insensitive, query names are exact.
+	seenHeaders := map[string]bool{}
 	for _, h := range match.Headers {
 		name := strings.ToLower(string(h.Name))
 		if name == "" {
 			return mc, errors.New("invalid header match: empty name")
 		}
-		if seen[name] {
+		if seenHeaders[name] {
 			continue
 		}
-		seen[name] = true
+		seenHeaders[name] = true
 		condType := MatchCondExact
 		if h.Type != nil && *h.Type == gatewayv1.HeaderMatchRegularExpression {
 			condType = MatchCondRegexp
@@ -105,11 +106,17 @@ func NormalizeHTTPRouteMatch(match gatewayv1.HTTPRouteMatch) (MatchConditions, e
 		mc.Headers = append(mc.Headers, MatchCond{Name: name, Type: condType, Value: h.Value})
 	}
 
+	// Spec: first entry per name wins, later equivalent names are ignored.
+	seenQuery := map[string]bool{}
 	for _, q := range match.QueryParams {
 		name := string(q.Name)
 		if name == "" {
 			return mc, errors.New("invalid query param match: empty name")
 		}
+		if seenQuery[name] {
+			continue
+		}
+		seenQuery[name] = true
 		condType := MatchCondExact
 		if q.Type != nil && *q.Type == gatewayv1.QueryParamMatchRegularExpression {
 			condType = MatchCondRegexp
