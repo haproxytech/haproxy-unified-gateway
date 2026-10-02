@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -335,4 +336,64 @@ func TestGatewayListenerFeedbackStatusPatcher_StatusEqual(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// An absent field and a zero count are two different claims: the first says no
+// controller published a count, the second that none is attached. Reading them as
+// equal would make a Gateway that has never been given one skip its first write and
+// never receive the field.
+func TestAttachedListenerSetsEqual(t *testing.T) {
+	tests := []struct {
+		name      string
+		published *int32
+		computed  int32
+		want      bool
+	}{
+		{name: "absent published, none computed", want: false},
+		{name: "absent published, some computed", computed: 3, want: false},
+		{name: "zero published, none computed", published: new(int32), want: true},
+		{name: "zero published, some computed", published: new(int32), computed: 1, want: false},
+		{name: "same count", published: pointerTo(int32(2)), computed: 2, want: true},
+		{name: "count went down", published: pointerTo(int32(2)), computed: 1, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, attachedListenerSetsEqual(tt.published, tt.computed))
+		})
+	}
+}
+
+func pointerTo[T any](v T) *T { return &v }
+
+// The count is read from the tree and published as a pointer on the API status. The two
+// halves are checked together: a patcher that read the field but wrote nothing, or wrote
+// a constant, would pass only one of them.
+func TestGatewayStatusPatcher_PublishesTheAttachedListenerSetCount(t *testing.T) {
+	gw := tree.NewGateway(&gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: "infra", Name: "gw"}})
+	gw.AttachedListenerSets = 2
+
+	sp := newGatewayStatusPatcher(gw, nil, testExtractGVK, slog.Default())
+
+	live := &gatewayv1.Gateway{}
+	upToDate, err := sp.StatusEqual(live)
+	require.NoError(t, err)
+	require.False(t, upToDate, "a Gateway with no published count has to be written once")
+
+	require.NoError(t, sp.SetStatus(live))
+	require.NotNil(t, live.Status.AttachedListenerSets)
+	require.Equal(t, int32(2), *live.Status.AttachedListenerSets)
+
+	// The published status must stand on its own: the tree Gateway is counted up and
+	// reset in place every cycle while this write runs asynchronously. A patcher that
+	// held a pointer into the tree would see its published count change under it.
+	gw.AttachedListenerSets = 0
+	require.Equal(t, int32(2), *live.Status.AttachedListenerSets,
+		"the published count must be a copy, not a pointer into the tree")
+
+	// The patcher compares against the count it captured, so it is up to date with
+	// what it just wrote even though the tree has moved on.
+	upToDate, err = sp.StatusEqual(live)
+	require.NoError(t, err)
+	require.True(t, upToDate)
 }

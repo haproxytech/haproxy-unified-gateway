@@ -118,3 +118,28 @@ func TestListenerSetDeepCopyOfNilIsNil(t *testing.T) {
 
 	assert.Nil(t, ls.DeepCopy())
 }
+
+// The patcher skips a ListenerSet whose attachment is unreported rather than publishing
+// the empty conditions the silent case leaves behind, and this predicate is the only
+// thing that tells it so -- the attachment vocabulary stays private to this package.
+//
+// Both reported outcomes answer true, a refusal included: a Gateway that does not allow
+// the attachment still owes the ListenerSet a status.
+func TestListenerSetIsAttachmentReported(t *testing.T) {
+	tests := []struct {
+		name       string
+		attachment listenerSetAttachment
+		want       bool
+	}{
+		{name: "unreported stays silent", attachment: attachmentUnreported, want: false},
+		{name: "a refusal is reported", attachment: attachmentNotAllowed, want: true},
+		{name: "an attachment is reported", attachment: attachmentAllowed, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ls := &ListenerSet{Attachment: tt.attachment}
+			assert.Equal(t, tt.want, ls.IsAttachmentReported())
+		})
+	}
+}
