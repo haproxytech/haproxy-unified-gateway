@@ -15,6 +15,7 @@ package tree
 
 import (
 	"testing"
+	"time"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
@@ -636,4 +637,168 @@ func TestCompositeConflictNamesItsKindsInTheMessage(t *testing.T) {
 	assert.Equal(t, "Conflicting listeners: other (conflicts on protocol and hostname)",
 		messageFor(conflictOnProtocol|conflictOnHostname),
 		"two kinds: the reason names one, so the message has to name both")
+}
+
+// The previous Programmed condition of a listener is read from the resource that
+// declares it. An entry looked up in its parent Gateway's status.listeners finds a
+// homonym -- the API allows an entry to share a name with a Gateway listener -- and
+// adopts a condition about a different object. The same lookup now goes to the
+// ListenerSet, whose status carries the entry and whose generation is the one its
+// conditions observe.
+func TestBuildConditionsReadsTheDeclaringResourceStatus(t *testing.T) {
+	gwKey := client.ObjectKey{Namespace: "infra", Name: "gw"}
+	lsKey := client.ObjectKey{Namespace: "tenant", Name: "ls"}
+	const (
+		gatewayGeneration     = int64(7)
+		listenerSetGeneration = int64(3)
+	)
+	created := metav1.NewTime(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	published := func(conditionType string, status metav1.ConditionStatus, generation int64) metav1.Condition {
+		return metav1.Condition{
+			Type:               conditionType,
+			Status:             status,
+			Reason:             "Programmed",
+			Message:            "programmed",
+			ObservedGeneration: generation,
+			LastTransitionTime: metav1.NewTime(created.Add(time.Hour)),
+		}
+	}
+
+	// gatewayPublishedProgrammed is a Gateway that has already published a fresh
+	// Programmed condition for a listener named http -- the homonym an entry must not
+	// inherit.
+	gatewayPublishedProgrammed := func() *Gateway {
+		return &Gateway{K8sResource: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: gwKey.Namespace, Name: gwKey.Name,
+				Generation: gatewayGeneration, CreationTimestamp: created,
+			},
+			Status: gatewayv1.GatewayStatus{Listeners: []gatewayv1.ListenerStatus{{
+				Name:       "http",
+				Conditions: []metav1.Condition{published(string(gatewayv1.ListenerConditionProgrammed), metav1.ConditionTrue, gatewayGeneration)},
+			}}},
+		}}
+	}
+
+	listenerSet := func(programmed *metav1.Condition) *ListenerSet {
+		treeLs := &ListenerSet{K8sResource: &gatewayv1.ListenerSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: lsKey.Namespace, Name: lsKey.Name,
+				Generation: listenerSetGeneration, CreationTimestamp: created,
+			},
+		}}
+		if programmed != nil {
+			treeLs.K8sResource.Status.Listeners = []gatewayv1.ListenerEntryStatus{{
+				Name:       "http",
+				Conditions: []metav1.Condition{*programmed},
+			}}
+		}
+		return treeLs
+	}
+
+	ownListener := func() *Listener {
+		return &Listener{
+			ListenerKey:        gatewayListenerKey(gwKey, "http"),
+			K8sGatewayListener: &gatewayv1.Listener{Name: "http", Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+			OwnerKind:          kindGateway,
+			Conditions:         make(generic.Conditions),
+		}
+	}
+
+	entry := func() *Listener {
+		return &Listener{
+			ListenerKey:                 listenerSetListenerKey(gwKey, lsKey, "http"),
+			K8sListenerSetListenerEntry: &gatewayv1.ListenerEntry{Name: "http", Port: 8080, Protocol: gatewayv1.HTTPProtocolType},
+			OwnerKind:                   kindListenerSet,
+			Conditions:                  make(generic.Conditions),
+		}
+	}
+
+	newStore := func(gw *Gateway, treeLs *ListenerSet) *ControllerStore {
+		s := &ControllerStore{GateTree: &GateTree{
+			Gateways:     map[types.NamespacedName]*Gateway{gwKey: gw},
+			ListenerSets: map[types.NamespacedName]*ListenerSet{},
+		}}
+		if treeLs != nil {
+			s.GateTree.ListenerSets[lsKey] = treeLs
+		}
+		return s
+	}
+
+	programmedStatus := func(t *testing.T, l *Listener) metav1.ConditionStatus {
+		t.Helper()
+		cond, ok := l.programmedCondition()
+		require.True(t, ok, "the Programmed condition must be present")
+		return cond.Status
+	}
+
+	t.Run("a Gateway listener keeps its own published condition", func(t *testing.T) {
+		gw := gatewayPublishedProgrammed()
+		l := ownListener()
+
+		l.BuildConditions(gw, newStore(gw, nil).previousStatusOf(l))
+
+		assert.Equal(t, metav1.ConditionTrue, programmedStatus(t, l))
+	})
+
+	t.Run("an entry does not adopt a homonym Gateway condition", func(t *testing.T) {
+		gw := gatewayPublishedProgrammed()
+		l := entry()
+
+		l.BuildConditions(gw, newStore(gw, listenerSet(nil)).previousStatusOf(l))
+
+		assert.Equal(t, metav1.ConditionUnknown, programmedStatus(t, l),
+			"the Gateway's http listener is a different object; its condition must not describe this entry")
+	})
+
+	t.Run("an entry keeps the condition its own ListenerSet published", func(t *testing.T) {
+		gw := gatewayPublishedProgrammed()
+		// False, with a message the Gateway's homonym does not carry: the Gateway
+		// publishes True for its own http listener, so asserting this value and this
+		// wording is what proves whose condition was read, rather than that some
+		// condition was.
+		cond := published(string(gatewayv1.ListenerEntryConditionProgrammed), metav1.ConditionFalse, listenerSetGeneration)
+		cond.Message = "programmed by the ListenerSet"
+		l := entry()
+
+		l.BuildConditions(gw, newStore(gw, listenerSet(&cond)).previousStatusOf(l))
+
+		preserved, ok := l.programmedCondition()
+		require.True(t, ok)
+		assert.Equal(t, metav1.ConditionFalse, preserved.Status)
+		assert.Equal(t, "programmed by the ListenerSet", preserved.Message,
+			"the homonym Gateway listener publishes True with another message")
+	})
+
+	t.Run("a condition from another generation is discarded", func(t *testing.T) {
+		gw := gatewayPublishedProgrammed()
+		cond := published(string(gatewayv1.ListenerEntryConditionProgrammed), metav1.ConditionTrue, listenerSetGeneration-1)
+		l := entry()
+
+		l.BuildConditions(gw, newStore(gw, listenerSet(&cond)).previousStatusOf(l))
+
+		assert.Equal(t, metav1.ConditionUnknown, programmedStatus(t, l),
+			"the resource moved, so the published condition may no longer hold")
+	})
+
+	t.Run("an Unknown condition is not preserved", func(t *testing.T) {
+		gw := gatewayPublishedProgrammed()
+		cond := published(string(gatewayv1.ListenerEntryConditionProgrammed), metav1.ConditionUnknown, listenerSetGeneration)
+		l := entry()
+
+		l.BuildConditions(gw, newStore(gw, listenerSet(&cond)).previousStatusOf(l))
+
+		assert.Equal(t, metav1.ConditionUnknown, programmedStatus(t, l))
+	})
+
+	t.Run("the resolved identity is the declaring resource's", func(t *testing.T) {
+		gw := gatewayPublishedProgrammed()
+		store := newStore(gw, listenerSet(nil))
+
+		assert.Equal(t, gatewayGeneration, store.previousStatusOf(ownListener()).generation)
+		assert.Equal(t, listenerSetGeneration, store.previousStatusOf(entry()).generation,
+			"an entry observes its ListenerSet, not the Gateway it attaches to")
+		assert.Equal(t, created, store.previousStatusOf(entry()).creationTimestamp)
+	})
 }
