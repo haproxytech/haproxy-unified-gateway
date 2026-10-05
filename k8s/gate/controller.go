@@ -46,6 +46,7 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -286,15 +287,10 @@ type ctlrCfg struct {
 // and the watch is wired only when the CRD is present.
 func ingressControllerCfgs(ctx context.Context, cfg config.Configuration, mgr manager.Manager) []ctlrCfg {
 	ingressBackendGVK := objtypes.ObjectTypeIngressBackendCR.GroupVersionKind()
-	_, ingressBackendMapErr := mgr.GetRESTMapper().RESTMapping(ingressBackendGVK.GroupKind(), ingressBackendGVK.Version)
-	ingressBackendCRDInstalled := ingressBackendMapErr == nil
+	ingressBackendCRDInstalled, ingressBackendMapErr := crdInstalled(mgr.GetRESTMapper(), ingressBackendGVK)
 	if !ingressBackendCRDInstalled {
-		cfg.Logger.LogAttrs(
-			ctx, slog.LevelInfo,
-			"Foreign Ingress Backend CRD not installed; cr-backend references to it are disabled",
-			logging.LogAttrCategory(logging.LogCategoryK8s),
-			slog.String("gvk", ingressBackendGVK.String()),
-		)
+		logCRDUnavailable(ctx, cfg, ingressBackendGVK,
+			"Foreign Ingress Backend CRD", "cr-backend references to it are disabled", ingressBackendMapErr)
 	}
 
 	ingressOptions := []Option{
@@ -368,6 +364,69 @@ func ingressControllerCfgs(ctx context.Context, cfg config.Configuration, mgr ma
 		})
 	}
 	return cfgs
+}
+
+// listenerSetControllerCfgs returns the ListenerSet controller registration, or none
+// when the cluster does not serve its CRD.
+//
+// ListenerSet is v1 (gateway-api v1.5, standard channel), while a cluster may be
+// serving older Gateway API CRDs that do not include it. Registering a controller for
+// a Kind the cluster does not serve leaves its informer permanently unsynced, which
+// stalls the whole controller -- the same reason ingressControllerCfgs probes the
+// foreign Backend CR before watching it. Registration happens once at startup, so the
+// probe does too: a CRD installed later needs a restart, which is also when the watch
+// would be wired.
+func listenerSetControllerCfgs(ctx context.Context, cfg config.Configuration, mgr manager.Manager) []ctlrCfg {
+	gvk := objtypes.ObjectTypeListenerSet.GroupVersionKind()
+	installed, err := crdInstalled(mgr.GetRESTMapper(), gvk)
+	if !installed {
+		logCRDUnavailable(ctx, cfg, gvk, "ListenerSet CRD", "the ListenerSet controller is disabled", err)
+		return nil
+	}
+
+	return []ctlrCfg{{
+		name:       "ListenerSet",
+		objectType: objtypes.ObjectTypeListenerSet,
+		options: []Option{
+			WithK8sPredicate(
+				k8spredicate.And(
+					k8spredicate.GenerationChangedPredicate{},
+					predicate.NewNamespacePredicate(cfg.Namespaces),
+				),
+			),
+			// No WithEnqueueFor yet. A ListenerSet does have secondary dependencies --
+			// the Secrets of its certificateRefs, the ReferenceGrants permitting them,
+			// and the Gateway it attaches to -- and it also has to enqueue that
+			// Gateway, since a ListenerSet alone produces no configuration. Those edges
+			// are added with the builder that consumes them; registering them before
+			// there is anything to rebuild would only cost cycles.
+		},
+	}}
+}
+
+// crdInstalled reports whether the cluster serves the given Kind. The resolution
+// error is returned rather than swallowed: "not installed" and "the RESTMapper is
+// unusable" are different claims, and only the first is expected.
+func crdInstalled(rm meta.RESTMapper, gvk schema.GroupVersionKind) (bool, error) {
+	if _, err := rm.RESTMapping(gvk.GroupKind(), gvk.Version); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// logCRDUnavailable records why a Kind is not watched, telling the two cases apart:
+// a CRD the cluster does not serve is an expected configuration and is logged at
+// info, while a RESTMapper that cannot answer at all is a failure to look into, and
+// passing it off as the first would disable a watch silently.
+func logCRDUnavailable(ctx context.Context, cfg config.Configuration, gvk schema.GroupVersionKind, what, disabled string, err error) {
+	level, msg := slog.LevelInfo, what+" not installed; "+disabled
+	if !meta.IsNoMatchError(err) {
+		level, msg = slog.LevelWarn, "could not resolve "+what+"; "+disabled
+	}
+	cfg.Logger.LogAttrs(ctx, level, msg,
+		logging.LogAttrCategory(logging.LogCategoryK8s),
+		slog.String("gvk", gvk.String()),
+		logging.LogAttrError(err))
 }
 
 //revive:disable:function-length
@@ -751,25 +810,6 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 				// rebuild would only cost cycles.
 			},
 		},
-		{
-			name:       "ListenerSet",
-			objectType: objtypes.ObjectTypeListenerSet,
-			options: []Option{
-				WithK8sPredicate(
-					k8spredicate.And(
-						k8spredicate.GenerationChangedPredicate{},
-						predicate.NewNamespacePredicate(cfg.Namespaces),
-					),
-				),
-				// No WithEnqueueFor yet. A ListenerSet does have secondary
-				// dependencies -- the Secrets of its certificateRefs, the
-				// ReferenceGrants permitting them, and the Gateway it attaches to --
-				// and it also has to enqueue that Gateway, since a ListenerSet alone
-				// produces no configuration. Those edges are added with the builder
-				// that consumes them; registering them before there is anything to
-				// rebuild would only cost cycles.
-			},
-		},
 	}
 
 	// Ingress support is opt-in (--enable-ingress). When disabled, the Ingress,
@@ -783,6 +823,11 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 			"Ingress support disabled; set --enable-ingress to watch Ingress resources",
 			logging.LogAttrCategory(logging.LogCategoryK8s))
 	}
+
+	// ListenerSet has no feature flag: it is part of the Gateway API standard channel,
+	// so it is watched whenever the cluster serves its CRD, and skipped -- with a
+	// reason -- when it does not.
+	controllerRegisterCfgs = append(controllerRegisterCfgs, listenerSetControllerCfgs(ctx, cfg, mgr)...)
 
 	for _, registerConfig := range controllerRegisterCfgs {
 		params := registerParams{
