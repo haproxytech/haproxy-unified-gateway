@@ -119,6 +119,7 @@ rules:
       - referencegrants
       - grpcroutes
       - tlsroutes
+      - listenersets
     verbs:
       - list
       - watch
@@ -131,6 +132,7 @@ rules:
       - referencegrants/status
       - grpcroutes/status
       - tlsroutes/status
+      - listenersets/status
     verbs:
       - get
       - update
