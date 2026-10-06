@@ -22,6 +22,8 @@ import (
 	v3 "github.com/haproxytech/haproxy-unified-gateway/api/gate/v3"
 	"github.com/haproxytech/haproxy-unified-gateway/hug/configuration"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/constants"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/index"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
@@ -33,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // enqueueGatewayClassForHugGate returns a handler.EventHandler that enqueues all GatewayClasses
@@ -654,6 +657,128 @@ func gatewayHasCrossNamespaceRefTo(gateway gatewayv1.Gateway, targetNamespace st
 		}
 	}
 	return false
+}
+
+// enqueueListenerSetsForSecret enqueues the ListenerSets whose entries' certificateRefs
+// name the changed Secret, through the index the ListenerSet controller registers.
+//
+// A ListenerSet alone produces no configuration: the reconcile this triggers is relayed to
+// its parent Gateway by the contribution builder (reprocessGatewaysOfChangedListenerSets),
+// which is where the merged list and the certificate checks are rebuilt.
+func enqueueListenerSetsForSecret(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			listenerSetList := &gatewayv1.ListenerSetList{}
+			if err := ctrlclient.List(ctx, listenerSetList, client.MatchingFields{
+				index.ListenerSetCertificateRefIndexField: client.ObjectKeyFromObject(o).String(),
+			}); err != nil {
+				return nil
+			}
+			return listenerSetRequests(dns, listenerSetList.Items)
+		}
+	}
+}
+
+// enqueueListenerSetsForReferenceGrant enqueues the ListenerSets a changed ReferenceGrant
+// could permit: those holding a cross-namespace certificateRef into the grant's namespace.
+// Adding a grant can make such a reference resolvable, and removing it can stop it being
+// so.
+//
+// The ListenerSets are found through the target-namespace index -- a grant event is
+// already scoped to its own namespace -- and then checked against the grant's shape with
+// tree.ReferenceGrantCovers, the same shape the manager is built from. Whether the
+// reference actually resolves is left to the build: the edge only drops what cannot
+// matter, so it cannot miss an event the derivation would have accepted.
+func enqueueListenerSetsForReferenceGrant(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+	return func(ctrlclient client.Client, _ utilsk8s.ExtractGVK) handler.MapFunc {
+		return func(ctx context.Context, o client.Object) []reconcile.Request {
+			referenceGrant, ok := o.(*gatewayv1beta1.ReferenceGrant)
+			if !ok {
+				return nil
+			}
+			listenerSetList := &gatewayv1.ListenerSetList{}
+			if err := ctrlclient.List(ctx, listenerSetList, client.MatchingFields{
+				index.ListenerSetCertificateRefNamespaceIndexField: referenceGrant.Namespace,
+			}); err != nil {
+				return nil
+			}
+			var requests []reconcile.Request
+			for _, listenerSet := range listenerSetList.Items {
+				if !dns.Check(types.NamespacedName{Namespace: listenerSet.Namespace, Name: listenerSet.Name}) {
+					continue
+				}
+				if listenerSetCoveredByReferenceGrant(listenerSet, referenceGrant) {
+					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+						Namespace: listenerSet.Namespace,
+						Name:      listenerSet.Name,
+					}})
+				}
+			}
+			return requests
+		}
+	}
+}
+
+// referenceGrantCouldCoverListenerSet reports whether a ReferenceGrant can, by its shape
+// alone, permit a certificateRef of a ListenerSet: it has to target Secrets, and to name
+// the ListenerSet kind on its From side -- the owner of a ListenerSet entry is the
+// ListenerSet itself (GEP-1713), never its parent Gateway. A grant that cannot is dropped
+// in the watch predicate, before any List or reconcile.
+func referenceGrantCouldCoverListenerSet(obj client.Object) bool {
+	referenceGrant, ok := obj.(*gatewayv1beta1.ReferenceGrant)
+	if !ok {
+		return false
+	}
+	targetsSecret := false
+	for _, to := range referenceGrant.Spec.To {
+		if string(to.Group) == "" && string(to.Kind) == "Secret" {
+			targetsSecret = true
+			break
+		}
+	}
+	if !targetsSecret {
+		return false
+	}
+	for _, from := range referenceGrant.Spec.From {
+		if string(from.Group) == gatewayv1.GroupName && string(from.Kind) == "ListenerSet" {
+			return true
+		}
+	}
+	return false
+}
+
+// listenerSetCoveredByReferenceGrant reports whether the grant permits at least one
+// cross-namespace certificateRef of the ListenerSet, using the shape shared with the
+// reference manager (tree.ReferenceGrantCovers). A same-namespace reference is skipped:
+// it needs no grant, so a grant event cannot be its cause.
+func listenerSetCoveredByReferenceGrant(listenerSet gatewayv1.ListenerSet, referenceGrant *gatewayv1beta1.ReferenceGrant) bool {
+	from := tree.GrantFrom{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: listenerSet.Namespace}
+	for _, certificateRef := range index.ListenerSetCertificateRefs(&listenerSet) {
+		if certificateRef.Namespace == listenerSet.Namespace {
+			continue
+		}
+		to := tree.GrantTo{Group: "", Kind: "Secret", Namespace: certificateRef.Namespace, Name: certificateRef.Name}
+		if tree.ReferenceGrantCovers(referenceGrant, from, to) {
+			return true
+		}
+	}
+	return false
+}
+
+// listenerSetRequests maps ListenerSets to reconcile requests, filtered to the watched
+// namespaces.
+func listenerSetRequests(dns utils.DedicatedNamespaces, listenerSets []gatewayv1.ListenerSet) []reconcile.Request {
+	var requests []reconcile.Request
+	for _, listenerSet := range listenerSets {
+		if !dns.Check(types.NamespacedName{Namespace: listenerSet.Namespace, Name: listenerSet.Name}) {
+			continue
+		}
+		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+			Namespace: listenerSet.Namespace,
+			Name:      listenerSet.Name,
+		}})
+	}
+	return requests
 }
 
 // enqueueTLSRouteForReferenceGrant returns a handler.EventHandler that enqueues all TLSRoutes

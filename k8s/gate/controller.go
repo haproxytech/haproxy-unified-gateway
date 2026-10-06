@@ -394,12 +394,33 @@ func listenerSetControllerCfgs(ctx context.Context, cfg config.Configuration, mg
 					predicate.NewNamespacePredicate(cfg.Namespaces),
 				),
 			),
-			// No WithEnqueueFor yet. A ListenerSet does have secondary dependencies --
-			// the Secrets of its certificateRefs, the ReferenceGrants permitting them,
-			// and the Gateway it attaches to -- and it also has to enqueue that
-			// Gateway, since a ListenerSet alone produces no configuration. Those edges
-			// are added with the builder that consumes them; registering them before
-			// there is anything to rebuild would only cost cycles.
+			// The two objects an entry's certificateRef depends on. The third edge a
+			// ListenerSet owes -- towards its parent Gateway, without which nothing is
+			// served -- is not a watch: the contribution builder relays a changed
+			// ListenerSet to its parent itself (reprocessGatewaysOfChangedListenerSets),
+			// so no second controller has to enqueue it.
+			WithFieldIndices(index.ListenerSetCertificateRefFieldIndices(cfg.Logger)),
+			WithEnqueueFor([]enqueueForParams{
+				{
+					watchSource: objtypes.ObjectTypeSecret,
+					enqueueFunc: enqueueListenerSetsForSecret(utils.NewDedicatedNamespaces(cfg.Namespaces)),
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				},
+				{
+					watchSource: objtypes.ObjectTypeRefGrant,
+					enqueueFunc: enqueueListenerSetsForReferenceGrant(utils.NewDedicatedNamespaces(cfg.Namespaces)),
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+						// A grant whose shape cannot permit a certificateRef is dropped here,
+						// before the map func: no List, no enqueue, no rebuild.
+						k8spredicate.NewPredicateFuncs(referenceGrantCouldCoverListenerSet),
+					),
+				},
+			}),
 		},
 	}}
 }
