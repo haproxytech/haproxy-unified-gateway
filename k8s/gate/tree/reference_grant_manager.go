@@ -4,6 +4,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	"k8s.io/apimachinery/pkg/types"
+	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // GrantFrom identifies the source side of a ReferenceGrant check.
@@ -101,22 +102,11 @@ func (mgr *ReferenceGrantManager) UpsertReferenceGrant(referenceGrant ReferenceG
 	// We remove any previous association
 	mgr.removeReferenceGrantWithCheck(referenceGrant, false)
 	// For each 'To' of the ReferenceGrant
-	for _, to := range referenceGrant.K8sResource.Spec.To {
-		grantTo := GrantTo{
-			Namespace: referenceGrant.K8sResource.Namespace,
-			Group:     string(to.Group),
-			Kind:      string(to.Kind),
-			Name:      string(utils.PointerDefaultValueIfNil(to.Name)),
-		}
+	for _, grantTo := range referenceGrantTos(referenceGrant.K8sResource) {
 		// ___________________________
 		// Update toReferenceGrantFrom
 		referenceGrantFrom := mgr.toReferenceGrantFrom[grantTo]
-		for _, from := range referenceGrant.K8sResource.Spec.From {
-			grantFrom := GrantFrom{
-				Namespace: string(from.Namespace),
-				Group:     string(from.Group),
-				Kind:      string(from.Kind),
-			}
+		for _, grantFrom := range referenceGrantFroms(referenceGrant.K8sResource) {
 			// We associate the 'To' with the couple 'ReferenceGrant' and 'From'
 			if referenceGrantFrom == nil {
 				// First association so we create the map
@@ -148,6 +138,77 @@ func (mgr *ReferenceGrantManager) UpsertReferenceGrant(referenceGrant ReferenceG
 			referenceGrantsTo[grantTo] = struct{}{}
 		}
 	}
+}
+
+// referenceGrantTos lists the To side a ReferenceGrant declares, in the manager's
+// vocabulary: the grant's own namespace, the declared group and kind, and an absent name
+// spelled as the empty wildcard GrantTo uses.
+func referenceGrantTos(referenceGrant *gatewayv1beta1.ReferenceGrant) []GrantTo {
+	if referenceGrant == nil {
+		return nil
+	}
+	tos := make([]GrantTo, 0, len(referenceGrant.Spec.To))
+	for _, to := range referenceGrant.Spec.To {
+		tos = append(tos, GrantTo{
+			Namespace: referenceGrant.Namespace,
+			Group:     string(to.Group),
+			Kind:      string(to.Kind),
+			Name:      string(utils.PointerDefaultValueIfNil(to.Name)),
+		})
+	}
+	return tos
+}
+
+// referenceGrantFroms lists the From side a ReferenceGrant declares, in the manager's
+// vocabulary.
+func referenceGrantFroms(referenceGrant *gatewayv1beta1.ReferenceGrant) []GrantFrom {
+	if referenceGrant == nil {
+		return nil
+	}
+	froms := make([]GrantFrom, 0, len(referenceGrant.Spec.From))
+	for _, from := range referenceGrant.Spec.From {
+		froms = append(froms, GrantFrom{
+			Namespace: string(from.Namespace),
+			Group:     string(from.Group),
+			Kind:      string(from.Kind),
+		})
+	}
+	return froms
+}
+
+// ReferenceGrantCovers reports whether a single ReferenceGrant, from its spec alone,
+// permits the given reference. It is the stateless half of IsAccessGranted: it reads no
+// resolved map, so an enqueue edge can filter on exactly the shape the manager is built
+// from -- referenceGrantTos/referenceGrantFroms are shared with UpsertReferenceGrant --
+// rather than keeping a second, drift-prone copy of it.
+//
+// A same-namespace reference is not "covered": it needs no grant at all, so a grant
+// appearing or disappearing cannot be its cause.
+func ReferenceGrantCovers(referenceGrant *gatewayv1beta1.ReferenceGrant, from GrantFrom, to GrantTo) bool {
+	if to.Namespace == from.Namespace {
+		// Same namespace: no grant is needed, so none can be the one permitting it.
+		return false
+	}
+	for _, grantTo := range referenceGrantTos(referenceGrant) {
+		if !grantToMatches(grantTo, to) {
+			continue
+		}
+		for _, grantFrom := range referenceGrantFroms(referenceGrant) {
+			if grantFrom == from {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// grantToMatches reports whether a grant's To side covers a wanted target. An empty
+// granted name is the wildcard IsAccessGranted resolves through its wildcard lookup.
+func grantToMatches(granted, wanted GrantTo) bool {
+	if granted.Group != wanted.Group || granted.Kind != wanted.Kind || granted.Namespace != wanted.Namespace {
+		return false
+	}
+	return granted.Name == "" || granted.Name == wanted.Name
 }
 
 // removeReferenceGrantWithCheck removes all entries for a ReferenceGrant.
