@@ -86,6 +86,34 @@ func (vl *VirtualListener) DeepCopy() *VirtualListener {
 
 // Equal checks if two VirtualListeners are equal by comparing ProtocolCategory, Port,
 // and each Listener's K8sResource.
+// GoneListeners returns the listeners this frontend served in the previous cycle and no
+// longer serves.
+//
+// A frontend outlives the loss of one of its listeners -- the others share its port -- so
+// nothing else recognises the listener as gone, and the map entries it wrote (its hostname
+// match, and the routes it carried) would stay on disk and keep serving. The comparison is
+// by listener key: a listener that only moved within the list is not gone, and an entry of
+// a deleted ListenerSet is recognised without its own object still being in the store.
+func (vl *VirtualListener) GoneListeners(previous *VirtualListener) []*Listener {
+	if vl == nil || previous == nil {
+		return nil
+	}
+
+	present := make(map[listenerKey]struct{}, len(vl.Listeners))
+	for _, listener := range vl.Listeners {
+		present[listener.Key()] = struct{}{}
+	}
+
+	var gone []*Listener
+	for _, listener := range previous.Listeners {
+		if _, still := present[listener.Key()]; still {
+			continue
+		}
+		gone = append(gone, listener)
+	}
+	return gone
+}
+
 func (vl *VirtualListener) Equal(other *VirtualListener) bool {
 	if vl == nil || other == nil {
 		return vl == other

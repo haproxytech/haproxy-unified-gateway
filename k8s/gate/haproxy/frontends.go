@@ -95,6 +95,10 @@ func (b *HaproxyConfMgrImpl) upsertFrontends(vListenerName string, vListener *tr
 			logging.LogAttrError(err))
 	}
 
+	// Drop what a listener this frontend used to serve wrote and it no longer serves,
+	// before refilling: the frontend survives the loss (other listeners share its port),
+	// so nothing else purges those entries.
+	b.clearGoneListenerMaps(vListenerName, vListener)
 	b.fillListenerMaps(vListenerName, vListener)
 
 	return nil
@@ -104,29 +108,52 @@ func (b *HaproxyConfMgrImpl) upsertFrontends(vListenerName string, vListener *tr
 // MAP_LISTENER_ROUTE_EXACT_MATCH, and MAP_LISTENER_ROUTE_WILDCARD_MATCH
 // that were added for each listener in the VirtualListener.
 func (b *HaproxyConfMgrImpl) clearListenerMaps(vlName string, vListener *tree.VirtualListener) {
+	for _, l := range vListener.Listeners {
+		b.clearListenerMapOrigins(vlName, l)
+	}
+}
+
+// clearGoneListenerMaps removes the entries a frontend's previous listeners wrote and its
+// current ones do not replace.
+//
+// The frontend survives the loss of a listener -- the others share its port -- so its
+// per-VirtualListener purge never runs, and a ListenerSet deletion, or an entry removed
+// from one, would otherwise leave that listener's hostname and route entries in the maps,
+// still serving traffic for something that no longer exists.
+func (b *HaproxyConfMgrImpl) clearGoneListenerMaps(vlName string, vListener *tree.VirtualListener) {
+	previous, existed := b.controllerStore.GateTree.PreviousVirtualListeners[vlName]
+	if !existed {
+		return
+	}
+	for _, l := range vListener.GoneListeners(previous) {
+		b.clearListenerMapOrigins(vlName, l)
+	}
+}
+
+// clearListenerMapOrigins removes every entry one listener wrote: its own hostname match,
+// and the routing entries of the routes it carried.
+func (b *HaproxyConfMgrImpl) clearListenerMapOrigins(vlName string, l *tree.Listener) {
 	frontendName := b.getFrontendName(vlName)
 	listenerExactMatchMap := b.params.mapsStorage.GetListenerExactMatchMapFile(frontendName)
 	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile(frontendName)
 	listenerRouteExactMatchMap := b.params.mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
 	listenerRouteWildcardMatchMap := b.params.mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
 
-	for _, l := range vListener.Listeners {
-		listenerKeyName := l.Key().String()
-		resourceOrigin := maps.ResourceOrigin{
-			Namespace: l.Key().OwnerKey().Namespace,
-			Name:      listenerKeyName,
-		}
-		listenerExactMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
-		listenerWildcardMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+	listenerKeyName := l.Key().String()
+	resourceOrigin := maps.ResourceOrigin{
+		Namespace: l.Key().OwnerKey().Namespace,
+		Name:      listenerKeyName,
+	}
+	listenerExactMatchMap.RemoveEntriesFrom(resourceOrigin)
+	listenerWildcardMatchMap.RemoveEntriesFrom(resourceOrigin)
 
-		for routeKey := range l.AttachedRoutes {
-			routeOrigin := maps.ResourceOrigin{
-				Namespace: routeKey.Namespace,
-				Name:      listenerKeyName + "/" + routeKey.Name,
-			}
-			listenerRouteExactMatchMap.ApplyRoute(routeOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
-			listenerRouteWildcardMatchMap.ApplyRoute(routeOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+	for routeKey := range l.AttachedRoutes {
+		routeOrigin := maps.ResourceOrigin{
+			Namespace: routeKey.Namespace,
+			Name:      listenerKeyName + "/" + routeKey.Name,
 		}
+		listenerRouteExactMatchMap.RemoveEntriesFrom(routeOrigin)
+		listenerRouteWildcardMatchMap.RemoveEntriesFrom(routeOrigin)
 	}
 }
 
@@ -161,7 +188,7 @@ func (b *HaproxyConfMgrImpl) fillListenerMaps(vListenerName string, vListener *t
 		}
 		if isDomainWildcard(hostnameStr) {
 			// Clear exact match for this listener (in case hostname type changed from exact to wildcard)
-			listenerExactMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+			listenerExactMatchMap.RemoveEntriesFrom(resourceOrigin)
 			// Strip the leading "*" so that map_end can match against the suffix (e.g. ".example.com")
 			wildcardKey := removeDomainWildcard(hostnameStr)
 			// Here reverse the domain string (because map_end does not take the longest string)
@@ -175,7 +202,7 @@ func (b *HaproxyConfMgrImpl) fillListenerMaps(vListenerName string, vListener *t
 				})
 		} else {
 			// Clear wildcard match for this listener (in case hostname type changed from wildcard to exact)
-			listenerWildcardMatchMap.ApplyRoute(resourceOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+			listenerWildcardMatchMap.RemoveEntriesFrom(resourceOrigin)
 			listenerExactMatchMap.ApplyRoute(resourceOrigin,
 				map[maps.EntryKey]map[string]*maps.WeightedValue{
 					{Hostname: hostnameStr}: {
