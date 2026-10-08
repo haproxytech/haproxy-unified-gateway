@@ -448,6 +448,29 @@ func (g *Gateway) OwnListenerByName(name gatewayv1.SectionName) *Listener {
 	return nil
 }
 
+// ContributedListenerByName resolves a listener a listenerSet has contributed and declared **itself**, by the
+// name a sectionName would use.
+func (g *Gateway) ContributedListenerByName(parentKey client.ObjectKey, name gatewayv1.SectionName) *Listener {
+	for _, listener := range g.Listeners {
+		if listener.FromListenerSet() && listener.Name() == name && listener.ListenerKey.ListenerSetKey == parentKey {
+			return listener
+		}
+	}
+	return nil
+}
+
+// ContributedListeners are the listeners a ListenerSet has contributed and declared **itself**, by
+// the parentRef naming the ListenerSet.
+func (g *Gateway) ContributedListeners(parentKey client.ObjectKey) []*Listener {
+	var contributedListeners []*Listener
+	for _, listener := range g.Listeners {
+		if listener.FromListenerSet() && listener.ListenerKey.ListenerSetKey == parentKey {
+			contributedListeners = append(contributedListeners, listener)
+		}
+	}
+	return contributedListeners
+}
+
 func (g *Gateway) BuildConditions() {
 	if !g.isManaged() {
 		return
