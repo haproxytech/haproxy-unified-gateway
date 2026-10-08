@@ -17,6 +17,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
+	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -139,6 +140,10 @@ func (b *GatewayBuilderImpl) computeGateTreeUpdates() {
 	// in order to recompute the checks and status (both Gateway and listeners)
 	b.checkListenerConflicts()
 
+	// A Gateway re-upserted by the conflict diff has its listener list rebuilt too, so
+	// the routes that serve it have to be marked after this point, not before.
+	b.markRoutesOfRebuiltGateways()
+
 	for _, treeGw := range b.ControllerStore.GateTree.Gateways {
 		if treeGw == nil || treeGw.TreeStatus.Status != store.StatusUpserted {
 			continue
@@ -215,6 +220,118 @@ func (b *GatewayBuilderImpl) processManagementChecks(treeGw *Gateway) {
 func (b *GatewayBuilderImpl) CleanTreeUpdates() {
 	cleanTreeUpdates(b.GateTree.Gateways)
 	cleanTreeUpdates(b.UnmanagedGateTree.Gateways)
+}
+
+// markRoutesOfRebuiltGateways re-marks for processing every route that serves a Gateway
+// rebuilt this cycle.
+//
+// constructMergedListeners recreates the whole listening surface of an upserted Gateway
+// -- its own listeners and the entries its ListenerSets contribute -- with fresh
+// AttachedRoutes maps, and the conflict diff can re-upsert a Gateway on top of that. A
+// route attached to one of those listeners and not re-processed in the same cycle would
+// keep a count of zero and stale Accepted conditions, so the routes that serve the
+// Gateway have to come back through the route builders, which run later in this cycle.
+//
+// "Serves" is deliberately wider than "is attached to": a route must also be reached when
+// the Gateway change is what makes it attachable at all -- a listener added, or
+// allowedListeners relaxed to admit one of its ListenerSets. That is why the relation is
+// resolved from the routes' parentRefs and the ListenerSet mirror, rather than read back
+// from the listeners the rebuild is about to discard.
+//
+// It is also the one place that sees both parent kinds at once: the enqueue edges are
+// per-kind, and neither kind's event can reach a route that named the other.
+func (b *GatewayBuilderImpl) markRoutesOfRebuiltGateways() {
+	rebuilt := make(map[client.ObjectKey]struct{})
+	for gwKey, treeGw := range b.ControllerStore.GateTree.Gateways {
+		if treeGw == nil || treeGw.TreeStatus.Status != store.StatusUpserted {
+			continue
+		}
+		rebuilt[gwKey] = struct{}{}
+	}
+	if len(rebuilt) == 0 {
+		return
+	}
+
+	for key, route := range b.ControllerStore.GateTree.HTTPRoutes {
+		if route == nil || route.K8sResource == nil {
+			continue
+		}
+		if b.routeServesAnyRebuiltGateway(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace, rebuilt) {
+			injectIndirectUpdate(b.ClusterStore.Updates.HTTPRoutes, key, route.K8sResource)
+		}
+	}
+	for key, route := range b.ControllerStore.UnmanagedGateTree.HTTPRoutes {
+		if route == nil || route.K8sResource == nil {
+			continue
+		}
+		if b.routeServesAnyRebuiltGateway(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace, rebuilt) {
+			injectIndirectUpdate(b.ClusterStore.Updates.HTTPRoutes, key, route.K8sResource)
+		}
+	}
+	for key, route := range b.ControllerStore.GateTree.TLSRoutes {
+		if route == nil || route.K8sResource == nil {
+			continue
+		}
+		if b.routeServesAnyRebuiltGateway(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace, rebuilt) {
+			injectIndirectUpdate(b.ClusterStore.Updates.TLSRoutes, key, route.K8sResource)
+		}
+	}
+	for key, route := range b.ControllerStore.UnmanagedGateTree.TLSRoutes {
+		if route == nil || route.K8sResource == nil {
+			continue
+		}
+		if b.routeServesAnyRebuiltGateway(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace, rebuilt) {
+			injectIndirectUpdate(b.ClusterStore.Updates.TLSRoutes, key, route.K8sResource)
+		}
+	}
+}
+
+// routeServesAnyRebuiltGateway reports whether one of a route's parentRefs designates a
+// rebuilt Gateway -- directly, or through a ListenerSet it names. A ListenerSet that is
+// not (or not yet) allowed to attach still resolves to its parent Gateway: whether it may
+// attach is the ListenerSet's own verdict, not a reason to leave a route that named it
+// behind.
+func (b *GatewayBuilderImpl) routeServesAnyRebuiltGateway(
+	parentRefs []gatewayv1.ParentReference,
+	routeNamespace string,
+	rebuilt map[client.ObjectKey]struct{},
+) bool {
+	for _, parentRef := range parentRefs {
+		switch utilsk8s.ResolveParentRefKind(parentRef, b.ControllerStore.ExtractGVK) {
+		case utilsk8s.ParentRefKindGateway:
+			key := GetParentRefNamespacedNameFromResource(parentRef, getNamespaceOrDefault(parentRef.Namespace, routeNamespace))
+			if _, ok := rebuilt[key]; ok {
+				return true
+			}
+		case utilsk8s.ParentRefKindListenerSet:
+			lsKey := GetParentRefNamespacedNameFromResource(parentRef, getNamespaceOrDefault(parentRef.Namespace, routeNamespace))
+			treeLs := b.ControllerStore.GateTree.ListenerSets[lsKey]
+			if treeLs == nil || treeLs.K8sResource == nil {
+				continue
+			}
+			if gwKey, namesGateway := parentGatewayKey(treeLs.K8sResource); namesGateway {
+				if _, ok := rebuilt[gwKey]; ok {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// injectIndirectUpdate marks a linked object for processing without it having changed,
+// the same way a GatewayClass picks up an installed-versions change. An update already
+// queued for that object -- a real change, or a deletion -- is left alone.
+func injectIndirectUpdate[T client.Object](updates map[client.ObjectKey]store.Update[T], key client.ObjectKey, object T) {
+	if _, alreadyPresent := updates[key]; alreadyPresent {
+		return
+	}
+	updates[key] = store.Update[T]{
+		NewObject: object,
+		OldObject: object, // old = new when indirect update
+		Status:    store.StatusUpserted,
+		Indirect:  true,
+	}
 }
 
 // constructListenersOfUpsertedGateways builds the merged listener list of every
