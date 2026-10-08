@@ -402,11 +402,12 @@ func (l *Listener) checkProtocol(managedKinds managedRouteGroupKindsByProtocol) 
 		return
 	}
 
+	// Allowlist, not denylist: only Passthrough is served on a TLS listener, so a mode
+	// this controller does not know -- one added to the API later -- is rejected here
+	// rather than admitted by default.
 	tls := l.TLS()
 	if l.Protocol() == gatewayv1.TLSProtocolType &&
-		tls != nil &&
-		tls.Mode != nil &&
-		*tls.Mode == gatewayv1.TLSModeTerminate {
+		(tls == nil || tls.Mode == nil || *tls.Mode != gatewayv1.TLSModePassthrough) {
 		valErr := field.NotSupported(
 			field.NewPath("protocol"),
 			l.Protocol(),
