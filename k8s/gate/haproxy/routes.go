@@ -137,7 +137,7 @@ func (b *RouteMgrImpl) onValidTLSRouteUpserted(routeOrigin maps.ResourceOrigin, 
 }
 
 func (RouteMgrImpl) onInvalidTLSRouteUpserted(routeOrigin maps.ResourceOrigin, _ *tree.TLSRoute, mapSNI *maps.MapFileState) error {
-	mapSNI.ApplyRoute(routeOrigin, map[maps.EntryKey]map[string]*maps.WeightedValue{})
+	mapSNI.RemoveEntriesFrom(routeOrigin)
 	return nil
 }
 
@@ -347,10 +347,9 @@ func (d *desiredBackendsMaps) resolveEntry(hostname string, match gatewayv1.HTTP
 func (RouteMgrImpl) onInvalidHTTPRouteUpserted(origin maps.ResourceOrigin, _ *tree.HTTPRoute,
 	mapExact, mapPrefix, mapRegex *maps.MapFileState,
 ) error {
-	empty := map[maps.EntryKey]map[string]*maps.WeightedValue{}
-	mapExact.ApplyRoute(origin, empty)
-	mapPrefix.ApplyRoute(origin, empty)
-	mapRegex.ApplyRoute(origin, empty)
+	mapExact.RemoveEntriesFrom(origin)
+	mapPrefix.RemoveEntriesFrom(origin)
+	mapRegex.RemoveEntriesFrom(origin)
 	return nil
 }
 

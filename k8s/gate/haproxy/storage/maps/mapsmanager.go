@@ -379,6 +379,13 @@ func (m *MapFileState) ApplyRoute(
 	}
 }
 
+// RemoveEntriesFrom drops every entry this origin wrote and forgets it, which is what a
+// listener or a route that left a map file owes. It is ApplyRoute with nothing to apply,
+// spelled for the intent rather than for the mechanism.
+func (m *MapFileState) RemoveEntriesFrom(ro ResourceOrigin) {
+	m.ApplyRoute(ro, nil)
+}
+
 // ApplyDesiredBackends applies the desired backends for an entry and resource origin to the map file state.
 // It handles four cases:
 // 1. Get/Create EntryValue

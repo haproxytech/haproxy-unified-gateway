@@ -65,7 +65,6 @@ func (b *RouteMgrImpl) fillMaps() {
 // Where listener-name is "<ns>/<gateway>_<listener>" and route-name is "<ns>/<name>".
 func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 	controllerStore := b.topManager.controllerStore
-	empty := map[maps.EntryKey]map[string]*maps.WeightedValue{}
 
 	// Pre-loop: clear old state for routes that have been updated.
 	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
@@ -73,14 +72,14 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 			continue
 		}
 		for _, listener := range b.listenersForRoute(route.TreeStatus.OldTreeResource) {
-			b.clearHTTPRouteListenerMaps(routeKey, listener, empty)
+			b.clearHTTPRouteListenerMaps(routeKey, listener)
 		}
 	}
 
 	// Main loop: fill for the current state of each route.
 	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
 		for _, listener := range b.listenersForRoute(route) {
-			b.applyHTTPRouteListenerMaps(routeKey, route, listener, empty)
+			b.applyHTTPRouteListenerMaps(routeKey, route, listener)
 		}
 	}
 }
@@ -88,7 +87,6 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 func (b *RouteMgrImpl) clearHTTPRouteListenerMaps(
 	routeKey k8stypes.NamespacedName,
 	listener *tree.Listener,
-	empty map[maps.EntryKey]map[string]*maps.WeightedValue,
 ) {
 	if listener.VirtualListenerName == "" {
 		return
@@ -102,15 +100,14 @@ func (b *RouteMgrImpl) clearHTTPRouteListenerMaps(
 		Namespace: routeKey.Namespace,
 		Name:      listenerKeyName + "/" + routeKey.Name,
 	}
-	listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-	listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+	listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
+	listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 }
 
 func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 	routeKey k8stypes.NamespacedName,
 	route *tree.HTTPRoute,
 	listener *tree.Listener,
-	empty map[maps.EntryKey]map[string]*maps.WeightedValue,
 ) {
 	if listener.VirtualListenerName == "" {
 		return
@@ -129,8 +126,8 @@ func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 	case store.StatusUnchanged:
 		return
 	case store.StatusDeleted:
-		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
+		listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 		return
 	}
 
@@ -138,15 +135,15 @@ func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 	// A listener that rejects the route kind (e.g. TLS listener receiving an
 	// HTTPRoute) will not have the route in its AttachedRoutes.
 	if _, accepted := listener.AttachedRoutes[routeKey]; !accepted {
-		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
+		listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 		return
 	}
 
 	// StatusUpserted — only fill for valid routes.
 	if !route.Valid {
-		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
+		listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 		return
 	}
 
@@ -283,7 +280,6 @@ func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
 // for TLSRoutes, mirroring the same logic as fillListenerRouteMapsForHTTPRoutes.
 func (b *RouteMgrImpl) fillListenerRouteMapsForTLSRoutes() {
 	controllerStore := b.topManager.controllerStore
-	empty := map[maps.EntryKey]map[string]*maps.WeightedValue{}
 
 	// Pre-loop: clear old state for routes that have been updated.
 	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
@@ -291,14 +287,14 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForTLSRoutes() {
 			continue
 		}
 		for _, listener := range b.listenersForTLSRoute(route.TreeStatus.OldTreeResource) {
-			b.clearTLSRouteListenerMaps(routeKey, listener, empty)
+			b.clearTLSRouteListenerMaps(routeKey, listener)
 		}
 	}
 
 	// Main loop: fill for the current state of each route.
 	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
 		for _, listener := range b.listenersForTLSRoute(route) {
-			b.applyTLSRouteListenerMaps(routeKey, route, listener, empty)
+			b.applyTLSRouteListenerMaps(routeKey, route, listener)
 		}
 	}
 }
@@ -306,7 +302,6 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForTLSRoutes() {
 func (b *RouteMgrImpl) clearTLSRouteListenerMaps(
 	routeKey k8stypes.NamespacedName,
 	listener *tree.Listener,
-	empty map[maps.EntryKey]map[string]*maps.WeightedValue,
 ) {
 	if listener.VirtualListenerName == "" {
 		return
@@ -320,15 +315,14 @@ func (b *RouteMgrImpl) clearTLSRouteListenerMaps(
 		Namespace: routeKey.Namespace,
 		Name:      listenerKeyName + "/" + routeKey.Name,
 	}
-	listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-	listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+	listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
+	listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 }
 
 func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
 	routeKey k8stypes.NamespacedName,
 	route *tree.TLSRoute,
 	listener *tree.Listener,
-	empty map[maps.EntryKey]map[string]*maps.WeightedValue,
 ) {
 	if listener.VirtualListenerName == "" {
 		return
@@ -347,20 +341,20 @@ func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
 	case store.StatusUnchanged:
 		return
 	case store.StatusDeleted:
-		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
+		listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 		return
 	}
 
 	if _, accepted := listener.AttachedRoutes[routeKey]; !accepted {
-		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
+		listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 		return
 	}
 
 	if !route.Valid {
-		listenerRouteExactMap.ApplyRoute(routeOrigin, empty)
-		listenerRouteWildcardMap.ApplyRoute(routeOrigin, empty)
+		listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
+		listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 		return
 	}
 
