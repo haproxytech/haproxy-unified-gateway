@@ -133,7 +133,7 @@ func TestTLSGatewayStatusWithDelayedGatewayClass(t *testing.T) {
 				require.True(t, ok)
 				require.EqualValues(t, 1, condition.ObservedGeneration)
 			}
-			listener := result.Listeners["https"]
+			listener := result.OwnListenerByName("https")
 			require.NotNil(t, listener)
 			resolved, ok := listener.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs))
 			require.True(t, ok)

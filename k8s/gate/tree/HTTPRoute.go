@@ -203,9 +203,11 @@ type checkParentRefResult struct {
 
 // checkParentRef checks 1 parentRef and returns:
 // - a bool indicating if the parentRef is valid, and if it's not, a set of conditions detailing why
+//
+//revive:disable:function-length
 func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controllerStore ControllerStore) checkParentRefResult {
-	// Vérifie si le type de parentRef est supporté
-	if !utilsk8s.IsParentRefGroupKindSupported(parentRef, controllerStore.ExtractGVK) {
+	parentRefKind := utilsk8s.ResolveParentRefKind(parentRef, controllerStore.ExtractGVK)
+	if parentRefKind.Unsupported() {
 		return checkParentRefResult{
 			Managed:    false,
 			Valid:      false,
@@ -213,10 +215,30 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 		}
 	}
 
-	// Get the Gateway
-	gwKey := GetParentRefNamespacedName(parentRef, r.K8sResource.Namespace)
-	treeGw, ok := controllerStore.GateTree.Gateways[gwKey]
-	if ok && treeGw.TreeStatus.Status == store.StatusDeleted {
+	parentKey := GetParentRefNamespacedName(parentRef, r.K8sResource.Namespace)
+
+	var (
+		status *store.Status
+		ok     bool
+		treeGw *Gateway
+		treeLs *ListenerSet
+	)
+
+	switch parentRefKind {
+	case utilsk8s.ParentRefKindGateway:
+		treeGw, ok = controllerStore.GateTree.Gateways[parentKey]
+		if ok {
+			status = &treeGw.TreeStatus.Status
+		}
+	case utilsk8s.ParentRefKindListenerSet:
+		treeLs, ok = controllerStore.GateTree.ListenerSets[parentKey]
+		if ok {
+			status = &treeLs.TreeStatus.Status
+		}
+	}
+
+	if status != nil && *status == store.StatusDeleted {
+		// parent ref exists, but it was deleted
 		return checkParentRefResult{
 			Managed:    true,
 			Valid:      false,
@@ -224,6 +246,21 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 		}
 	}
 	if !ok {
+		// It's a whole different story, it means the parent ref does not exists,
+		// we can not know if it's managed by our controller or not
+		return checkParentRefResult{
+			Managed:    false,
+			Valid:      false,
+			Conditions: generic.Conditions{},
+		}
+	}
+
+	// An unreported ListenerSet has a parentRef naming a resource of another controller,
+	// or no Gateway of this one: its listeners are never contributed, so there is nothing
+	// to attach to. Writing a RouteParentStatus here would comment on someone else's
+	// resource -- those cases owe silence, not a report (same rule as the ListenerSet
+	// verdict builder).
+	if treeLs != nil && !treeLs.IsAttachmentReported() {
 		return checkParentRefResult{
 			Managed:    false,
 			Valid:      false,
@@ -236,8 +273,8 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 	// HTTPRoute could name "ing:gateway"; reject it explicitly here. This is
 	// defence in depth: the synthetic gateway's empty namespace already makes it
 	// unreachable from a real parentRef, but this guard keeps the reservation
-	// independent of that namespace choice.
-	if utils.IsSyntheticName(treeGw.K8sResource.Name) && !utils.IsSyntheticName(r.K8sResource.Name) {
+	// independent of that namespace choice. Only a Gateway parent can be synthetic.
+	if treeGw != nil && utils.IsSyntheticName(treeGw.K8sResource.Name) && !utils.IsSyntheticName(r.K8sResource.Name) {
 		return checkParentRefResult{
 			Managed:    true,
 			Valid:      false,
@@ -248,7 +285,17 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 	// Compute the list of attachable Listeners
 	attachableListeners := make([]*Listener, 0)
 	if parentRef.SectionName != nil {
-		listener := treeGw.OwnListenerByName(*parentRef.SectionName)
+		var listener *Listener
+		if treeGw != nil {
+			listener = treeGw.OwnListenerByName(*parentRef.SectionName)
+		} else if treeLs != nil && treeLs.K8sResource != nil {
+			// We're looking for a listener contributed by a ListenerSet in the gateway.
+			if gwKey, namesGateway := parentGatewayKey(treeLs.K8sResource); namesGateway {
+				if gw := controllerStore.GateTree.Gateways[gwKey]; gw != nil {
+					listener = gw.ContributedListenerByName(parentKey, *parentRef.SectionName)
+				}
+			}
+		}
 		if listener == nil || !listener.MatchesParentRefPort(parentRef.Port) {
 			return checkParentRefResult{
 				Managed:    true,
@@ -260,9 +307,19 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 	} else {
 		// No sectionName: every listener the Gateway declares itself is a candidate.
 		// Not the entries contributed by its ListenerSets -- those are reached by
-		// naming the ListenerSet as parentRef. A parentRef port, when it names one,
-		// narrows the candidates to the listeners on that port.
-		for _, listener := range treeGw.OwnListeners() {
+		// naming the ListenerSet as parentRef.
+		var listeners []*Listener
+		if treeGw != nil {
+			listeners = treeGw.OwnListeners()
+		} else if treeLs != nil && treeLs.K8sResource != nil {
+			// We're looking for the listeners contributed by a ListenerSet in the gateway.
+			if gwKey, namesGateway := parentGatewayKey(treeLs.K8sResource); namesGateway {
+				if gw := controllerStore.GateTree.Gateways[gwKey]; gw != nil {
+					listeners = gw.ContributedListeners(parentKey)
+				}
+			}
+		}
+				for _, listener := range listeners {
 			if !listener.MatchesParentRefPort(parentRef.Port) {
 				continue
 			}
@@ -299,8 +356,16 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 			continue
 		}
 
-		// Check if the route's namespace is permitted by allowedRoutes.namespaces
-		if !isRouteNamespaceAllowed(r.K8sResource.Namespace, listener, treeGw.K8sResource.Namespace, controllerStore.ClusterStore.Namespaces) {
+		// Check if the route's namespace is permitted by allowedRoutes.namespaces.
+		// For a contributed entry the declaring resource is the ListenerSet, so its
+		// namespace -- not the Gateway's -- is what "Same" and the selector compare against.
+		var nsParentRef string
+		if treeGw != nil {
+			nsParentRef = treeGw.K8sResource.Namespace
+		} else if treeLs != nil && treeLs.K8sResource != nil {
+			nsParentRef = treeLs.K8sResource.Namespace
+		}
+		if !isRouteNamespaceAllowed(r.K8sResource.Namespace, listener, nsParentRef, controllerStore.ClusterStore.Namespaces) {
 			conds.MergeOverrideConditions(rc.ConditionNotAcceptedRouteReasonNotAllowedByListeners())
 			continue
 		}

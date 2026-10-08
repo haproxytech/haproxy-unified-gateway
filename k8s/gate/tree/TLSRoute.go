@@ -167,7 +167,8 @@ func (r *TLSRoute) checkParentRefs(controllerStore ControllerStore) {
 
 //revive:disable:function-length
 func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controllerStore ControllerStore) checkParentRefResult {
-	if !utilsk8s.IsParentRefGroupKindSupported(parentRef, controllerStore.ExtractGVK) {
+	parentRefKind := utilsk8s.ResolveParentRefKind(parentRef, controllerStore.ExtractGVK)
+	if parentRefKind.Unsupported() {
 		return checkParentRefResult{
 			Managed:    false,
 			Valid:      false,
@@ -175,11 +176,30 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 		}
 	}
 
-	gwKey := GetParentRefNamespacedNameFromResource(parentRef, getNamespaceOrDefault(parentRef.Namespace, r.K8sResource.Namespace))
+	parentKey := GetParentRefNamespacedNameFromResource(parentRef, getNamespaceOrDefault(parentRef.Namespace, r.K8sResource.Namespace))
 
-	treeGw, ok := controllerStore.GateTree.Gateways[gwKey]
-	if ok && treeGw.TreeStatus.Status == store.StatusDeleted {
-		// gateway exists, but it was deleted
+	var (
+		status *store.Status
+		ok     bool
+		treeGw *Gateway
+		treeLs *ListenerSet
+	)
+
+	switch parentRefKind {
+	case utilsk8s.ParentRefKindGateway:
+		treeGw, ok = controllerStore.GateTree.Gateways[parentKey]
+		if ok {
+			status = &treeGw.TreeStatus.Status
+		}
+	case utilsk8s.ParentRefKindListenerSet:
+		treeLs, ok = controllerStore.GateTree.ListenerSets[parentKey]
+		if ok {
+			status = &treeLs.TreeStatus.Status
+		}
+	}
+
+	if status != nil && *status == store.StatusDeleted {
+		// parent ref exists, but it was deleted
 		return checkParentRefResult{
 			Managed:    true,
 			Valid:      false,
@@ -187,7 +207,7 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 		}
 	}
 	if !ok {
-		// It's a whole different story, it means the Gateway does not exists,
+		// It's a whole different story, it means the parent ref does not exists,
 		// we can not know if it's managed by our controller or not
 		return checkParentRefResult{
 			Managed:    false,
@@ -196,14 +216,37 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 		}
 	}
 
-	// From now on, the parent references an exising Gateway managed by our controller
+	// An unreported ListenerSet has a parentRef naming a resource of another controller,
+	// or no Gateway of this one: its listeners are never contributed, so there is nothing
+	// to attach to. Writing a RouteParentStatus here would comment on someone else's
+	// resource -- those cases owe silence, not a report (same rule as the ListenerSet
+	// verdict builder).
+	if treeLs != nil && !treeLs.IsAttachmentReported() {
+		return checkParentRefResult{
+			Managed:    false,
+			Valid:      false,
+			Conditions: generic.Conditions{},
+		}
+	}
+
+	// From now on, the parent references an exising Gateway or ListenerSet managed by our controller
 	// SectionName is optional
 	// 1- if set, the only attachable listener is the one references by the sectionName
 	// 2- if not set, all listeners from the Gateway are attachable
 	attachableListeners := make([]*Listener, 0)
 	if parentRef.SectionName != nil {
 		// Check if the Gateway has this listener
-		listener := treeGw.OwnListenerByName(*parentRef.SectionName)
+		var listener *Listener
+		if treeGw != nil {
+			listener = treeGw.OwnListenerByName(*parentRef.SectionName)
+		} else if treeLs != nil && treeLs.K8sResource != nil {
+			// We're looking for a listener contributed by a ListenerSet in the gateway.
+			if gwKey, namesGateway := parentGatewayKey(treeLs.K8sResource); namesGateway {
+				if gw := controllerStore.GateTree.Gateways[gwKey]; gw != nil {
+					listener = gw.ContributedListenerByName(parentKey, *parentRef.SectionName)
+				}
+			}
+		}
 		if listener == nil || !listener.MatchesParentRefPort(parentRef.Port) {
 			return checkParentRefResult{
 				Managed:    true,
@@ -211,22 +254,24 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 				Conditions: rc.ConditionNotAcceptedNoMatchingParent(),
 			}
 		}
-		tlsMode := utils.PointerDefaultValueIfNil(listener.TLS()).Mode
-		if tlsMode == nil || *tlsMode != gatewayv1.TLSModePassthrough {
-			return checkParentRefResult{
-				Managed:    true,
-				Valid:      false,
-				Conditions: rc.ConditionNotAcceptedRouteReasonNotAllowedByListeners(),
-			}
-		}
 		// We found the listener, it does exists
 		attachableListeners = append(attachableListeners, listener)
 	} else {
 		// No sectionName: every listener the Gateway declares itself is a candidate.
 		// Not the entries contributed by its ListenerSets -- those are reached by
-		// naming the ListenerSet as parentRef. A parentRef port, when it names one,
-		// narrows the candidates to the listeners on that port.
-		for _, listener := range treeGw.OwnListeners() {
+		// naming the ListenerSet as parentRef.
+		var listeners []*Listener
+		if treeGw != nil {
+			listeners = treeGw.OwnListeners()
+		} else if treeLs != nil && treeLs.K8sResource != nil {
+			// We're looking for a listener contributed by a ListenerSet in the gateway.
+			if gwKey, namesGateway := parentGatewayKey(treeLs.K8sResource); namesGateway {
+				if gw := controllerStore.GateTree.Gateways[gwKey]; gw != nil {
+					listeners = gw.ContributedListeners(parentKey)
+				}
+			}
+		}
+				for _, listener := range listeners {
 			if !listener.MatchesParentRefPort(parentRef.Port) {
 				continue
 			}
@@ -245,7 +290,10 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 	conds := generic.Conditions{}
 
 	for _, listener := range attachableListeners {
-		// Check if the listener is accepted (routes can attach to accepted listeners even with unresolved refs)
+		// Check if the listener is accepted (routes can attach to accepted listeners even with unresolved refs).
+		// The TLS mode is not inspected here: checkProtocol already marked a TLS listener in
+		// Terminate mode Accepted=False (UnsupportedProtocol) at Gateway build, so a TLSRoute
+		// is kept off it by this precomputed verdict and the mode is never re-read per route.
 		if !listener.Accepted {
 			conds.MergeOverrideConditions(rc.ConditionNotAcceptedNoMatchingParent())
 			continue
@@ -264,7 +312,13 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 		}
 
 		// Check if the route's namespace is permitted by allowedRoutes.namespaces
-		if !isRouteNamespaceAllowed(r.K8sResource.Namespace, listener, treeGw.K8sResource.Namespace, controllerStore.ClusterStore.Namespaces) {
+		var nsParentRef string
+		if treeGw != nil {
+			nsParentRef = treeGw.K8sResource.Namespace
+		} else if treeLs != nil && treeLs.K8sResource != nil {
+			nsParentRef = treeLs.K8sResource.Namespace
+		}
+		if !isRouteNamespaceAllowed(r.K8sResource.Namespace, listener, nsParentRef, controllerStore.ClusterStore.Namespaces) {
 			conds.MergeOverrideConditions(rc.ConditionNotAcceptedRouteReasonNotAllowedByListeners())
 			continue
 		}

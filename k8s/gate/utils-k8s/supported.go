@@ -68,18 +68,48 @@ func IsBackendRefGroupKindSupported(backendRef gatewayv1.BackendObjectReference,
 	return true
 }
 
-// IsParentRefGroupKindSupported checks if the provided HTTPRoute parent reference has a supported Group and Kind.
-// It only supports `gatewayv1.Gateway` resources.
-func IsParentRefGroupKindSupported(parentRef gatewayv1.ParentReference, extractGVK ExtractGVK) bool {
-	gvk := extractGVK(objtypes.ObjectTypeGateway)
+// ParentRefKind identifies which of the supported parent kinds a ParentReference
+// designates. The zero value is the unsupported case, so a ParentRefKind that was never
+// resolved cannot be mistaken for a Gateway or a ListenerSet.
+type ParentRefKind int
 
-	if parentRef.Kind != nil && *parentRef.Kind != gatewayv1.Kind(gvk.Kind) {
-		return false
+const (
+	ParentRefKindUnsupported ParentRefKind = iota
+	ParentRefKindGateway
+	ParentRefKindListenerSet
+)
+
+// Unsupported reports whether the parent reference designates no kind we serve.
+func (k ParentRefKind) Unsupported() bool {
+	return k == ParentRefKindUnsupported
+}
+
+// ResolveParentRefKind returns the parent kind a ParentReference designates, among the
+// ones we support: gatewayv1.Gateway and gatewayv1.ListenerSet.
+//
+// The kind and group are optional on a ParentReference: when absent they default to the
+// Gateway ones, and a ListenerSet parentRef therefore only needs a group when its own
+// group differs from the Gateway's.
+func ResolveParentRefKind(parentRef gatewayv1.ParentReference, extractGVK ExtractGVK) ParentRefKind {
+	gvkGw := extractGVK(objtypes.ObjectTypeGateway)
+	gvkLS := extractGVK(objtypes.ObjectTypeListenerSet)
+
+	parentRefKind := gatewayv1.Kind(gvkGw.Kind)
+	if parentRef.Kind != nil {
+		parentRefKind = *parentRef.Kind
 	}
-	if parentRef.Group != nil && *parentRef.Group != gatewayv1.Group(gvk.Group) {
-		return false
+	parentRefGroup := gatewayv1.Group(gvkGw.Group)
+	if parentRef.Group != nil {
+		parentRefGroup = *parentRef.Group
 	}
-	return true
+
+	if parentRefGroup == gatewayv1.Group(gvkGw.Group) && parentRefKind == gatewayv1.Kind(gvkGw.Kind) {
+		return ParentRefKindGateway
+	}
+	if parentRefGroup == gatewayv1.Group(gvkLS.Group) && parentRefKind == gatewayv1.Kind(gvkLS.Kind) {
+		return ParentRefKindListenerSet
+	}
+	return ParentRefKindUnsupported
 }
 
 // IsSecretGroupKindSupported checks if the provided certificate reference has a supported Group and Kind.

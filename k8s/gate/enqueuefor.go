@@ -271,10 +271,36 @@ func enqueueGatewayForSecret(dg utils.DedicatedGateway, dns utils.DedicatedNames
 	}
 }
 
-// enqueueHTTPRouteForGateway returns a handler.EventHandler that enqueues all HTTPRoutes
-// related to an observed Gateway.
+// routeParentRefNamesObject reports whether one of a route's parentRefs designates o,
+// provided it is of the expected parent kind.
+//
+// The kind is compared to the caller's rather than inferred from o, so a Gateway event
+// cannot reach a route that named a ListenerSet, and the reverse. What identifies a
+// parent is its name and namespace, the two fields the API gives a ParentReference for
+// it; a name that is shared across the two kinds is still two different parents.
+func routeParentRefNamesObject(
+	parentRefs []gatewayv1.ParentReference,
+	routeNamespace string,
+	o client.Object,
+	extractGVK utilsk8s.ExtractGVK,
+	kind utilsk8s.ParentRefKind,
+) bool {
+	for _, parentRef := range parentRefs {
+		if utilsk8s.ResolveParentRefKind(parentRef, extractGVK) != kind {
+			continue
+		}
+		parent := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, routeNamespace)
+		if parent.Name == o.GetName() && parent.Namespace == o.GetNamespace() {
+			return true
+		}
+	}
+	return false
+}
+
+// enqueueHTTPRoutesForParentKind returns a handler.EventHandler that enqueues every
+// HTTPRoute whose parentRefs designate the observed object as a parent of the given kind.
 // dns is used to restrict processing to the watched namespaces when configured.
-func enqueueHTTPRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+func enqueueHTTPRoutesForParentKind(kind utilsk8s.ParentRefKind, dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
 	return func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
 		return func(ctx context.Context, o client.Object) []reconcile.Request {
 			var requests []reconcile.Request
@@ -291,25 +317,23 @@ func enqueueHTTPRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient c
 				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
 					continue
 				}
-				for _, parentRef := range route.Spec.ParentRefs {
-					// We only accept v1.Gateway
-					if !utilsk8s.IsParentRefGroupKindSupported(parentRef, extractGVK) {
-						continue
-					}
-					gwNsName := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, route.GetNamespace())
-
-					if gwNsName.Name == o.GetName() && gwNsName.Namespace == o.GetNamespace() {
-						requests = append(requests, reconcile.Request{
-							Namespace: route.GetNamespace(),
-							Name:      route.GetName(),
-						})
-					}
+				if routeParentRefNamesObject(route.Spec.ParentRefs, route.GetNamespace(), o, extractGVK, kind) {
+					requests = append(requests, reconcile.Request{
+						Namespace: route.GetNamespace(),
+						Name:      route.GetName(),
+					})
 				}
 			}
 
 			return requests
 		}
 	}
+}
+
+// enqueueHTTPRouteForGateway enqueues the HTTPRoutes whose parentRef names an observed
+// Gateway.
+func enqueueHTTPRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+	return enqueueHTTPRoutesForParentKind(utilsk8s.ParentRefKindGateway, dns)
 }
 
 // enqueueHTTPRouteForService returns a handler.EventHandler that enqueues all HTTPRoutes
@@ -495,10 +519,10 @@ func enqueueTLSRouteForService(dns utils.DedicatedNamespaces) func(ctrlclient cl
 	}
 }
 
-// enqueueTLSRouteForGateway returns a handler.EventHandler that enqueues all TLSRoutes
-// related to an observed Gateway.
+// enqueueTLSRoutesForParentKind returns a handler.EventHandler that enqueues every
+// TLSRoute whose parentRefs designate the observed object as a parent of the given kind.
 // dns is used to restrict processing to the watched namespaces when configured.
-func enqueueTLSRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+func enqueueTLSRoutesForParentKind(kind utilsk8s.ParentRefKind, dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
 	return func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
 		return func(ctx context.Context, o client.Object) []reconcile.Request {
 			var requests []reconcile.Request
@@ -515,25 +539,23 @@ func enqueueTLSRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient cl
 				if !dns.Check(types.NamespacedName{Namespace: route.GetNamespace(), Name: route.GetName()}) {
 					continue
 				}
-				for _, parentRef := range route.Spec.ParentRefs {
-					// We only accept v1.Gateway
-					if !utilsk8s.IsParentRefGroupKindSupported(parentRef, extractGVK) {
-						continue
-					}
-					gwNsName := utils.GetNamespacedName(parentRef.Name, parentRef.Namespace, route.GetNamespace())
-
-					if gwNsName.Name == o.GetName() && gwNsName.Namespace == o.GetNamespace() {
-						requests = append(requests, reconcile.Request{
-							Namespace: route.GetNamespace(),
-							Name:      route.GetName(),
-						})
-					}
+				if routeParentRefNamesObject(route.Spec.ParentRefs, route.GetNamespace(), o, extractGVK, kind) {
+					requests = append(requests, reconcile.Request{
+						Namespace: route.GetNamespace(),
+						Name:      route.GetName(),
+					})
 				}
 			}
 
 			return requests
 		}
 	}
+}
+
+// enqueueTLSRouteForGateway enqueues the TLSRoutes whose parentRef names an observed
+// Gateway.
+func enqueueTLSRouteForGateway(dns utils.DedicatedNamespaces) func(ctrlclient client.Client, extractGVK utilsk8s.ExtractGVK) handler.MapFunc {
+	return enqueueTLSRoutesForParentKind(utilsk8s.ParentRefKindGateway, dns)
 }
 
 // servicesWithBackendCRInNamespace returns the Services whose backend-cr
