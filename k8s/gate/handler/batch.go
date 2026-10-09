@@ -350,9 +350,7 @@ func (h *eventHandlerImpl) forwardFeedback(ctx context.Context, resultCh chan di
 	case result := <-resultCh:
 		h.logger.LogAttrs(ctx, slog.LevelInfo, "[received] HUG => CONTROLLER: haproxy conf update result ", slog.Any("result", result))
 		gatetree := h.treeBuilder.GetTree()
-		for gwKey, gen := range result.GatewayObservedGenerations {
-			gatetree.UpdateListenerProgrammedCondition(h.logger, gwKey, gen, result.Err)
-		}
+		gatetree.UpdateListenerProgrammedConditions(h.logger, result.ObservedGenerations, result.Err)
 		gateways := gatetree.RLockGateways()
 		updates := h.statusUpdater.PrepareFeedbackStatusUpdate(result, gateways)
 		gatetree.RUnlockGateways()

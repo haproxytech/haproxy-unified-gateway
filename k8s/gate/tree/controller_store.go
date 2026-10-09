@@ -175,6 +175,30 @@ func (b *ControllerStore) GetGatewayForListener(listener *Listener) *Gateway {
 	return b.GateTree.Gateways[listener.Key().GatewayKey]
 }
 
+// OwnerK8sResource returns the API object that declares this listener: the ListenerSet whose
+// entry it is, or the Gateway that declares it itself. It is where everything owned by the
+// declaring resource is read from -- its generation, first of all, which a listener's own
+// payload does not carry.
+func (b *ControllerStore) OwnerK8sResource(listener *Listener) client.Object {
+	if listener == nil {
+		return nil
+	}
+
+	if listener.FromListenerSet() {
+		treeLs := b.GateTree.ListenerSets[listener.Key().ListenerSetKey]
+		if treeLs == nil || treeLs.K8sResource == nil {
+			return nil
+		}
+		return treeLs.K8sResource
+	}
+
+	treeGw := b.GateTree.Gateways[listener.Key().GatewayKey]
+	if treeGw == nil || treeGw.K8sResource == nil {
+		return nil
+	}
+	return treeGw.K8sResource
+}
+
 // previousStatusOf returns what the resource declaring this listener published about it
 // last time. See listenerPreviousStatus for why it is the declaring resource and not the
 // Gateway the listener is served on.

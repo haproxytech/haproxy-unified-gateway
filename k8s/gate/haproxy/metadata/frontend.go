@@ -17,61 +17,37 @@ import (
 	"encoding/json"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type FrontendMetaData map[string]map[string]K8sObjectInfo // map[kind] -> map[objectKey]K8sObjectInfo
 
-type GatewayInfo struct {
-	gwKey      client.ObjectKey
-	generation int64
-}
-
+// FrontendMetaData records, per frontend, the resources its listeners answer to and the
+// generation each is programmed from: the Gateway for its own listeners, the ListenerSet for
+// the entries it contributed. The kind is part of the key because a ListenerSet may share a
+// name and namespace with its parent Gateway.
 func (mm *ManagerImpl) FrontendMetaData(vListener *tree.VirtualListener) MetaData {
-	// Build a list of Gateway info to put in the metadata of the frontend
-	infos := make([]GatewayInfo, 0)
-	var gvk schema.GroupVersionKind
-	for _, listener := range vListener.Listeners {
-		treeGw := mm.cs.GetGatewayForListener(listener)
-		if treeGw == nil {
-			continue
-		}
-		k8sResource := treeGw.GetK8sResource()
-		if k8sResource == nil {
-			continue
-		}
-		// gvk are all the same (Gateway), so we can safely override
-		gvk = mm.extractGVK(k8sResource)
-		infos = append(infos, GatewayInfo{
-			gwKey: client.ObjectKeyFromObject(k8sResource),
-			//	gwKind:     gvk.Kind,
-			generation: k8sResource.GetGeneration(),
-		})
-	}
-
-	md := FrontendMetadata(infos, gvk.Kind, mm.linkID)
-	return md
-}
-
-func FrontendMetadata(infos []GatewayInfo, kind, linkID string) MetaData {
 	frontendMetadata := make(FrontendMetaData)
 
-	gatewayMetadata := make(map[string]K8sObjectInfo)
-	for _, info := range infos {
-		objInfo := K8sObjectInfo{
-			Generation: info.generation,
-			LinkID:     linkID,
+	for _, listener := range vListener.Listeners {
+		owner := mm.cs.OwnerK8sResource(listener)
+		if owner == nil {
+			continue
 		}
-		gatewayMetadata[info.gwKey.String()] = objInfo
+		kind := string(listener.OwnerKind)
+		if frontendMetadata[kind] == nil {
+			frontendMetadata[kind] = make(map[string]K8sObjectInfo)
+		}
+		frontendMetadata[kind][client.ObjectKeyFromObject(owner).String()] = K8sObjectInfo{
+			Generation: owner.GetGeneration(),
+			LinkID:     mm.linkID,
+		}
 	}
 
-	frontendMetadata[kind] = gatewayMetadata
-
 	md := make(MetaData)
-	// Gateway metatdata marshall/unmarshal
-	// This step is required to ensure that the metadata is in a format that is the same after the one returned from parsing out the metadata from configuration
+	// Marshal/unmarshal so the metadata has the same shape as the one parsed back out of
+	// the configuration.
 	o := make(map[string]any)
 	by, _ := json.Marshal(frontendMetadata)
 	_ = json.Unmarshal(by, &o)

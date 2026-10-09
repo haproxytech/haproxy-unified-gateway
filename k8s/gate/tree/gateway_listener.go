@@ -44,6 +44,12 @@ import (
 const (
 	kindGateway     gatewayv1.Kind = "Gateway"
 	kindListenerSet gatewayv1.Kind = "ListenerSet"
+
+	// OwnerKindGateway and OwnerKindListenerSet are the values a Listener's OwnerKind
+	// carries. Exported because a consumer of a listener -- the HAProxy apply feedback
+	// that stamps Programmed, for one -- has to name the resource that declares it.
+	OwnerKindGateway     = kindGateway
+	OwnerKindListenerSet = kindListenerSet
 )
 
 // Listener is a listener of the merged list of a Gateway: either one declared in

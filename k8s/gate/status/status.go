@@ -61,8 +61,8 @@ type StatusUpdater interface {
 	UpdateStatus(ctx context.Context, updates PreparedStatusUpdates)
 	// PrepareFeedbackStatusUpdate builds status updates for gateway listener
 	// Programmed conditions from the tree's current listener state (already
-	// updated by UpdateListenerProgrammedCondition). Only gateways present in
-	// result.GatewayObservedGenerations are updated.
+	// updated by UpdateListenerProgrammedConditions). Only gateways present in
+	// result.ObservedGenerations are updated.
 	PrepareFeedbackStatusUpdate(result diffs.HaproxyConfResult, gateways map[types.NamespacedName]*tree.Gateway) PreparedStatusUpdates
 	// PrepareIngressStatusUpdate builds status writes that set each eligible
 	// Ingress's status.loadBalancer.ingress to the controller addresses, and

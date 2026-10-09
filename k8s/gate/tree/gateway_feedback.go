@@ -24,59 +24,86 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// UpdateListenerProgrammedCondition updates the Programmed condition for all
-// listeners of the given gateway using the result of an HAProxy apply cycle.
-// The update is skipped for listeners whose current Programmed condition already
-// has a higher ObservedGeneration than observedGen (stale result guard).
+// ObservedOwner names a resource a frontend was programmed against: the Gateway it serves,
+// or the ListenerSet that declared one of the entries it serves.
+type ObservedOwner struct {
+	Kind gatewayv1.Kind
+	Key  types.NamespacedName
+}
+
+// ObservedGenerations maps each resource a frontend was programmed against to the
+// generation that programming was made from.
+type ObservedGenerations map[ObservedOwner]int64
+
+// UpdateListenerProgrammedConditions stamps the Programmed condition of every listener whose
+// declaring resource was programmed in this apply cycle, with the generation of that
+// resource.
+//
+// Each listener answers to the resource that declares it -- the Gateway for its own
+// listeners, the ListenerSet for the entries it contributed. The generation to report, and
+// the one the staleness guard compares, is therefore the owner's: a ListenerSet and its
+// parent Gateway have unrelated generation counters, and stamping an entry with the
+// Gateway's would publish an observedGeneration belonging to a resource that does not carry
+// the condition.
+//
 // Thread-safe: acquires the GateTree write lock.
 //
 // It takes a logger because it is the one condition writer with nowhere to put a
 // failure: it either writes the Programmed condition or leaves the previous one
 // alone, so a problem building that condition would otherwise leave no trace at
 // all.
-func (t *GateTree) UpdateListenerProgrammedCondition(logger *slog.Logger, gwKey types.NamespacedName, observedGen int64, applyErr error) {
+func (t *GateTree) UpdateListenerProgrammedConditions(logger *slog.Logger, observed ObservedGenerations, applyErr error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	gw, ok := t.Gateways[gwKey]
-	if !ok {
-		// Legitimately silent, unlike the error below: the feedback arrives after the
-		// apply, and the Gateway may have been deleted in between. There is nothing
-		// left to report a Programmed condition on.
-		return
-	}
-
 	condType := generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
-	newCond, err := buildListenerProgrammedCondition(observedGen, applyErr)
-	if err != nil {
-		// Leaving the existing condition alone is still the safe answer -- it says
-		// Pending, the truth of an unconfirmed apply, where a zero-valued condition
-		// would publish the empty Reason the API server rejects. But this path
-		// deliberately writes nothing, so unlike the checks it has no status to carry
-		// the gap: a listener would sit on Pending for ever with no trace anywhere.
-		// The log is the only channel left, and this is a programming error -- the
-		// verdict reported here is a constant of the conditions package -- so it is
-		// worth an error level.
-		logger.LogAttrs(context.Background(), slog.LevelError,
-			"Cannot report the HAProxy apply result on a Gateway's listeners",
-			logging.LogAttrKey(gwKey),
-			logging.LogAttrError(err),
-		)
-		return
-	}
 
-	for _, listener := range gw.Listeners {
-		// If the Listener was not accepted, then it was not Programmed.
-		if !listener.Valid {
+	conditions := make(map[ObservedOwner]generic.Condition, len(observed))
+	for owner, observedGen := range observed {
+		newCond, err := buildListenerProgrammedCondition(observedGen, applyErr)
+		if err != nil {
+			// Leaving the existing condition alone is still the safe answer -- it says
+			// Pending, the truth of an unconfirmed apply, where a zero-valued condition
+			// would publish the empty Reason the API server rejects. But this path
+			// deliberately writes nothing, so unlike the checks it has no status to carry
+			// the gap: a listener would sit on Pending for ever with no trace anywhere.
+			// The log is the only channel left, and this is a programming error -- the
+			// verdict reported here is a constant of the conditions package -- so it is
+			// worth an error level.
+			logger.LogAttrs(context.Background(), slog.LevelError,
+				"Cannot report the HAProxy apply result on a listener",
+				logging.LogAttrKey(owner.Key),
+				logging.LogAttrError(err),
+			)
 			continue
 		}
+		conditions[owner] = newCond
+	}
 
-		if existing, exists := listener.Conditions.GetCondition(condType); exists {
-			if observedGen < existing.ObservedGeneration {
-				continue // stale: a newer result already set this condition
-			}
+	for _, gw := range t.Gateways {
+		if gw == nil {
+			continue
 		}
-		listener.Conditions[condType] = newCond
+		for _, listener := range gw.Listeners {
+			// If the Listener was not accepted, then it was not Programmed.
+			if !listener.Valid {
+				continue
+			}
+
+			owner := ObservedOwner{Kind: listener.OwnerKind, Key: listener.Key().OwnerKey()}
+			newCond, programmed := conditions[owner]
+			if !programmed {
+				// Not part of this apply: never programmed from this result.
+				continue
+			}
+
+			if existing, exists := listener.Conditions.GetCondition(condType); exists {
+				if observed[owner] < existing.ObservedGeneration {
+					continue // stale: a newer result already set this condition
+				}
+			}
+			listener.Conditions[condType] = newCond
+		}
 	}
 }
 

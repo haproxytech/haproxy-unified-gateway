@@ -18,14 +18,17 @@ import (
 
 	"github.com/haproxytech/client-native/v6/models"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/metadata"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 func makeMetadata(gatewayEntries map[string]any) map[string]any {
+	return makeMetadataKinds(map[string]map[string]any{"Gateway": gatewayEntries})
+}
+
+func makeMetadataKinds(kinds map[string]map[string]any) map[string]any {
 	return map[string]any{
-		metadata.UnifiedGatewayMetaDataKey: map[string]any{
-			"Gateway": gatewayEntries,
-		},
+		metadata.UnifiedGatewayMetaDataKey: kinds,
 	}
 }
 
@@ -147,7 +150,15 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractGatewayGenerationsFromFrontend(tt.frontend)
+			all := make(tree.ObservedGenerations)
+			extractObservedGenerationsFromFrontend(tt.frontend, all)
+			// Every fixture above is Gateway-declared; the kinds are covered apart.
+			got := make(map[types.NamespacedName]int64)
+			for owner, gen := range all {
+				if owner.Kind == tree.OwnerKindGateway {
+					got[owner.Key] = gen
+				}
+			}
 			if len(got) != len(tt.want) {
 				t.Fatalf("got %d entries, want %d: got=%v want=%v", len(got), len(tt.want), got, tt.want)
 			}
@@ -162,5 +173,40 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A frontend records the generation of every resource its listeners answer to, under the
+// kind of the resource that declares them: the Gateway for its own listeners, the
+// ListenerSet for an entry it contributed. The two can share a name, so the kind is what
+// keeps their generations apart.
+func TestExtractObservedGenerationsKeepsEachDeclaringKind(t *testing.T) {
+	frontend := &models.Frontend{
+		Metadata: makeMetadataKinds(map[string]map[string]any{
+			"Gateway":     {"infra/shared": gatewayEntry(3, "link-1")},
+			"ListenerSet": {"infra/shared": gatewayEntry(11, "link-1")},
+		}),
+	}
+
+	got := make(tree.ObservedGenerations)
+	extractObservedGenerationsFromFrontend(frontend, got)
+
+	want := tree.ObservedGenerations{
+		{Kind: tree.OwnerKindGateway, Key: types.NamespacedName{Namespace: "infra", Name: "shared"}}:     3,
+		{Kind: tree.OwnerKindListenerSet, Key: types.NamespacedName{Namespace: "infra", Name: "shared"}}: 11,
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("got %d owners, want %d: got=%v want=%v", len(got), len(want), got, want)
+	}
+	for owner, wantGen := range want {
+		gotGen, ok := got[owner]
+		if !ok {
+			t.Errorf("missing owner %v in result", owner)
+			continue
+		}
+		if gotGen != wantGen {
+			t.Errorf("owner %v: got generation %d, want %d", owner, gotGen, wantGen)
+		}
 	}
 }

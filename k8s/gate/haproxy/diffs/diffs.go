@@ -21,7 +21,9 @@ import (
 	"github.com/haproxytech/client-native/v6/models"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/metadata"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/structured"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	"k8s.io/apimachinery/pkg/types"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type MergeStrategies struct {
@@ -29,15 +31,16 @@ type MergeStrategies struct {
 	Defaults string // override or append
 }
 
-// GatewayObservedGenerations maps each gateway (namespace/name) to the highest
-// observed generation seen in the processed frontends' metadata.
-type GatewayObservedGenerations map[types.NamespacedName]int64
+// ObservedGenerations maps each resource a frontend was programmed against to the highest
+// generation it was programmed from. It is the tree's type because the feedback that stamps a
+// listener's Programmed condition routes by the same (kind, key) pair.
+type ObservedGenerations = tree.ObservedGenerations
 
 // HaproxyConfResult is the outcome of a single HaproxyConfDiffs processing
 // cycle, sent back to the controller via HaproxyConfDiffs.ResultCh.
 type HaproxyConfResult struct {
-	Err                        error
-	GatewayObservedGenerations GatewayObservedGenerations
+	Err                 error
+	ObservedGenerations ObservedGenerations
 }
 
 type HaproxyConfDiffs struct {
@@ -64,67 +67,60 @@ func (c HaproxyConfDiffs) IsEmpty() bool {
 	return c.Created.IsEmpty() && c.Updated.IsEmpty() && c.Deleted.IsEmpty()
 }
 
-// GatewayObservedGenerations builds a map of gateway → max generation from
-// the metadata of all Created and Updated frontends. Deleted frontends are
-// excluded because their config is no longer active.
-func (c HaproxyConfDiffs) GatewayObservedGenerations() GatewayObservedGenerations {
-	result := make(GatewayObservedGenerations)
+// ObservedGenerations builds the per-resource generations from the metadata of all Created
+// and Updated frontends. Deleted frontends are excluded because their config is no longer
+// active.
+func (c HaproxyConfDiffs) ObservedGenerations() ObservedGenerations {
+	result := make(ObservedGenerations)
 	for _, fe := range c.Created.Frontends {
-		for key, gen := range extractGatewayGenerationsFromFrontend(fe) {
-			if existing, ok := result[key]; !ok || gen > existing {
-				result[key] = gen
-			}
-		}
+		extractObservedGenerationsFromFrontend(fe, result)
 	}
 	for _, fe := range c.Updated.Frontends {
-		for key, gen := range extractGatewayGenerationsFromFrontend(fe) {
-			if existing, ok := result[key]; !ok || gen > existing {
-				result[key] = gen
-			}
-		}
+		extractObservedGenerationsFromFrontend(fe, result)
 	}
 	return result
 }
 
-func extractGatewayGenerationsFromFrontend(fe *models.Frontend) map[types.NamespacedName]int64 {
-	result := make(map[types.NamespacedName]int64)
+// extractObservedGenerationsFromFrontend reads every kind a frontend records, keeping the
+// highest generation seen for each resource.
+func extractObservedGenerationsFromFrontend(fe *models.Frontend, into ObservedGenerations) {
 	if fe == nil || fe.Metadata == nil {
-		return result
+		return
 	}
 	hugI, ok := fe.Metadata[metadata.UnifiedGatewayMetaDataKey]
 	if !ok {
-		return result
+		return
 	}
 	by, err := json.Marshal(hugI)
 	if err != nil {
-		return result
+		return
 	}
-	// After the JSON round-trip in FrontendMetadata(), the structure is:
-	// { "Gateway": { "namespace/name": { "Generation": float64, "LinkID": string } } }
+	// After the JSON round-trip in FrontendMetaData(), the structure is:
+	// { "<kind>": { "namespace/name": { "Generation": float64, "LinkID": string } } }
 	var hugMeta map[string]map[string]map[string]any
 	if err := json.Unmarshal(by, &hugMeta); err != nil {
-		return result
+		return
 	}
-	gatewayMeta, ok := hugMeta["Gateway"]
-	if !ok {
-		return result
+	for kind, objects := range hugMeta {
+		for nsName, info := range objects {
+			genAny, ok := info["Generation"]
+			if !ok {
+				continue
+			}
+			genFloat, ok := genAny.(float64)
+			if !ok {
+				continue
+			}
+			nn := parseNamespacedName(nsName)
+			if nn == (types.NamespacedName{}) {
+				continue
+			}
+			owner := tree.ObservedOwner{Kind: gatewayv1.Kind(kind), Key: nn}
+			if existing, ok := into[owner]; !ok || int64(genFloat) > existing {
+				into[owner] = int64(genFloat)
+			}
+		}
 	}
-	for nsName, info := range gatewayMeta {
-		genAny, ok := info["Generation"]
-		if !ok {
-			continue
-		}
-		genFloat, ok := genAny.(float64)
-		if !ok {
-			continue
-		}
-		nn := parseNamespacedName(nsName)
-		if nn == (types.NamespacedName{}) {
-			continue
-		}
-		result[nn] = int64(genFloat)
-	}
-	return result
 }
 
 func parseNamespacedName(s string) types.NamespacedName {

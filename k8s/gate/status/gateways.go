@@ -30,12 +30,17 @@ import (
 
 // PrepareFeedbackStatusUpdate builds a PreparedStatusUpdates from the tree's
 // current gateway listener Programmed conditions. Only gateways present in
-// result.GatewayObservedGenerations are included; the listener conditions must
-// already have been updated via GateTree.UpdateListenerProgrammedCondition
-// before this is called.
+// result.ObservedGenerations are included; the listener conditions must already
+// have been updated via GateTree.UpdateListenerProgrammedConditions before this
+// is called. A ListenerSet entry's programmation is not published here: it
+// belongs to the ListenerSet status, which the pass that owns it writes.
 func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(result diffs.HaproxyConfResult, gateways map[types.NamespacedName]*tree.Gateway) PreparedStatusUpdates {
-	updates := make(PreparedStatusUpdates, 0, len(result.GatewayObservedGenerations))
-	for gwKey := range result.GatewayObservedGenerations {
+	updates := make(PreparedStatusUpdates, 0, len(result.ObservedGenerations))
+	for owner := range result.ObservedGenerations {
+		if owner.Kind != tree.OwnerKindGateway {
+			continue
+		}
+		gwKey := owner.Key
 		gw, ok := gateways[gwKey]
 		if !ok {
 			continue
@@ -44,7 +49,6 @@ func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(result diffs.HaproxyConf
 		if gw.GatewayForIngress {
 			continue
 		}
-		gwKey := gwKey
 		params := StatusUpdateParams[*gatewayv1.Gateway]{
 			Object:        objtypes.ObjectTypeGateway,
 			NsName:        gwKey,
