@@ -108,7 +108,7 @@ func newGatewayStatusPatcher(gw *tree.Gateway, addresses []gatewayv1.GatewayStat
 				Name:           listener.Name(),
 				Conditions:     conds,
 				SupportedKinds: kinds,
-				AttachedRoutes: int32(len(listener.AttachedRoutes)), // To be changed with the correct value
+				AttachedRoutes: int32(len(listener.AttachedRoutes)),
 			})
 		}
 	}

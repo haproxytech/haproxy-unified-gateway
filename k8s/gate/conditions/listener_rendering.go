@@ -177,10 +177,16 @@ var gatewayListenerVerdictsWithoutSpelling = map[ListenerConditionVerdict]struct
 }
 
 // listenerEntryVerdictsWithoutSpelling is the same declaration for the entry
-// vocabulary, empty so far: every verdict this controller concludes has an entry
-// reason. TooManyListeners will be the first the other way round -- a verdict only
-// an entry can carry.
-var listenerEntryVerdictsWithoutSpelling = map[ListenerConditionVerdict]struct{}{}
+// vocabulary: a verdict this vocabulary has no reason for.
+//
+// TooManyListeners is the mirror image -- a verdict only an entry can carry -- and is
+// not listed here: it is not this controller's to conclude yet.
+var listenerEntryVerdictsWithoutSpelling = map[ListenerConditionVerdict]struct{}{
+	// The API gives a Gateway's listeners UnsupportedValue for a protocol it serves
+	// in another form only (a TLS listener asking for a mode other than Passthrough)
+	// and gives entries no such reason: an entry has UnsupportedProtocol alone.
+	VerdictUnsupportedValue: {},
+}
 
 // listenerEntryConditionSpellings spells the verdicts in the vocabulary of the entries a
 // ListenerSet contributes, for its status.listeners[].conditions. Same values as
