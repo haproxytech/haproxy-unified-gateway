@@ -179,6 +179,27 @@ func TestComputeListenerConflicts(t *testing.T) {
 			},
 		},
 		{
+			// The conformance manifest listenerset-protocol-conflict: two TCP entries
+			// declare the same port with no hostname, on a port an HTTP listener has
+			// already claimed. TCP carries no hostname, so the second conflicts on its
+			// protocol only -- not on both, which is what made the suite report
+			// ListenerConflict where it expects ProtocolConflict.
+			name: "No hostname conflict on a protocol that has no hostname",
+			gateways: []*Gateway{
+				mkGateway(
+					"gw1", t1,
+					mkListener("http", 80, gatewayv1.HTTPProtocolType, nil),
+					mkListener("tcp-1", 80, gatewayv1.TCPProtocolType, nil),
+					mkListener("tcp-2", 80, gatewayv1.TCPProtocolType, nil),
+				),
+			},
+			expected: map[string]conflictKinds{
+				"default/gw1_http":  noConflict,
+				"default/gw1_tcp-1": conflictOnProtocol,
+				"default/gw1_tcp-2": conflictOnProtocol,
+			},
+		},
+		{
 			name: "No Conflict - empty hostname coexists with specific hostname (catch-all + specific)",
 			gateways: []*Gateway{
 				mkGateway(

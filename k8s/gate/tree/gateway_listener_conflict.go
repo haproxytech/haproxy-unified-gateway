@@ -241,11 +241,21 @@ type hostnameClaim struct {
 // pass, so no protocol verdict can be overwritten here -- which is the other half
 // of why the exclusion could go: dropping it without making the earlier pass the
 // builder would have had this one reset the verdicts it just recorded.
+//
+// Listeners on a protocol that carries no hostname take no claim at all. Their
+// hostname field is empty by requirement, not by choice, so two of them on one port
+// are indistinguishable for a reason that is not a hostname -- reporting them as a
+// hostname conflict turned an ordinary protocol conflict into ListenerConflict for
+// the conformance suite, which reports the protocol reason for exactly that
+// manifest.
 func (b *GatewayBuilderImpl) detectHostnameConflicts(listenersByPort map[gatewayv1.PortNumber][]*Listener) {
 	claimed := make(map[hostnameClaim]struct{})
 
 	for port, listeners := range listenersByPort {
 		for _, listener := range listeners {
+			if !protocols.CarriesHostname(listener.Protocol()) {
+				continue
+			}
 			claim := hostnameClaim{
 				port: port,
 				// The Gateway the listener is served on, not the resource declaring

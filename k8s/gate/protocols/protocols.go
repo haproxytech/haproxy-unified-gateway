@@ -36,3 +36,20 @@ var ProtocolCategories = map[gatewayv1.ProtocolType]ProtocolCategory{
 	gatewayv1.TCPProtocolType:   ProcotolCategoryTCP,
 	gatewayv1.UDPProtocolType:   ProcotolCategoryUDP,
 }
+
+// protocolsCarryingHostname are the protocols whose listeners may claim a hostname.
+// The API admits the field on these only: on TCP and UDP it must be empty, so there
+// is nothing there for a hostname conflict to be about.
+var protocolsCarryingHostname = map[gatewayv1.ProtocolType]struct{}{
+	gatewayv1.HTTPProtocolType:  {},
+	gatewayv1.HTTPSProtocolType: {},
+	gatewayv1.TLSProtocolType:   {},
+}
+
+// CarriesHostname reports whether a listener's hostname means anything on this
+// protocol. A predicate rather than the set, because a reader asking the question
+// should not have to know that absence from the set means "no".
+func CarriesHostname(protocol gatewayv1.ProtocolType) bool {
+	_, ok := protocolsCarryingHostname[protocol]
+	return ok
+}
