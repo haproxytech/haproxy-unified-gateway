@@ -29,12 +29,18 @@ import (
 )
 
 // PrepareFeedbackStatusUpdate builds a PreparedStatusUpdates from the tree's
-// current gateway listener Programmed conditions. Only gateways present in
-// result.ObservedGenerations are included; the listener conditions must already
-// have been updated via GateTree.UpdateListenerProgrammedConditions before this
-// is called. A ListenerSet entry's programmation is not published here: it
-// belongs to the ListenerSet status, which the pass that owns it writes.
-func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(result diffs.HaproxyConfResult, gateways map[types.NamespacedName]*tree.Gateway) PreparedStatusUpdates {
+// current listener Programmed conditions. Only the resources present in
+// result.ObservedGenerations are included, each published on the object that carries its
+// conditions: the Gateway for its own listeners, the ListenerSet for the entries it
+// contributed -- whose programmation is reported nowhere else, since the periodic pass
+// runs before the apply. The conditions must already have been updated via
+// GateTree.UpdateListenerProgrammedConditions before this is called.
+func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(
+	ctx context.Context,
+	result diffs.HaproxyConfResult,
+	gateways map[types.NamespacedName]*tree.Gateway,
+	listenerSets map[types.NamespacedName]*tree.ListenerSet,
+) PreparedStatusUpdates {
 	updates := make(PreparedStatusUpdates, 0, len(result.ObservedGenerations))
 	for owner := range result.ObservedGenerations {
 		if owner.Kind != tree.OwnerKindGateway {
@@ -85,6 +91,21 @@ func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(result diffs.HaproxyConf
 			}
 		})
 	}
+
+	// An entry's Programmed condition is published in its ListenerSet's status.listeners, and
+	// the periodic pass ran before the apply: republish the ListenerSets this apply programmed,
+	// or the fresh verdict would wait for an unrelated event to be written.
+	observedListenerSets := make(map[types.NamespacedName]*tree.ListenerSet)
+	for owner := range result.ObservedGenerations {
+		if owner.Kind != tree.OwnerKindListenerSet {
+			continue
+		}
+		if ls, ok := listenerSets[owner.Key]; ok {
+			observedListenerSets[owner.Key] = ls
+		}
+	}
+	updates = append(updates, s.prepareListenerSetUpdates(ctx, observedListenerSets)...)
+
 	return updates
 }
 

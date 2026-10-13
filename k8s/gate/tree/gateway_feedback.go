@@ -15,6 +15,7 @@ package tree
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions"
@@ -56,79 +57,129 @@ func (t *GateTree) UpdateListenerProgrammedConditions(logger *slog.Logger, obser
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	condType := generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
-
-	conditions := make(map[ObservedOwner]generic.Condition, len(observed))
-	for owner, observedGen := range observed {
-		newCond, err := buildListenerProgrammedCondition(observedGen, applyErr)
-		if err != nil {
-			// Leaving the existing condition alone is still the safe answer -- it says
-			// Pending, the truth of an unconfirmed apply, where a zero-valued condition
-			// would publish the empty Reason the API server rejects. But this path
-			// deliberately writes nothing, so unlike the checks it has no status to carry
-			// the gap: a listener would sit on Pending for ever with no trace anywhere.
-			// The log is the only channel left, and this is a programming error -- the
-			// verdict reported here is a constant of the conditions package -- so it is
-			// worth an error level.
-			logger.LogAttrs(context.Background(), slog.LevelError,
-				"Cannot report the HAProxy apply result on a listener",
-				logging.LogAttrKey(owner.Key),
-				logging.LogAttrError(err),
-			)
-			continue
-		}
-		conditions[owner] = newCond
+	if len(observed) == 0 {
+		// Nothing was programmed: no listener owes a condition, and the roll-ups the verdict
+		// pass took are still true.
+		return
 	}
 
-	for _, gw := range t.Gateways {
-		if gw == nil {
-			continue
-		}
-		for _, listener := range gw.Listeners {
+	for owner, observedGen := range observed {
+		// Resolve what the owner declares rather than walking the tree: the observed owners
+		// are the frontends this apply wrote, a handful, while the tree holds every Gateway
+		// the controller serves.
+		t.forEachListenerDeclaredBy(owner, func(listener *Listener) {
 			// If the Listener was not accepted, then it was not Programmed.
 			if !listener.Valid {
-				continue
+				return
 			}
 
-			owner := ObservedOwner{Kind: listener.OwnerKind, Key: listener.Key().OwnerKey()}
-			newCond, programmed := conditions[owner]
-			if !programmed {
-				// Not part of this apply: never programmed from this result.
-				continue
+			newCond, err := listenerProgrammedCondition(listener, observedGen, applyErr)
+			if err != nil {
+				// Leaving the existing condition alone is still the safe answer -- it says
+				// Pending, the truth of an unconfirmed apply, where a zero-valued condition
+				// would publish the empty Reason the API server rejects. But this path
+				// deliberately writes nothing, so unlike the checks it has no status to carry
+				// the gap: a listener would sit on Pending for ever with no trace anywhere.
+				// The log is the only channel left, and this is a programming error -- the
+				// verdict reported here is a constant of the conditions package -- so it is
+				// worth an error level.
+				logger.LogAttrs(context.Background(), slog.LevelError,
+					"Cannot report the HAProxy apply result on a listener",
+					logging.LogAttrKey(owner.Key),
+					logging.LogAttrError(err),
+				)
+				return
 			}
 
-			if existing, exists := listener.Conditions.GetCondition(condType); exists {
-				if observed[owner] < existing.ObservedGeneration {
-					continue // stale: a newer result already set this condition
+			if existing, exists := listener.Conditions.GetCondition(newCond.Type); exists {
+				if observedGen < existing.ObservedGeneration {
+					return // stale: a newer result already set this condition
 				}
 			}
-			listener.Conditions[condType] = newCond
+			listener.Conditions[newCond.Type] = newCond
+		})
+	}
+
+	// The entries a ListenerSet publishes roll up the conditions just stamped, so the
+	// roll-up has to be taken again: the one the verdict pass left was computed before the
+	// apply, and publishing it now would report the Pending the apply has answered.
+	t.refreshListenerSetVerdicts()
+}
+
+// forEachListenerDeclaredBy calls fn for every listener the owner declares: a Gateway's own
+// listeners, or the entries a ListenerSet contributed to its parent's merged list.
+//
+// Reading the owner's listeners rather than scanning the tree is what keeps the feedback
+// proportional to what was programmed -- the observed owners are the frontends the apply
+// wrote, while the tree holds every Gateway the controller serves.
+func (t *GateTree) forEachListenerDeclaredBy(owner ObservedOwner, fn func(*Listener)) {
+	if owner.Kind == OwnerKindListenerSet {
+		treeLs := t.ListenerSets[owner.Key]
+		if treeLs == nil || treeLs.K8sResource == nil {
+			return
 		}
+		gwKey, namesGateway := parentGatewayKey(treeLs.K8sResource)
+		if !namesGateway {
+			return
+		}
+		forEachListenerDeclaredByListenerSet(t.Gateways[gwKey], owner.Key, fn)
+		return
+	}
+
+	treeGw := t.Gateways[owner.Key]
+	if treeGw == nil {
+		return
+	}
+	for _, listener := range treeGw.Listeners {
+		if listener.FromListenerSet() {
+			continue
+		}
+		fn(listener)
 	}
 }
 
-// RLockGateways acquires a read lock on the GateTree and returns the Gateways
-// map. The caller must call RUnlockGateways when done reading.
-func (t *GateTree) RLockGateways() map[types.NamespacedName]*Gateway {
+// RLockFeedbackView acquires a read lock on the GateTree and returns the collections the
+// apply feedback resolves its observed owners against. The caller must call
+// RUnlockFeedbackView when done reading.
+//
+// Both maps under one lock: taking a second read lock while the first is held can deadlock
+// against a waiting writer, so the pair comes back together.
+func (t *GateTree) RLockFeedbackView() (map[types.NamespacedName]*Gateway, map[types.NamespacedName]*ListenerSet) {
 	t.mu.RLock()
-	return t.Gateways
+	return t.Gateways, t.ListenerSets
 }
 
-// RUnlockGateways releases the read lock acquired by RLockGateways.
-func (t *GateTree) RUnlockGateways() {
+// RUnlockFeedbackView releases the read lock acquired by RLockFeedbackView.
+func (t *GateTree) RUnlockFeedbackView() {
 	t.mu.RUnlock()
 }
 
-func buildListenerProgrammedCondition(observedGen int64, applyErr error) (generic.Condition, error) {
-	if applyErr == nil {
-		return conditions.NewGatewayListenerProgrammedCondition("", observedGen, true)
+// listenerProgrammedCondition builds the Programmed condition an apply cycle owes a
+// listener, in that listener's own vocabulary.
+//
+// An entry's condition is published in its ListenerSet's status and spelled with the entry
+// type and reason; a Gateway listener's with the Gateway's. The spelling is what the
+// listener already knows about itself -- the same table the checks go through -- so the
+// verdict is rendered through conditionsFor rather than through a constructor that would
+// fix the Gateway vocabulary for every listener.
+func listenerProgrammedCondition(listener *Listener, observedGen int64, applyErr error) (generic.Condition, error) {
+	verdict := conditions.VerdictProgrammed
+	msg := ""
+	if applyErr != nil {
+		verdict = conditions.VerdictNotProgrammable
+		msg = applyErr.Error()
+		// Current MaxLength of the Message field in a Condition is 32768 characters.
+		// Truncate if necessary to avoid issues with Kubernetes API rejections.
+		const maxLen = 32768
+		if len(msg) > maxLen {
+			msg = msg[:maxLen]
+		}
 	}
-	msg := applyErr.Error()
-	// Current MaxLength of the Message field in a Condition is 32768 characters.
-	// Truncate if necessary to avoid issues with Kubernetes API rejections.
-	const maxLen = 32768
-	if len(msg) > maxLen {
-		msg = msg[:maxLen]
+
+	rendered := listener.conditionsFor(verdict, msg)
+	for _, condition := range rendered {
+		condition.ObservedGeneration = observedGen
+		return condition, nil
 	}
-	return conditions.NewGatewayListenerProgrammedCondition(msg, observedGen, false)
+	return generic.Condition{}, fmt.Errorf("no condition rendered for verdict %s", verdict)
 }

@@ -351,9 +351,9 @@ func (h *eventHandlerImpl) forwardFeedback(ctx context.Context, resultCh chan di
 		h.logger.LogAttrs(ctx, slog.LevelInfo, "[received] HUG => CONTROLLER: haproxy conf update result ", slog.Any("result", result))
 		gatetree := h.treeBuilder.GetTree()
 		gatetree.UpdateListenerProgrammedConditions(h.logger, result.ObservedGenerations, result.Err)
-		gateways := gatetree.RLockGateways()
-		updates := h.statusUpdater.PrepareFeedbackStatusUpdate(result, gateways)
-		gatetree.RUnlockGateways()
+		gateways, listenerSets := gatetree.RLockFeedbackView()
+		updates := h.statusUpdater.PrepareFeedbackStatusUpdate(ctx, result, gateways, listenerSets)
+		gatetree.RUnlockFeedbackView()
 		h.statusUpdater.UpdateStatus(ctx, updates)
 	case <-time.After(forwardFeedbackTimeout):
 		// TODO: check with the team

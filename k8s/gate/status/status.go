@@ -59,11 +59,16 @@ type StatusUpdater interface {
 	// UpdateStatus dispatches a previously prepared batch of writes to the
 	// background goroutine. Any stale pending batch is replaced by the new one.
 	UpdateStatus(ctx context.Context, updates PreparedStatusUpdates)
-	// PrepareFeedbackStatusUpdate builds status updates for gateway listener
-	// Programmed conditions from the tree's current listener state (already
-	// updated by UpdateListenerProgrammedConditions). Only gateways present in
-	// result.ObservedGenerations are updated.
-	PrepareFeedbackStatusUpdate(result diffs.HaproxyConfResult, gateways map[types.NamespacedName]*tree.Gateway) PreparedStatusUpdates
+	// PrepareFeedbackStatusUpdate builds status updates for the Programmed conditions of the
+	// listeners the apply reported (already updated by UpdateListenerProgrammedConditions):
+	// the Gateway's own listeners on the Gateway, the entries on their ListenerSet. Only the
+	// resources present in result.ObservedGenerations are updated.
+	PrepareFeedbackStatusUpdate(
+		ctx context.Context,
+		result diffs.HaproxyConfResult,
+		gateways map[types.NamespacedName]*tree.Gateway,
+		listenerSets map[types.NamespacedName]*tree.ListenerSet,
+	) PreparedStatusUpdates
 	// PrepareIngressStatusUpdate builds status writes that set each eligible
 	// Ingress's status.loadBalancer.ingress to the controller addresses, and
 	// clears it for ineligible ones. It is a no-op when Ingress status updates

@@ -54,13 +54,29 @@ func NewListenerSetVerdictBuilder(controllerStore *ControllerStore) Builder {
 // --------------------
 
 func (b *ListenerSetVerdictBuilder) ComputeTreeUpdates() {
-	// The count is a roll-up over every ListenerSet of the tree, so it is cleared
-	// before the roll-up rather than patched up: a ListenerSet deleted this cycle
-	// contributes nothing and must not leave its contribution behind in the count.
-	b.resetAttachedListenerSetCounts()
+	b.GateTree.refreshListenerSetVerdicts()
+}
 
-	for _, treeLs := range b.GateTree.ListenerSets {
-		b.computeListenerSetVerdict(treeLs)
+// refreshListenerSetVerdicts re-derives every ListenerSet's entries, its own conditions, and
+// its parent Gateway's attachedListenerSets count, from the listeners it contributed.
+//
+// It is what the verdict pass runs once per cycle, and what the apply feedback runs again
+// after stamping the Programmed conditions the entries roll up: the entries are built from
+// the listeners' conditions, so a roll-up taken before the apply would publish a Pending
+// that the apply has already answered.
+//
+// The count is a roll-up over every ListenerSet of the tree, so it is cleared before the
+// roll-up rather than patched up: a ListenerSet deleted this cycle contributes nothing and
+// must not leave its contribution behind in the count.
+func (g *GateTree) refreshListenerSetVerdicts() {
+	for _, treeGw := range g.Gateways {
+		if treeGw != nil {
+			treeGw.AttachedListenerSets = 0
+		}
+	}
+
+	for _, treeLs := range g.ListenerSets {
+		computeListenerSetVerdict(g, treeLs)
 	}
 }
 
@@ -68,17 +84,9 @@ func (b *ListenerSetVerdictBuilder) ComputeTreeUpdates() {
 // deleted, by the contribution pass, which is the one that puts them in the tree.
 func (*ListenerSetVerdictBuilder) CleanTreeUpdates() {}
 
-func (b *ListenerSetVerdictBuilder) resetAttachedListenerSetCounts() {
-	for _, treeGw := range b.GateTree.Gateways {
-		if treeGw != nil {
-			treeGw.AttachedListenerSets = 0
-		}
-	}
-}
-
 // computeListenerSetVerdict settles a ListenerSet's own conditions, its per-entry
 // status records, and its parent Gateway's attachedListenerSets.
-func (b *ListenerSetVerdictBuilder) computeListenerSetVerdict(treeLs *ListenerSet) {
+func computeListenerSetVerdict(gates *GateTree, treeLs *ListenerSet) {
 	if treeLs == nil {
 		return
 	}
@@ -118,7 +126,7 @@ func (b *ListenerSetVerdictBuilder) computeListenerSetVerdict(treeLs *ListenerSe
 		return
 	}
 
-	parentGw := b.parentGatewayOf(treeLs)
+	parentGw := parentGatewayOf(gates, treeLs)
 	if parentGw == nil || !conditionStatusIs(
 		parentGw.Conditions, string(gatewayv1.GatewayConditionAccepted), metav1.ConditionTrue,
 	) {
@@ -149,12 +157,12 @@ func (b *ListenerSetVerdictBuilder) computeListenerSetVerdict(treeLs *ListenerSe
 // A read, not a decision: the attachment was settled by the contribution pass, and
 // the key it used was recorded on the listener keys themselves. Re-deriving it here
 // would be a second place to keep in agreement with the first.
-func (b *ListenerSetVerdictBuilder) parentGatewayOf(treeLs *ListenerSet) *Gateway {
+func parentGatewayOf(gates *GateTree, treeLs *ListenerSet) *Gateway {
 	gwKey, namesGateway := parentGatewayKey(treeLs.K8sResource)
 	if !namesGateway {
 		return nil
 	}
-	return b.GateTree.Gateways[gwKey]
+	return gates.Gateways[gwKey]
 }
 
 // listenerSetEntryRollUp is what a ListenerSet's own conditions are derived from:
@@ -180,11 +188,7 @@ type listenerSetEntryRollUp struct {
 func rollUpListenerSetEntries(parentGw *Gateway, lsKey client.ObjectKey, ownerGeneration int64) listenerSetEntryRollUp {
 	var rollUp listenerSetEntryRollUp
 
-	for _, listener := range parentGw.Listeners {
-		if listener.Key().ListenerSetKey != lsKey {
-			continue
-		}
-
+	forEachListenerDeclaredByListenerSet(parentGw, lsKey, func(listener *Listener) {
 		rollUp.total++
 		if listener.Accepted {
 			rollUp.accepted++
@@ -204,9 +208,27 @@ func rollUpListenerSetEntries(parentGw *Gateway, lsKey client.ObjectKey, ownerGe
 			SupportedKinds: listener.AllowedRouteKinds,
 			AttachedRoutes: int32(len(listener.AttachedRoutes)),
 		})
-	}
+	})
 
 	return rollUp
+}
+
+// forEachListenerDeclaredByListenerSet walks the listeners a Gateway's merged list holds for
+// one ListenerSet, in that list's order: the Gateway's own listeners first, then ListenerSets
+// oldest first, and so spec order within this one.
+//
+// It selects on the declaring resource, not on a purpose: what a caller does with the walk --
+// roll the entries up, stamp a condition, or anything else -- is the caller's business.
+func forEachListenerDeclaredByListenerSet(parentGw *Gateway, lsKey client.ObjectKey, fn func(*Listener)) {
+	if parentGw == nil {
+		return
+	}
+	for _, listener := range parentGw.Listeners {
+		if listener.Key().ListenerSetKey != lsKey {
+			continue
+		}
+		fn(listener)
+	}
 }
 
 // rollUpListenerSetVerdict derives the ListenerSet's own Accepted and Programmed
