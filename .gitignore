@@ -16,4 +16,5 @@ ci/k0s/k0s-data/
 test/conformance/conformance-report.yaml
 conformance-junit.xml
 conformance-junit.html
+conformance-runs/
 gitlab-mr-checker

@@ -535,40 +535,62 @@ tasks:
           TOOL: GOTESTSUM
     vars:
       FORMAT: '{{default "testdox" .FORMAT}}'
-      CONFORMANCE_REPORT_OUTPUT: '{{default "conformance-report.yaml" .CONFORMANCE_REPORT_OUTPUT}}'
-      CONFORMANCE_JUNIT_OUTPUT: '{{default "conformance-junit.xml" .CONFORMANCE_JUNIT_OUTPUT}}'
-      CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "conformance-junit.html" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
+      # Left empty on purpose: the run directory resolved below is what names the three outputs,
+      # and a caller that pins one of them -- CI does, because its diff job fetches the previous
+      # run by artifact name -- keeps its own path.
+      CONFORMANCE_OUTPUT_DIR: '{{default "" .CONFORMANCE_OUTPUT_DIR}}'
+      CONFORMANCE_REPORT_OUTPUT: '{{default "" .CONFORMANCE_REPORT_OUTPUT}}'
+      CONFORMANCE_JUNIT_OUTPUT: '{{default "" .CONFORMANCE_JUNIT_OUTPUT}}'
+      CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
       CONFORMANCE_RUN_TEST: '{{default "" .CONFORMANCE_RUN_TEST}}'
       CONFORMANCE_SKIP_TESTS: '{{default "" .CONFORMANCE_SKIP_TESTS}}'
       SEQUENTIAL: '{{default "false" .SEQUENTIAL}}'
     cmds:
       - |
-        if CONFORMANCE_REPORT_OUTPUT={{.CONFORMANCE_REPORT_OUTPUT}} \
+        # Every run keeps its own directory. A campaign takes minutes and its report is the only
+        # record of it, so a later run must not be able to overwrite an earlier one.
+        RUN_DIR="{{.CONFORMANCE_OUTPUT_DIR}}"
+        [ -n "$RUN_DIR" ] || RUN_DIR="conformance-runs/$(date +%Y%m%dT%H%M%S)"
+        mkdir -p "$RUN_DIR"
+
+        REPORT="{{.CONFORMANCE_REPORT_OUTPUT}}"
+        [ -n "$REPORT" ] || REPORT="$RUN_DIR/conformance-report.yaml"
+        JUNIT="{{.CONFORMANCE_JUNIT_OUTPUT}}"
+        [ -n "$JUNIT" ] || JUNIT="$RUN_DIR/conformance-junit.xml"
+        JUNIT_HTML="{{.CONFORMANCE_JUNIT_HTML_OUTPUT}}"
+        [ -n "$JUNIT_HTML" ] || JUNIT_HTML="$RUN_DIR/conformance-junit.html"
+        echo "Conformance run directory: $RUN_DIR"
+
+        if CONFORMANCE_REPORT_OUTPUT="$REPORT" \
           $(check-go-tool {{.GOTESTSUM}}) \
             --format-icons=hivis \
             --format={{.FORMAT}} \
             --format-hide-empty-pkg \
-            --junitfile {{.CONFORMANCE_JUNIT_OUTPUT}} \
+            --junitfile "$JUNIT" \
             -- ./test/conformance/ \
               -count=1 \
               -tags=conformance \
               -timeout 60m \
               -v \
               {{if eq .SEQUENTIAL "true"}}-p 1{{end}}\
-              -failfast \
               {{if .CONFORMANCE_RUN_TEST}}-run-test '{{.CONFORMANCE_RUN_TEST}}'{{end}} \
               {{if .CONFORMANCE_SKIP_TESTS}}-skip-tests '{{.CONFORMANCE_SKIP_TESTS}}'{{end}}; then
           RUN_STATUS=0
         else
           RUN_STATUS=1
         fi
-        go run ./cmd/junit-report/main.go {{.CONFORMANCE_JUNIT_OUTPUT}} {{.CONFORMANCE_JUNIT_HTML_OUTPUT}} || true
+        go run ./cmd/junit-report/main.go "$JUNIT" "$JUNIT_HTML" || true
         exit ${RUN_STATUS}
 
   conformance-report:
-    desc: "print passed/skipped/failed summary from a JUnit XML report"
+    desc: "print passed/skipped/failed summary from a JUnit XML report (defaults to the most recent local run)"
     vars:
-      CONFORMANCE_JUNIT_OUTPUT: '{{default "conformance-junit.xml" .CONFORMANCE_JUNIT_OUTPUT}}'
-      CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "conformance-junit.html" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
+      CONFORMANCE_JUNIT_OUTPUT: '{{default "" .CONFORMANCE_JUNIT_OUTPUT}}'
+      CONFORMANCE_JUNIT_HTML_OUTPUT: '{{default "" .CONFORMANCE_JUNIT_HTML_OUTPUT}}'
     cmds:
-      - go run ./cmd/junit-report/main.go {{.CONFORMANCE_JUNIT_OUTPUT}} {{.CONFORMANCE_JUNIT_HTML_OUTPUT}}
+      - |
+        JUNIT="{{.CONFORMANCE_JUNIT_OUTPUT}}"
+        [ -n "$JUNIT" ] || JUNIT="$(ls -1dt conformance-runs/*/ 2>/dev/null | head -1)conformance-junit.xml"
+        HTML="{{.CONFORMANCE_JUNIT_HTML_OUTPUT}}"
+        [ -n "$HTML" ] || HTML="$(dirname "$JUNIT")/conformance-junit.html"
+        go run ./cmd/junit-report/main.go "$JUNIT" "$HTML"

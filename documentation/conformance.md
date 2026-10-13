@@ -99,6 +99,7 @@ The conformance report is the artifact implementations submit to the upstream
 | `CONFORMANCE_REPORT_OUTPUT` | `conformance-report.yaml` | Path for the conformance report |
 | `HUG_GATEWAY_CLASS` | `haproxy` | GatewayClass name used in tests |
 | `HUG_TEST_LISTENERSET` | _(unset)_ | Set to `1` to declare `SupportListenerSet` and enroll the ListenerSet tests |
+| `CONFORMANCE_OUTPUT_DIR` | `conformance-runs/<timestamp>` | Directory a local run writes its three reports to, so a run never overwrites an earlier one |
 
 ---
 
