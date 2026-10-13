@@ -176,6 +176,8 @@ func TestListenerSetVerdictAttachment(t *testing.T) {
 
 		programmed := conditionOf(t, treeLs.Conditions, string(gatewayv1.ListenerSetConditionProgrammed))
 		assert.Equal(t, metav1.ConditionFalse, programmed.Status)
+		assert.Equal(t, string(gatewayv1.ListenerSetReasonNotAllowed), programmed.Reason,
+			"a policy refusal is not a malformed ListenerSet: Programmed must carry the same reason as Accepted")
 
 		assert.Empty(t, treeLs.Entries)
 		assert.Zero(t, f.gw.AttachedListenerSets)

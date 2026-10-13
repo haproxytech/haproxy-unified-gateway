@@ -115,7 +115,7 @@ func computeListenerSetVerdict(gates *GateTree, treeLs *ListenerSet) {
 
 	if treeLs.Attachment == attachmentNotAllowed {
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetAcceptedNotAllowed())
-		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedInvalid())
+		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedNotAllowed())
 		return
 	}
 	if treeLs.Attachment != attachmentAllowed {

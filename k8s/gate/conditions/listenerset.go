@@ -160,14 +160,19 @@ func NewListenerSetProgrammedListenersNotValid() generic.Conditions {
 	)
 }
 
-// NewListenerSetProgrammedInvalid is the ListenerSet being refused before it could
-// be programmed. The API names no Programmed reason specific to a policy refusal,
-// so the generic Invalid is the closest word it offers.
-func NewListenerSetProgrammedInvalid() generic.Conditions {
+// NewListenerSetProgrammedNotAllowed is the parent Gateway refusing this ListenerSet
+// through its allowedListeners policy, so there is nothing to program.
+//
+// The API's list of Programmed reasons does not enumerate NotAllowed -- it names
+// Invalid, ParentNotProgrammed, ListenersNotValid and PortUnavailable -- but it
+// explicitly lets a controller raise the condition with other reasons, and the
+// conformance suite requires NotAllowed here, on both conditions. Invalid would also
+// read as a malformed ListenerSet, which a policy refusal is not.
+func NewListenerSetProgrammedNotAllowed() generic.Conditions {
 	return listenerSetConditions(
 		gatewayv1.ListenerSetConditionProgrammed,
 		metav1.ConditionFalse,
-		gatewayv1.ListenerSetReasonInvalid,
-		"ListenerSet is not programmed",
+		gatewayv1.ListenerSetReasonNotAllowed,
+		"ListenerSet is not allowed by the parent Gateway's allowedListeners policy",
 	)
 }
