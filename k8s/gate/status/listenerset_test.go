@@ -257,6 +257,87 @@ func TestListenerSetStatusPatcher_PublishesTheTreeVerdict(t *testing.T) {
 	require.Equal(t, int64(7), ls.Status.Conditions[0].ObservedGeneration)
 }
 
+// The ListenerSets a status test works with: the Gateway that allows them, one that does not,
+// and the ListenerSet naming either.
+const (
+	statusTestGatewayNamespace = "infra"
+	statusTestGatewayName      = "gw"
+	statusTestForeignGateway   = "not-ours"
+	statusTestListenerSetName  = "ls"
+	statusTestListenerSetEntry = "http"
+)
+
+func newStatusTestControllerStore(t *testing.T) *tree.ControllerStore {
+	t.Helper()
+	gwKey := types.NamespacedName{Namespace: statusTestGatewayNamespace, Name: statusTestGatewayName}
+	from := gatewayv1.NamespacesFromAll
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name},
+		Spec: gatewayv1.GatewaySpec{
+			GatewayClassName: "hug",
+			AllowedListeners: &gatewayv1.AllowedListeners{
+				Namespaces: &gatewayv1.ListenerNamespaces{From: &from},
+			},
+		},
+	}
+	return &tree.ControllerStore{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		ClusterStore: &store.ClusterStore{
+			Gateways:     map[types.NamespacedName]*gatewayv1.Gateway{gwKey: gw},
+			ListenerSets: map[types.NamespacedName]*gatewayv1.ListenerSet{},
+			Namespaces:   map[types.NamespacedName]*corev1.Namespace{},
+			Updates:      store.NewClusterUpdates(),
+		},
+		GateTree: &tree.GateTree{
+			Gateways:       map[types.NamespacedName]*tree.Gateway{},
+			GatewayClasses: map[types.NamespacedName]*tree.GatewayClass{{Name: "hug"}: {}},
+			ListenerSets:   map[types.NamespacedName]*tree.ListenerSet{},
+		},
+	}
+}
+
+// attachedStatusTestListenerSet drives the contribution pass for one ListenerSet naming
+// parentName, and returns its tree node. The attachment decision is the pass's and not the
+// fixture's: a test that wrote the field itself would still pass if the guard stopped reading
+// it.
+func attachedStatusTestListenerSet(t *testing.T, parentName string) *tree.ListenerSet {
+	t.Helper()
+	controllerStore := newStatusTestControllerStore(t)
+	lsKey := types.NamespacedName{Namespace: "tenant", Name: statusTestListenerSetName}
+	k8sLs := &gatewayv1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{Namespace: lsKey.Namespace, Name: lsKey.Name},
+		Spec: gatewayv1.ListenerSetSpec{
+			ParentRef: gatewayv1.ParentGatewayReference{
+				Name:      gatewayv1.ObjectName(parentName),
+				Namespace: pointerTo(gatewayv1.Namespace(statusTestGatewayNamespace)),
+			},
+			Listeners: []gatewayv1.ListenerEntry{{
+				Name: statusTestListenerSetEntry, Port: 8080, Protocol: gatewayv1.HTTPProtocolType,
+			}},
+		},
+	}
+	controllerStore.ClusterStore.Updates.ListenerSets[lsKey] = store.Update[*gatewayv1.ListenerSet]{
+		Status:    store.StatusUpserted,
+		NewObject: k8sLs,
+	}
+	builder := &tree.ListenerSetContributionBuilder{ControllerStore: controllerStore}
+	builder.ComputeTreeUpdates()
+
+	require.Contains(t, controllerStore.GateTree.ListenerSets, lsKey)
+	return controllerStore.GateTree.ListenerSets[lsKey]
+}
+
+func newStatusTestUpdater(t *testing.T) *StatusUpdaterImpl {
+	t.Helper()
+	return &StatusUpdaterImpl{
+		config: StatusUpdaterConf{
+			logger:     slog.Default(),
+			client:     fake.NewClientBuilder().Build(),
+			extractGVK: testExtractGVK,
+		},
+	}
+}
+
 // staleCountTestUpdater is a status updater over a client that carries a status
 // subresource for both objects the Gateway pass writes, so a test can read back what was
 // published. It is built here rather than reusing the pass's own fixture helper: this test
@@ -337,109 +418,32 @@ func TestPrepareGatewayUpdatesRepublishesAStaleListenerSetCount(t *testing.T) {
 // stopped producing an attached ListenerSet fails here instead of being read as the
 // skip it is meant to exercise.
 func TestPrepareListenerSetUpdatesPublishesOnlyWhatItOwns(t *testing.T) {
-	const (
-		gatewayNamespace   = "infra"
-		gatewayName        = "gw"
-		listenerSetName    = "ls"
-		listenerSetEntry   = "http"
-		foreignGatewayName = "not-ours"
-	)
-
-	newControllerStore := func(t *testing.T) *tree.ControllerStore {
-		t.Helper()
-		gwKey := types.NamespacedName{Namespace: gatewayNamespace, Name: gatewayName}
-		from := gatewayv1.NamespacesFromAll
-		gw := &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name},
-			Spec: gatewayv1.GatewaySpec{
-				GatewayClassName: "hug",
-				AllowedListeners: &gatewayv1.AllowedListeners{
-					Namespaces: &gatewayv1.ListenerNamespaces{From: &from},
-				},
-			},
-		}
-		return &tree.ControllerStore{
-			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-			ClusterStore: &store.ClusterStore{
-				Gateways:     map[types.NamespacedName]*gatewayv1.Gateway{gwKey: gw},
-				ListenerSets: map[types.NamespacedName]*gatewayv1.ListenerSet{},
-				Namespaces:   map[types.NamespacedName]*corev1.Namespace{},
-				Updates:      store.NewClusterUpdates(),
-			},
-			GateTree: &tree.GateTree{
-				Gateways:       map[types.NamespacedName]*tree.Gateway{},
-				GatewayClasses: map[types.NamespacedName]*tree.GatewayClass{{Name: "hug"}: {}},
-				ListenerSets:   map[types.NamespacedName]*tree.ListenerSet{},
-			},
-		}
-	}
-
-	// attachListenerSet drives the contribution pass for one ListenerSet naming
-	// parentName, and returns its tree node.
-	attachListenerSet := func(t *testing.T, parentName string) *tree.ListenerSet {
-		t.Helper()
-		controllerStore := newControllerStore(t)
-		k8sLs := &gatewayv1.ListenerSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: listenerSetName},
-			Spec: gatewayv1.ListenerSetSpec{
-				ParentRef: gatewayv1.ParentGatewayReference{
-					Name:      gatewayv1.ObjectName(parentName),
-					Namespace: pointerTo(gatewayv1.Namespace(gatewayNamespace)),
-				},
-				Listeners: []gatewayv1.ListenerEntry{{
-					Name: listenerSetEntry, Port: 8080, Protocol: gatewayv1.HTTPProtocolType,
-				}},
-			},
-		}
-		lsKey := types.NamespacedName{Namespace: "tenant", Name: listenerSetName}
-		controllerStore.ClusterStore.Updates.ListenerSets[lsKey] = store.Update[*gatewayv1.ListenerSet]{
-			Status:    store.StatusUpserted,
-			NewObject: k8sLs,
-		}
-		builder := &tree.ListenerSetContributionBuilder{ControllerStore: controllerStore}
-		builder.ComputeTreeUpdates()
-
-		require.Contains(t, controllerStore.GateTree.ListenerSets, lsKey)
-		return controllerStore.GateTree.ListenerSets[lsKey]
-	}
-
-	newUpdater := func(t *testing.T) *StatusUpdaterImpl {
-		t.Helper()
-		return &StatusUpdaterImpl{
-			config: StatusUpdaterConf{
-				logger:     slog.Default(),
-				client:     fake.NewClientBuilder().Build(),
-				extractGVK: testExtractGVK,
-			},
-		}
-	}
-
 	t.Run("an attached ListenerSet is published", func(t *testing.T) {
-		ls := attachListenerSet(t, gatewayName)
+		ls := attachedStatusTestListenerSet(t, statusTestGatewayName)
 		require.True(t, ls.IsAttachmentReported(), "fixture must produce an attached ListenerSet")
 
-		writes := newUpdater(t).prepareListenerSetUpdates(context.Background(), map[types.NamespacedName]*tree.ListenerSet{
-			{Namespace: "tenant", Name: listenerSetName}: ls,
+		writes := newStatusTestUpdater(t).prepareListenerSetUpdates(context.Background(), map[types.NamespacedName]*tree.ListenerSet{
+			{Namespace: "tenant", Name: statusTestListenerSetName}: ls,
 		})
 		require.Len(t, writes, 1)
 	})
 
 	t.Run("a ListenerSet naming another controller's Gateway is left alone", func(t *testing.T) {
-		ls := attachListenerSet(t, foreignGatewayName)
+		ls := attachedStatusTestListenerSet(t, statusTestForeignGateway)
 		require.False(t, ls.IsAttachmentReported())
 
-		writes := newUpdater(t).prepareListenerSetUpdates(context.Background(), map[types.NamespacedName]*tree.ListenerSet{
-			{Namespace: "tenant", Name: listenerSetName}: ls,
+		writes := newStatusTestUpdater(t).prepareListenerSetUpdates(context.Background(), map[types.NamespacedName]*tree.ListenerSet{
+			{Namespace: "tenant", Name: statusTestListenerSetName}: ls,
 		})
 		require.Empty(t, writes, "writing here would clear a status that is not ours to comment on")
 	})
 
 	t.Run("a deleted ListenerSet has no resource left to write to", func(t *testing.T) {
-		ls := attachListenerSet(t, gatewayName)
+		ls := attachedStatusTestListenerSet(t, statusTestGatewayName)
 		ls.SetAsDeleted(slog.Default())
 
-		writes := newUpdater(t).prepareListenerSetUpdates(context.Background(), map[types.NamespacedName]*tree.ListenerSet{
-			{Namespace: "tenant", Name: listenerSetName}: ls,
+		writes := newStatusTestUpdater(t).prepareListenerSetUpdates(context.Background(), map[types.NamespacedName]*tree.ListenerSet{
+			{Namespace: "tenant", Name: statusTestListenerSetName}: ls,
 		})
 		require.Empty(t, writes)
 	})
