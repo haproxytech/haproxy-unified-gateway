@@ -86,10 +86,16 @@ func TestSeveralConflictsIsAnEntryOnlyVerdict(t *testing.T) {
 	conflicted := generic.ConditionType(gatewayv1.ListenerEntryConditionConflicted)
 	assert.Equal(t, string(gatewayv1.ListenerEntryReasonListenerConflict), rendered[conflicted].Reason)
 
-	// And it carries the companion refusal like the single-kind conflicts do: without
-	// it the entry would read as accepted while its port is configured nowhere.
+	// And it carries the companion refusals like the single-kind conflicts do: without
+	// them the entry would read as accepted and programmed while its port is
+	// configured nowhere.
 	accepted := generic.ConditionType(gatewayv1.ListenerEntryConditionAccepted)
 	assert.Equal(t, metav1.ConditionFalse, rendered[accepted].Status)
+	assert.Equal(t, string(gatewayv1.ListenerEntryReasonListenerConflict), rendered[accepted].Reason)
+
+	programmed := generic.ConditionType(gatewayv1.ListenerEntryConditionProgrammed)
+	assert.Equal(t, metav1.ConditionFalse, rendered[programmed].Status)
+	assert.Equal(t, string(gatewayv1.ListenerEntryReasonListenerConflict), rendered[programmed].Reason)
 }
 
 // Every verdict must be on exactly one side of the message split: either it names
@@ -116,20 +122,21 @@ func TestEveryVerdictSettlesItsMessage(t *testing.T) {
 	}
 }
 
-// A conflict is the one verdict that produces two conditions, because the Gateway
-// API asks for both: Conflicted asserting the conflict, and Accepted refusing the
-// listener because of it. Rendering only the first would leave a listener reported
-// as accepted while its port is not configured anywhere.
+// A conflict is the one verdict that produces three conditions, because the Gateway
+// API asks for all of them: Conflicted asserting the conflict, and Accepted and
+// Programmed refusing the listener because of it. Rendering only the first would
+// leave a listener reported as accepted while its port is not configured anywhere.
 func TestConflictAlsoRefusesAcceptance(t *testing.T) {
 	conflicted := generic.ConditionType(gatewayv1.ListenerConditionConflicted)
 	accepted := generic.ConditionType(gatewayv1.ListenerConditionAccepted)
+	programmed := generic.ConditionType(gatewayv1.ListenerConditionProgrammed)
 
 	for _, verdict := range []ListenerConditionVerdict{VerdictHostnameConflict, VerdictProtocolConflict} {
 		t.Run(string(verdict), func(t *testing.T) {
 			rendered, err := NewGatewayListenerConditions(verdict, "Conflicting listeners: other")
 			assert.NoError(t, err)
 
-			assert.Len(t, rendered, 2)
+			assert.Len(t, rendered, 3)
 
 			assert.Equal(t, metav1.ConditionTrue, rendered[conflicted].Status)
 			assert.Equal(t, string(verdict), rendered[conflicted].Reason,
@@ -137,10 +144,15 @@ func TestConflictAlsoRefusesAcceptance(t *testing.T) {
 			assert.Equal(t, "Conflicting listeners: other", rendered[conflicted].Message,
 				"the check's message, which names the other listeners, is the one worth keeping")
 
+			// The API names the conflict as the reason all three are refused with, so a
+			// reader never has to correlate an Invalid with a Conflicted to learn why.
 			assert.Equal(t, metav1.ConditionFalse, rendered[accepted].Status)
-			assert.Equal(t, string(gatewayv1.ListenerReasonInvalid), rendered[accepted].Reason)
+			assert.Equal(t, string(verdict), rendered[accepted].Reason)
 			assert.Equal(t, "Listener is invalid (see ConditionType Conflicted)", rendered[accepted].Message,
 				"the companion condition keeps its own wording, pointing at the Conflicted one")
+
+			assert.Equal(t, metav1.ConditionFalse, rendered[programmed].Status)
+			assert.Equal(t, string(verdict), rendered[programmed].Reason)
 		})
 	}
 }

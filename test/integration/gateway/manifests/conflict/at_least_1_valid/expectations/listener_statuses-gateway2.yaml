@@ -7,7 +7,7 @@
       type: Conflicted
     - message: Listener is invalid (see ConditionType Conflicted)
       observedGeneration: 1
-      reason: Invalid
+      reason: ProtocolConflict
       status: "False"
       type: Accepted
     - message: Listener references have been resolved
@@ -17,7 +17,7 @@
       type: ResolvedRefs
     - message: Listener is invalid
       observedGeneration: 1
-      reason: Invalid
+      reason: ProtocolConflict
       status: "False"
       type: Programmed
     name: http-8080

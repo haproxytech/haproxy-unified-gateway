@@ -647,34 +647,36 @@ func (l *Listener) BuildConditions(treeGw *Gateway, previousStatus listenerPrevi
 	// isAccepted tracks whether the listener is accepted (routes can attach even with unresolved refs)
 	isAccepted := true
 
-	_, exists := l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionAccepted))
-	if !exists {
+	_, acceptedExists := l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionAccepted))
+	if !acceptedExists {
 		// Accepted = OK
 		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictAccepted, ""))
 	} else {
-		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictNotProgrammable, ""))
 		shouldProgramm = false
 		isAccepted = false
 	}
 
-	_, exists = l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs))
-	if !exists {
+	_, resolvedExists := l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs))
+	if !resolvedExists {
 		// ResolvedRefs = OK
 		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictRefsResolved, ""))
 	} else {
-		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictNotProgrammable, ""))
 		shouldProgramm = false
 		// ResolvedRefs=False does NOT prevent route attachment per the Gateway API spec
 	}
 
-	_, exists = l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionConflicted))
-	if exists {
-		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictNotProgrammable, ""))
+	if _, conflicted := l.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionConflicted)); conflicted {
 		shouldProgramm = false
 		isAccepted = false
 	}
 
-	if shouldProgramm {
+	// A refused listener is denied programmation once, here, with the reason the check
+	// that refused it gave. A conflict renders one itself -- its own reason names the
+	// conflict -- and the generic Invalid must not overwrite it, so what is already
+	// there wins.
+	_, alreadyProgrammed := l.Conditions.GetCondition(l.programmedConditionType())
+	switch {
+	case shouldProgramm:
 		// Preserve the Programmed condition the declaring resource already published
 		// rather than resetting the listener to Pending: at startup HAProxy may already
 		// be programmed, and both the reported status and the frontend builders treat
@@ -685,6 +687,9 @@ func (l *Listener) BuildConditions(treeGw *Gateway, previousStatus listenerPrevi
 		} else {
 			l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictProgrammingPending, ""))
 		}
+	case alreadyProgrammed:
+	default:
+		l.Conditions.MergeOverrideConditions(l.conditionsFor(conditions.VerdictNotProgrammable, ""))
 	}
 
 	l.Valid = shouldProgramm

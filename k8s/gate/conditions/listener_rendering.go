@@ -15,7 +15,6 @@ package conditions
 
 import (
 	"fmt"
-	"maps"
 
 	generic "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -33,10 +32,10 @@ type listenerConditionSpelling[ConditionType ~string, ConditionReason ~string] s
 }
 
 // isConflict reports whether a verdict states a conflict, which is the one case
-// where a verdict produces two conditions: the Conflicted condition asserting the
-// conflict, and the Accepted condition refusing the listener because of it. The
-// Gateway API requires both, so the rule lives here once instead of in each
-// vocabulary.
+// where a verdict produces three conditions: the Conflicted condition asserting the
+// conflict, and the Accepted and Programmed conditions refusing the listener because
+// of it. The Gateway API requires all three, so the rule lives here once instead of
+// in each vocabulary.
 func (v ListenerConditionVerdict) isConflict() bool {
 	return v == VerdictHostnameConflict ||
 		v == VerdictProtocolConflict ||
@@ -72,13 +71,26 @@ func conditionsForVerdict[ConditionType ~string, ConditionReason ~string](
 	}
 
 	if verdict.isConflict() {
-		// The companion is a constant of this package, so a table missing it is the
-		// same programming error as above and is reported the same way.
-		companion, err := conditionsForVerdict(conditionSpellingsByVerdict, VerdictRejectedByConflict, "")
-		if err != nil {
-			return nil, err
+		// A conflict denies the listener acceptance and programmation, and the API
+		// names the conflict itself as the reason for all three conditions: Conflicted
+		// asserts it while Accepted and Programmed are refused with it. The reason is
+		// therefore the conflict's own, not the generic Invalid the refusal verdicts
+		// carry -- a reader must not have to correlate an Invalid with a Conflicted to
+		// learn why the listener is refused.
+		conflictReason := string(spelling.ConditionReason)
+		for _, denied := range []ListenerConditionVerdict{VerdictRejectedByConflict, VerdictNotProgrammable} {
+			deniedSpelling, ok := conditionSpellingsByVerdict[denied]
+			if !ok {
+				return nil, fmt.Errorf("no condition spelling for listener verdict %q", denied)
+			}
+			conditionType := generic.ConditionType(deniedSpelling.ConditionType)
+			conditions[conditionType] = generic.Condition{
+				Type:    conditionType,
+				Status:  listenerConditionVerdictStatuses[denied],
+				Reason:  conflictReason,
+				Message: denied.message(""),
+			}
 		}
-		maps.Copy(conditions, companion)
 	}
 
 	return conditions, nil
