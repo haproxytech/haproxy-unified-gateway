@@ -376,8 +376,13 @@ func ingressControllerCfgs(ctx context.Context, cfg config.Configuration, mgr ma
 // foreign Backend CR before watching it. Registration happens once at startup, so the
 // probe does too: a CRD installed later needs a restart, which is also when the watch
 // would be wired.
-func listenerSetControllerCfgs(ctx context.Context, cfg config.Configuration, mgr manager.Manager) []ctlrCfg {
-	gvk := objtypes.ObjectTypeListenerSet.GroupVersionKind()
+func listenerSetControllerCfgs(ctx context.Context, cfg config.Configuration, mgr manager.Manager, extractGVK utilsk8s.ExtractGVK) []ctlrCfg {
+	// The GVK comes from the scheme, not from the object's own GroupVersionKind: a
+	// typed client.Object carries no TypeMeta, so ObjectTypeListenerSet.GroupVersionKind()
+	// is the zero GVK, and probing the RESTMapper with it reports "not installed" for a
+	// cluster that serves the CRD -- disabling the controller with a reason that names
+	// the wrong cause.
+	gvk := extractGVK(objtypes.ObjectTypeListenerSet)
 	installed, err := crdInstalled(mgr.GetRESTMapper(), gvk)
 	if !installed {
 		logCRDUnavailable(ctx, cfg, gvk, "ListenerSet CRD", "the ListenerSet controller is disabled", err)
@@ -848,7 +853,7 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 	// ListenerSet has no feature flag: it is part of the Gateway API standard channel,
 	// so it is watched whenever the cluster serves its CRD, and skipped -- with a
 	// reason -- when it does not.
-	controllerRegisterCfgs = append(controllerRegisterCfgs, listenerSetControllerCfgs(ctx, cfg, mgr)...)
+	controllerRegisterCfgs = append(controllerRegisterCfgs, listenerSetControllerCfgs(ctx, cfg, mgr, extractGVK)...)
 
 	for _, registerConfig := range controllerRegisterCfgs {
 		params := registerParams{

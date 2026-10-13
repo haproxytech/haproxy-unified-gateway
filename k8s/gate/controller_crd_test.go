@@ -14,8 +14,11 @@
 package controller
 
 import (
+	"log/slog"
 	"testing"
 
+	objtypes "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/object-types"
+	utilsk8s "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils-k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -26,11 +29,17 @@ import (
 // one it does not is skipped. The error is returned rather than swallowed so the
 // caller can tell "not installed" (expected) from "the RESTMapper is unusable" (not).
 func TestCRDInstalled(t *testing.T) {
-	gvk := schema.GroupVersionKind{
+	// The Kind must come from the scheme. A typed client.Object carries no TypeMeta, so
+	// its own GroupVersionKind() is the zero GVK, and probing the RESTMapper with that
+	// reports "not installed" on a cluster that serves the CRD. The two assertions pin
+	// both halves of that trap for the Kind listenerSetControllerCfgs probes with.
+	assert.True(t, objtypes.ObjectTypeListenerSet.GroupVersionKind().Empty())
+	gvk := utilsk8s.NewExtractGKV(scheme, slog.New(slog.DiscardHandler))(objtypes.ObjectTypeListenerSet)
+	require.Equal(t, schema.GroupVersionKind{
 		Group:   "gateway.networking.k8s.io",
 		Version: "v1",
 		Kind:    "ListenerSet",
-	}
+	}, gvk)
 
 	t.Run("the cluster serves the Kind", func(t *testing.T) {
 		mapper := meta.NewDefaultRESTMapper(nil)
