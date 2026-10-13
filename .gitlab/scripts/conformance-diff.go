@@ -60,6 +60,13 @@ func parseJUnit(data []byte) (map[string]string, error) {
 	results := make(map[string]string)
 	for _, suite := range suites.Suites {
 		for _, tc := range suite.TestCases {
+			// The aggregate root test is failed as soon as one of its subtests is, so comparing
+			// it would report a new failure on every run that has one. It is not a test of its
+			// own, and the JUnit report counts the subtests it aggregates.
+			if tc.Name == "TestConformance" {
+				continue
+			}
+
 			fullName := tc.Name
 			if tc.Classname != "" {
 				fullName = tc.Classname + " " + tc.Name

@@ -25,6 +25,39 @@ type (
 	failure struct{}
 )
 
+// rootTest is the single top-level test of the conformance package. `go test` marks it failed as
+// soon as one of its subtests is, so it aggregates its subtests rather than being one: counting it
+// would turn a single real failure into two, and a clean run into one extra pass.
+const rootTest = "TestConformance"
+
+// summarize splits the test cases of a JUnit file into passed, skipped and failed, dropping the
+// aggregate root test.
+func summarize(data []byte) (passed, skipped, failed []string, err error) {
+	var suites testSuites
+	if err := xml.Unmarshal(data, &suites); err != nil {
+		return nil, nil, nil, fmt.Errorf("parsing XML: %w", err)
+	}
+
+	for _, tc := range suites.TestCases {
+		if tc.Name == rootTest {
+			continue
+		}
+		name := strings.TrimPrefix(tc.Name, rootTest+"/")
+		switch {
+		case tc.Failure != nil:
+			failed = append(failed, name)
+		case tc.Skipped != nil:
+			skipped = append(skipped, name)
+		default:
+			passed = append(passed, name)
+		}
+	}
+	slices.Sort(passed)
+	slices.Sort(skipped)
+	slices.Sort(failed)
+	return passed, skipped, failed, nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("usage: junit-report <junit.xml> [output.html]")
@@ -35,26 +68,10 @@ func main() {
 		log.Fatalf("reading %s: %v", os.Args[1], err)
 	}
 
-	var suites testSuites
-	if err := xml.Unmarshal(data, &suites); err != nil {
-		log.Fatalf("parsing XML: %v", err)
+	passed, skippedNames, failed, err := summarize(data)
+	if err != nil {
+		log.Fatalf("summarizing %s: %v", os.Args[1], err)
 	}
-
-	var passed, skippedNames, failed []string
-	for _, tc := range suites.TestCases {
-		name := strings.TrimPrefix(tc.Name, "TestConformance/")
-		switch {
-		case tc.Failure != nil:
-			failed = append(failed, name)
-		case tc.Skipped != nil:
-			skippedNames = append(skippedNames, name)
-		default:
-			passed = append(passed, name)
-		}
-	}
-	slices.Sort(passed)
-	slices.Sort(skippedNames)
-	slices.Sort(failed)
 
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "PASSED  (%d):\n", len(passed))
