@@ -32,6 +32,22 @@ type ObservedOwner struct {
 	Key  types.NamespacedName
 }
 
+// String names an owner in one token: its kind, then its namespaced name.
+func (o ObservedOwner) String() string {
+	return string(o.Kind) + "/" + o.Key.String()
+}
+
+// MarshalText is what lets a map of owners be marshalled at all.
+//
+// The apply result is logged as a whole, and it travels to the controller as this map, and
+// encoding/json refuses a map whose member name is not a string: without this the log reports
+// "object member name must be a string" instead of the generations it was handed. The old
+// shape -- a map keyed by NamespacedName, which has no MarshalText either -- had the same
+// failure, so this is not new to the per-owner routing.
+func (o ObservedOwner) MarshalText() ([]byte, error) {
+	return []byte(o.String()), nil
+}
+
 // ObservedGenerations maps each resource a frontend was programmed against to the
 // generation that programming was made from.
 type ObservedGenerations map[ObservedOwner]int64
