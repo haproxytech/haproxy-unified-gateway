@@ -171,7 +171,7 @@ func parentGatewayOf(gates *GateTree, treeLs *ListenerSet) *Gateway {
 type listenerSetEntryRollUp struct {
 	statuses   []ListenerEntryStatus
 	total      int
-	accepted   int
+	valid      int
 	programmed int
 	pending    int
 }
@@ -180,18 +180,20 @@ type listenerSetEntryRollUp struct {
 // merged list, in the merged list's order -- the Gateway's own listeners first,
 // then ListenerSets oldest first -- and so in spec order within this one.
 //
-// Acceptance and programmation are read from two different places on purpose. An
-// entry whose certificateRef is not permitted is Accepted but not Valid: the API
-// keeps route attachment independent of ResolvedRefs, so the ListenerSet stays
-// Accepted while its Programmed condition is false. Reading `Valid` for both would
-// make a ReferenceGrant mistake refuse the whole ListenerSet.
+// Validity, not acceptance, is what the ListenerSet's own acceptance is counted
+// from. An entry whose certificateRef is not permitted stays accepted -- the API
+// keeps route attachment independent of ResolvedRefs -- but it cannot be
+// configured, and a ListenerSet whose only entry is in that state is not accepted
+// either. Programmation is read from the entry's own Programmed condition: pending
+// until the apply answers, true once it does, and false on an entry the checks
+// refused.
 func rollUpListenerSetEntries(parentGw *Gateway, lsKey client.ObjectKey, ownerGeneration int64) listenerSetEntryRollUp {
 	var rollUp listenerSetEntryRollUp
 
 	forEachListenerDeclaredByListenerSet(parentGw, lsKey, func(listener *Listener) {
 		rollUp.total++
-		if listener.Accepted {
-			rollUp.accepted++
+		if listener.Valid {
+			rollUp.valid++
 		}
 		if programmed, ok := listener.programmedCondition(); ok {
 			switch programmed.Status {
@@ -231,13 +233,23 @@ func forEachListenerDeclaredByListenerSet(parentGw *Gateway, lsKey client.Object
 	}
 }
 
-// rollUpListenerSetVerdict derives the ListenerSet's own Accepted and Programmed
-// conditions from its entries.
+// rollUpListenerSetVerdict settles a ListenerSet's two conditions from its entries.
 //
-// Accepted keeps the API's allowance that ListenersNotValid may sit on either
-// polarity: it is false only when no entry is left to serve, and true when some
-// entries still are. That is the same reading the Gateway uses for its own
-// listeners, where a Gateway with one valid listener stays accepted.
+// Both are "some" summaries, which is what the API asks them to be and what the
+// conformance suite checks:
+//
+//   - Accepted is true as soon as one entry can be served, and carries
+//     ListenersNotValid when some entries cannot -- the API states that reason may
+//     sit on either polarity, "depending on whether the listener being invalid
+//     causes the entire ListenerSet to not be accepted". It is false only when no
+//     entry is left to serve.
+//   - Programmed is true as soon as one entry is programmed: the API's wording is
+//     "has generated some configuration", so an entry a conflict refuses does not
+//     deny the configuration the others produced. It stays Unknown while entries
+//     are still waiting for HAProxy, and is false with ListenersNotValid only when
+//     nothing could be programmed at all.
+//
+// What Accepted counts is validity, not attachment: see entryRollUp.
 func rollUpListenerSetVerdict(treeLs *ListenerSet, rollUp listenerSetEntryRollUp) {
 	switch {
 	case rollUp.total == 0:
@@ -247,24 +259,21 @@ func rollUpListenerSetVerdict(treeLs *ListenerSet, rollUp listenerSetEntryRollUp
 		// Unknown because nothing was in fact programmed.
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetAcceptedOK())
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedPending())
-	case rollUp.accepted == 0:
+		return
+	case rollUp.valid == 0:
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetAcceptedAllListenersInvalid())
-		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedListenersNotValid())
-	case rollUp.accepted < rollUp.total:
+	case rollUp.valid < rollUp.total:
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetAcceptedSomeListenersInvalid())
-		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedListenersNotValid())
-	case rollUp.programmed == rollUp.total:
+	default:
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetAcceptedOK())
+	}
+
+	switch {
+	case rollUp.programmed > 0:
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedOK())
-	case rollUp.programmed+rollUp.pending == rollUp.total:
-		// Every entry accepted, none refused by a check, and at least one is still
-		// waiting for HAProxy.
-		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetAcceptedOK())
+	case rollUp.pending > 0:
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedPending())
 	default:
-		// Every entry accepted, and at least one is not programmable -- an
-		// unresolved reference, for instance, which leaves Accepted true.
-		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetAcceptedOK())
 		treeLs.Conditions.MergeOverrideConditions(conditions.NewListenerSetProgrammedListenersNotValid())
 	}
 }

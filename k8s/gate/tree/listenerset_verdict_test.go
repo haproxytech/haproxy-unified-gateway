@@ -120,6 +120,11 @@ func (f *verdictFixture) addContributedEntry(namespace, name, entryName string, 
 		},
 		OwnerKind:      kindListenerSet,
 		Accepted:       accepted,
+		// Valid is what production sets from the checks: an entry the checks refused
+		// is not accepted, and an entry that is accepted but not programmable -- an
+		// unresolved reference -- is accepted without being valid. The fixture only
+		// expresses the verdicts, so it derives the same conjunction.
+		Valid:          accepted && programmed != metav1.ConditionFalse,
 		Conditions:     make(generic.Conditions),
 		AttachedRoutes: make(map[client.ObjectKey]struct{}),
 	}
@@ -260,8 +265,8 @@ func TestListenerSetVerdictRollUp(t *testing.T) {
 			entries:            []entryExpectation{{true, metav1.ConditionTrue}, {false, metav1.ConditionFalse}},
 			wantAcceptedStatus: metav1.ConditionTrue,
 			wantAcceptedReason: gatewayv1.ListenerSetReasonListenersNotValid,
-			wantProgrammedStat: metav1.ConditionFalse,
-			wantProgrammedReas: string(gatewayv1.ListenerSetReasonListenersNotValid),
+			wantProgrammedStat: metav1.ConditionTrue,
+			wantProgrammedReas: string(gatewayv1.ListenerSetReasonProgrammed),
 			wantAttachedCount:  1,
 		},
 		{
@@ -275,23 +280,23 @@ func TestListenerSetVerdictRollUp(t *testing.T) {
 			wantAttachedCount:  0,
 		},
 		{
-			name:               "accepted but not programmable is invalid, not pending",
+			name:               "an entry accepted but not configurable does not carry acceptance",
 			gatewayAccepted:    true,
-			entries:            []entryExpectation{{true, metav1.ConditionTrue}, {true, metav1.ConditionFalse}},
-			wantAcceptedStatus: metav1.ConditionTrue,
-			wantAcceptedReason: gatewayv1.ListenerSetReasonAccepted,
+			entries:            []entryExpectation{{true, metav1.ConditionFalse}},
+			wantAcceptedStatus: metav1.ConditionFalse,
+			wantAcceptedReason: gatewayv1.ListenerSetReasonListenersNotValid,
 			wantProgrammedStat: metav1.ConditionFalse,
 			wantProgrammedReas: string(gatewayv1.ListenerSetReasonListenersNotValid),
-			wantAttachedCount:  1,
+			wantAttachedCount:  0,
 		},
 		{
-			name:               "accepted with one still pending",
+			name:               "one entry programmed is enough while another is pending",
 			gatewayAccepted:    true,
 			entries:            []entryExpectation{{true, metav1.ConditionTrue}, {true, metav1.ConditionUnknown}},
 			wantAcceptedStatus: metav1.ConditionTrue,
 			wantAcceptedReason: gatewayv1.ListenerSetReasonAccepted,
-			wantProgrammedStat: metav1.ConditionUnknown,
-			wantProgrammedReas: string(gatewayv1.ListenerSetReasonPending),
+			wantProgrammedStat: metav1.ConditionTrue,
+			wantProgrammedReas: string(gatewayv1.ListenerSetReasonProgrammed),
 			wantAttachedCount:  1,
 		},
 	}
