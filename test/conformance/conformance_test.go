@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -150,6 +151,16 @@ func TestConformance(t *testing.T) {
 	}
 
 	reportOutput := envOrDefault("CONFORMANCE_REPORT_OUTPUT", "conformance-report.yaml")
+	if os.Getenv("CONFORMANCE_REPORT_OUTPUT") == "" {
+		if _, err := os.Stat(reportOutput); err == nil {
+			// A campaign takes minutes and its report is the only record of it: an unset path must
+			// not let a later run overwrite an earlier one. A caller that pins the path -- the
+			// taskfile, CI -- keeps its name, and owns the overwrite it asked for.
+			previous := reportOutput
+			reportOutput = fmt.Sprintf("conformance-report-%s.yaml", time.Now().Format("20060102T150405"))
+			fmt.Fprintf(os.Stderr, "conformance: %s exists, writing %s instead\n", previous, reportOutput)
+		}
+	}
 
 	nodeIP := getNodeIP(context.Background(), cs)
 	t.Logf("NodeIP %s", nodeIP)
@@ -229,6 +240,14 @@ func TestConformance(t *testing.T) {
 		rawReport, err := yaml.Marshal(report)
 		if err != nil {
 			t.Logf("error marshaling conformance report: %v", err)
+			return
+		}
+		// The report is the only record of a campaign, and a caller may name a path
+		// whose directory it expected something else to have created. Failing to write
+		// because of a missing directory would lose the run, so create it here: a
+		// campaign that already failed is exactly when the report matters most.
+		if err := os.MkdirAll(filepath.Dir(reportOutput), 0o755); err != nil {
+			t.Logf("error creating the conformance report directory: %v", err)
 			return
 		}
 		if err := os.WriteFile(reportOutput, rawReport, 0o600); err != nil {
