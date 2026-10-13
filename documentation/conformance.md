@@ -98,6 +98,7 @@ The conformance report is the artifact implementations submit to the upstream
 | `CONFORMANCE_SKIP_TESTS` | _(unset)_ | Comma-separated list of test shortnames to skip |
 | `CONFORMANCE_REPORT_OUTPUT` | `conformance-report.yaml` | Path for the conformance report |
 | `HUG_GATEWAY_CLASS` | `haproxy` | GatewayClass name used in tests |
+| `HUG_TEST_LISTENERSET` | _(unset)_ | Set to `1` to declare `SupportListenerSet` and enroll the ListenerSet tests |
 
 ---
 
@@ -130,6 +131,7 @@ The conformance report is the artifact implementations submit to the upstream
 - `SupportHTTPRouteParentRefPort` (Extended, in `GATEWAY-HTTP`)
 - `SupportHTTPRouteDestinationPortMatching` (Extended, in `GATEWAY-HTTP`)
 - `SupportTLSRoute` (from the `GATEWAY-TLS` profile)
+- `SupportListenerSet` when `HUG_TEST_LISTENERSET=1`
 
 Extended features can be added to `test/conformance/conformance_test.go`
 as HUG gains support.

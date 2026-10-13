@@ -141,6 +141,14 @@ func TestConformance(t *testing.T) {
 		suite.GatewayTLSConformanceProfileName,
 	}
 
+	// ListenerSet is a feature the HTTP and TLS profiles carry, not a profile of its own, so
+	// declaring it is what enrolls its tests. It stays opt-in until the conformance campaign has
+	// been run against it: what is declared here is also what the published report claims as
+	// supported.
+	if os.Getenv("HUG_TEST_LISTENERSET") == "1" {
+		supportedFeatures = append(supportedFeatures, features.SupportListenerSet)
+	}
+
 	reportOutput := envOrDefault("CONFORMANCE_REPORT_OUTPUT", "conformance-report.yaml")
 
 	nodeIP := getNodeIP(context.Background(), cs)
