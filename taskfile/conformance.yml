@@ -545,6 +545,10 @@ tasks:
       CONFORMANCE_RUN_TEST: '{{default "" .CONFORMANCE_RUN_TEST}}'
       CONFORMANCE_SKIP_TESTS: '{{default "" .CONFORMANCE_SKIP_TESTS}}'
       SEQUENTIAL: '{{default "false" .SEQUENTIAL}}'
+      # go test's own ceiling. A campaign can outlast it: every test that fails burns its own
+      # deadline, and the timeout is then reported as if every unfinished test had failed --
+      # "0 passed, N failed, 0 skipped" for a run that was merely cut short.
+      CONFORMANCE_TEST_TIMEOUT: '{{default "60m" .CONFORMANCE_TEST_TIMEOUT}}'
     cmds:
       - |
         # Every run keeps its own directory. A campaign takes minutes and its report is the only
@@ -570,7 +574,7 @@ tasks:
             -- ./test/conformance/ \
               -count=1 \
               -tags=conformance \
-              -timeout 60m \
+              -timeout {{.CONFORMANCE_TEST_TIMEOUT}} \
               -v \
               {{if eq .SEQUENTIAL "true"}}-p 1{{end}}\
               {{if .CONFORMANCE_RUN_TEST}}-run-test '{{.CONFORMANCE_RUN_TEST}}'{{end}} \
