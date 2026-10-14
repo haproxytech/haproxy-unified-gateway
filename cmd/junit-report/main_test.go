@@ -19,17 +19,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The root test aggregates its subtests: `go test` marks it failed as soon as one of them is, so
-// counting it shows a single real failure as two, and a clean run as one extra pass. It is in the
-// JUnit file -- `tests="141"` in the artifact that first carried one counts it -- and it is not a
-// test of its own.
-func TestSummarizeDropsTheAggregateRootTest(t *testing.T) {
+// A test that contains others aggregates them: `go test` marks it failed as soon as one of its
+// subtests is, so counting it shows a single real failure twice -- and at every depth, not only at
+// the root. Such a test is in the JUnit file and is not a test of its own.
+func TestSummarizeDropsAggregateTests(t *testing.T) {
 	const junit = `<testsuites>
   <testsuite name="github.com/haproxytech/haproxy-unified-gateway/test/conformance">
     <testcase classname="pkg" name="TestConformance"/>
     <testcase classname="pkg" name="TestConformance/HTTPRouteSimpleSameNamespace"/>
     <testcase classname="pkg" name="TestConformance/HTTPRouteWeight"><failure/></testcase>
     <testcase classname="pkg" name="TestConformance/ListenerSetHTTPRouting"><skipped/></testcase>
+    <testcase classname="pkg" name="TestConformance/TLSRouteMixedTerminationNotSupported"><failure/></testcase>
+    <testcase classname="pkg" name="TestConformance/TLSRouteMixedTerminationNotSupported/one_of_its_own"><failure/></testcase>
   </testsuite>
 </testsuites>`
 
@@ -38,5 +39,26 @@ func TestSummarizeDropsTheAggregateRootTest(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"HTTPRouteSimpleSameNamespace"}, passed)
 	require.Equal(t, []string{"ListenerSetHTTPRouting"}, skipped)
-	require.Equal(t, []string{"HTTPRouteWeight"}, failed)
+	require.Equal(t,
+		[]string{
+			"HTTPRouteWeight",
+			"TLSRouteMixedTerminationNotSupported/one_of_its_own",
+		},
+		failed,
+		"the failing subtest is reported once, and the parent that aggregates it not at all")
+}
+
+// A test with no subtest is a test, including the root: a run that fails before creating any
+// subtest leaves it alone in the file, and that is a failure the reader has to see.
+func TestSummarizeKeepsARootFailureWithoutSubtests(t *testing.T) {
+	const junit = `<testsuites>
+  <testsuite name="github.com/haproxytech/haproxy-unified-gateway/test/conformance">
+    <testcase classname="pkg" name="TestConformance"><failure/></testcase>
+  </testsuite>
+</testsuites>`
+
+	_, _, failed, err := summarize([]byte(junit))
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"TestConformance"}, failed)
 }

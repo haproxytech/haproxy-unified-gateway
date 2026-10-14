@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -59,11 +60,19 @@ func parseJUnit(data []byte) (map[string]string, error) {
 
 	results := make(map[string]string)
 	for _, suite := range suites.Suites {
+		names := make([]string, 0, len(suite.TestCases))
 		for _, tc := range suite.TestCases {
-			// The aggregate root test is failed as soon as one of its subtests is, so comparing
-			// it would report a new failure on every run that has one. It is not a test of its
-			// own, and the JUnit report counts the subtests it aggregates.
-			if tc.Name == "TestConformance" {
+			names = append(names, tc.Name)
+		}
+		aggregates := aggregateNames(names)
+
+		for _, tc := range suite.TestCases {
+			// A test that contains others is failed as soon as one of its subtests is, so
+			// comparing it would report a new failure on every run that has one -- and twice,
+			// the JUnit report counting the subtest as well. Unlike the root, which the first
+			// version of this skipped by name, the rule is structural and holds at every depth.
+			// cmd/junit-report applies the same one to the same file.
+			if _, isAggregate := aggregates[tc.Name]; isAggregate {
 				continue
 			}
 
@@ -83,6 +92,24 @@ func parseJUnit(data []byte) (map[string]string, error) {
 		}
 	}
 	return results, nil
+}
+
+// aggregateNames returns the cases that contain others, in the JUnit file of one suite.
+//
+// `go test` marks a test failed as soon as one of its subtests is, so such a test aggregates its
+// subtests rather than being a test of its own. The relation is structural -- a case whose name is
+// a prefix of another's, followed by a slash -- and it holds at every depth.
+func aggregateNames(names []string) map[string]struct{} {
+	sorted := slices.Clone(names)
+	slices.Sort(sorted)
+
+	aggregates := make(map[string]struct{})
+	for i := 0; i+1 < len(sorted); i++ {
+		if strings.HasPrefix(sorted[i+1], sorted[i]+"/") {
+			aggregates[sorted[i]] = struct{}{}
+		}
+	}
+	return aggregates
 }
 
 func gitlabAPI(path string) ([]byte, error) {

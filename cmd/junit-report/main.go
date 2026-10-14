@@ -25,21 +25,51 @@ type (
 	failure struct{}
 )
 
-// rootTest is the single top-level test of the conformance package. `go test` marks it failed as
-// soon as one of its subtests is, so it aggregates its subtests rather than being one: counting it
-// would turn a single real failure into two, and a clean run into one extra pass.
+// rootTest is the single top-level test of the conformance package, and the prefix every other case
+// carries. It shortens the reported names; which cases are aggregates is decided structurally, by
+// aggregateNames.
 const rootTest = "TestConformance"
 
+// aggregateNames returns the cases that contain others.
+//
+// `go test` marks a test failed as soon as one of its subtests is, so such a test aggregates its
+// subtests rather than being a test of its own: counting it turns a single real failure into two,
+// and a clean run into one extra pass. The relation is structural -- a case whose name is a prefix
+// of another's, followed by a slash -- and it holds at every depth, not only at the root.
+//
+// A case with no subtest is a test, even when it is the root: a run that fails before creating any
+// subtest is a failure and must be counted, which is what a setup failure looks like.
+func aggregateNames(names []string) map[string]struct{} {
+	sorted := slices.Clone(names)
+	slices.Sort(sorted)
+
+	aggregates := make(map[string]struct{})
+	for i := 0; i+1 < len(sorted); i++ {
+		if strings.HasPrefix(sorted[i+1], sorted[i]+"/") {
+			aggregates[sorted[i]] = struct{}{}
+		}
+	}
+	return aggregates
+}
+
 // summarize splits the test cases of a JUnit file into passed, skipped and failed, dropping the
-// aggregate root test.
+// cases that aggregate others. The three partitions and the parse error are its return contract.
+//
+//revive:disable-next-line:function-result-limit
 func summarize(data []byte) (passed, skipped, failed []string, err error) {
 	var suites testSuites
 	if err := xml.Unmarshal(data, &suites); err != nil {
 		return nil, nil, nil, fmt.Errorf("parsing XML: %w", err)
 	}
 
+	names := make([]string, 0, len(suites.TestCases))
 	for _, tc := range suites.TestCases {
-		if tc.Name == rootTest {
+		names = append(names, tc.Name)
+	}
+	aggregates := aggregateNames(names)
+
+	for _, tc := range suites.TestCases {
+		if _, isAggregate := aggregates[tc.Name]; isAggregate {
 			continue
 		}
 		name := strings.TrimPrefix(tc.Name, rootTest+"/")
