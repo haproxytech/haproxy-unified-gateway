@@ -43,6 +43,20 @@ assigns real IPs to `LoadBalancer` services so the test binary — running on yo
 machine outside the cluster — can reach them. In CI, the test binary runs as a Pod
 inside the cluster and reaches `ClusterIP` services directly.
 
+### Known limitation: a Route whose parents name two Gateways
+
+One controller per Gateway cannot settle such a Route's status reliably. Each
+instance sees only its own Gateway, so it resolves only the parentRefs naming that
+Gateway and publishes `status.parents` with that single entry; the two instances
+carry the same `controllerName`, so the patcher replaces the entry rather than
+merging it, and the Route's parents oscillate between them.
+
+`HTTPRouteMultipleGateways` is where this shows: its two subtests run concurrently
+whatever `DisableParallelTests` says -- their `t.Parallel()` is inside the test body,
+not the suite's own marking -- and both read that Route's status, so one of them can
+time out after 60s. Recorded rather than worked around, since the CI uses this same
+deployer.
+
 ---
 
 ## Local development
