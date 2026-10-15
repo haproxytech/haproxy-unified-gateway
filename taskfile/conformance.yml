@@ -170,6 +170,7 @@ tasks:
       HUG_SERVICE_TYPE: '{{default "ClusterIP" .HUG_SERVICE_TYPE}}'
       HUG_IMPLEMENTATION_VERSION: '{{default "" .HUG_IMPLEMENTATION_VERSION}}'
       HUG_CONTROLLER_IMAGE_TAG: '{{default "latest" .HUG_CONTROLLER_IMAGE_TAG}}'
+      HUG_TEST_LISTENERSET: '{{default "" .HUG_TEST_LISTENERSET}}'
     cmds:
       - |
         # 1. Apply the job
@@ -179,6 +180,7 @@ tasks:
           -e "s|\${HUG_SERVICE_TYPE}|{{.HUG_SERVICE_TYPE}}|g" \
           -e "s|\${HUG_IMPLEMENTATION_VERSION}|{{.HUG_IMPLEMENTATION_VERSION}}|g" \
           -e "s|\${HUG_CONTROLLER_IMAGE_TAG}|{{.HUG_CONTROLLER_IMAGE_TAG}}|g" \
+          -e "s|\${HUG_TEST_LISTENERSET}|{{.HUG_TEST_LISTENERSET}}|g" \
           example/deploy/hug-conformance-ci/conformance-job.yaml | /{{.kubectl}} apply -f -
 
         # 2. Wait for success OR failure (Timeout after 90m)

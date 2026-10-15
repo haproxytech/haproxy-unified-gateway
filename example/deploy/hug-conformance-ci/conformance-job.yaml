@@ -46,6 +46,8 @@ spec:
           value: "${HUG_IMPLEMENTATION_VERSION}"
         - name: HUG_CONTROLLER_IMAGE_TAG
           value: "${HUG_CONTROLLER_IMAGE_TAG}"
+        - name: HUG_TEST_LISTENERSET
+          value: "${HUG_TEST_LISTENERSET}"
       volumes:
       - name: results
         hostPath:

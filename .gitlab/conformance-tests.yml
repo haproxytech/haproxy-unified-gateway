@@ -27,6 +27,10 @@ conformance-GW-API-1_6_3:
     CONFORMANCE_JUNIT_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.xml"
     CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.html"
     HUG_SERVICE_TYPE: "ClusterIP"
+    # Enroll the ListenerSet tests. Declaring the feature is what makes them run
+    # -- the suite skips a test whose features are undeclared -- and the same
+    # declaration is what the published report claims as supported.
+    HUG_TEST_LISTENERSET: "1"
   before_script:
     - export PATH=$PATH:/root/go/bin
     - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
@@ -76,6 +80,7 @@ conformance-MR-GW-API-1_6_3:
     CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.html"
     CONFORMANCE_RUN_TEST: ""
     HUG_SERVICE_TYPE: "ClusterIP"
+    HUG_TEST_LISTENERSET: "1"
     # Pod label selector for conformance-collect-debug-mr.
     # When set, that task collects logs, haproxy.cfg and map files from the
     # matching HUG pod after the conformance run. The deployer intentionally

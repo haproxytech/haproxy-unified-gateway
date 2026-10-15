@@ -152,6 +152,12 @@ The conformance report is the artifact implementations submit to the upstream
 Extended features can be added to `test/conformance/conformance_test.go`
 as HUG gains support.
 
+Both CI conformance jobs set `HUG_TEST_LISTENERSET=1` (see
+`.gitlab/conformance-tests.yml`), so the ListenerSet tests run in every pipeline
+and the published CI report claims `SupportListenerSet`. `HUG_TEST_TLS` is left
+unset there on purpose: the GATEWAY-TLS profile still fails the condition tests
+of invalid TLSRoutes.
+
 ---
 
 ## Pre-pulled images
