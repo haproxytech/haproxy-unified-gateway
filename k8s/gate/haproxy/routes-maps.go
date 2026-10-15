@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
@@ -185,29 +184,29 @@ func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 	listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
 }
 
-// listenersForParentRefs returns all gateway Listener objects referenced by parentRefs,
-// regardless of hostname matching. Deleted gateways and missing section names are skipped.
-func (b *RouteMgrImpl) listenersForParentRefs(parentRefs []gatewayv1.ParentReference, namespace string) []*tree.Listener {
-	controllerStore := b.topManager.controllerStore
+// listenersFromAttachments returns the listeners a route is attached to, from the
+// parentRef-keyed map its checks filled, deduplicated.
+//
+// Read rather than re-derived: resolving spec.parentRefs against Gateways cannot reach
+// an entry a ListenerSet contributes, because the resource naming that entry is not a
+// Gateway. The path maps are already written from this same map, so the listener-route
+// maps follow it here instead of keeping a second definition of the relationship.
+//
+// Generic over the route type, because the HTTP and TLS checks fill the same shape.
+func listenersFromAttachments[K any](attached utils.KeyMap[K, []*tree.Listener]) []*tree.Listener {
 	var result []*tree.Listener
-	for _, parentRef := range parentRefs {
-		gwKey := tree.GetParentRefNamespacedName(parentRef, namespace)
-		treeGw, ok := controllerStore.GateTree.Gateways[gwKey]
-		if !ok || treeGw.TreeStatus.Status == store.StatusDeleted {
-			continue
-		}
-		if parentRef.SectionName != nil {
-			// The Gateway's own listeners only: a sectionName on a Gateway parentRef
-			// never names an entry contributed by a ListenerSet.
-			if l := treeGw.OwnListenerByName(*parentRef.SectionName); l != nil {
-				result = append(result, l)
+	seen := make(map[string]struct{})
+	attached.Iterate(func(_ string, listeners []*tree.Listener) bool {
+		for _, listener := range listeners {
+			key := listener.Key().String()
+			if _, duplicate := seen[key]; duplicate {
+				continue
 			}
-		} else {
-			// No sectionName: the Gateway's own listeners, not the entries its
-			// ListenerSets contribute -- those are reached by naming the ListenerSet.
-			result = append(result, treeGw.OwnListeners()...)
+			seen[key] = struct{}{}
+			result = append(result, listener)
 		}
-	}
+		return true
+	})
 	return result
 }
 
@@ -215,7 +214,7 @@ func (b *RouteMgrImpl) listenersForRoute(route *tree.HTTPRoute) []*tree.Listener
 	if route.K8sResource == nil {
 		return nil
 	}
-	return b.listenersForParentRefs(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace)
+	return listenersFromAttachments(route.Listeners)
 }
 
 func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
@@ -395,7 +394,7 @@ func (b *RouteMgrImpl) listenersForTLSRoute(route *tree.TLSRoute) []*tree.Listen
 	if route.K8sResource == nil {
 		return nil
 	}
-	return b.listenersForParentRefs(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace)
+	return listenersFromAttachments(route.Listeners)
 }
 
 func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
