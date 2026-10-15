@@ -191,6 +191,12 @@ func TestConformance(t *testing.T) {
 	opts.TimeoutConfig = conformanceconfig.DefaultTimeoutConfig()
 	opts.AllowCRDsMismatch = true
 	opts.SkipProvisionalTests = true
+	// v1.6 marks 36 tests Parallel and runs them concurrently. This harness cannot: it
+	// serves one namespace and deploys a controller per Gateway, so every new Gateway
+	// leaves its neighbours' whole-namespace readiness check (NamespacesMustBeReady)
+	// failing for as long as a pod takes to start. Sequential by default;
+	// HUG_TEST_PARALLEL=1 opts back into the concurrent mode, to measure what it costs.
+	opts.DisableParallelTests = os.Getenv("HUG_TEST_PARALLEL") != "1"
 
 	t.Logf("conformance run test %s", opts.RunTest)
 	t.Logf("conformance skip tests %s", opts.SkipTests)
