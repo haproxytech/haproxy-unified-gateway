@@ -65,6 +65,17 @@ type ControllerStore struct {
 	// appends them after a Gateway's own listeners -- one writer for the merged list,
 	// which is what keeps the precedence order stated in a single place.
 	contributedListenersByGatewayKey map[client.ObjectKey][]*Listener
+	// previousContributorsByGatewayKey holds, per parent Gateway, the ListenerSets that
+	// contributed to it in the previous cycle, in the same order.
+	//
+	// It exists to tell an attachment that *changed* from one that was simply
+	// re-derived: the set of contributors is rebuilt from the whole tree every cycle,
+	// so its contents say nothing about what moved. Diffing it against the previous
+	// cycle is what finds the Gateways whose merged list is now wrong -- a ListenerSet
+	// that changed parent, one whose namespace labels no longer match the Gateway's
+	// selector, one that was deleted -- none of which is necessarily a ListenerSet
+	// event the parent could be enqueued from.
+	previousContributorsByGatewayKey map[client.ObjectKey][]client.ObjectKey
 	// conflictsByPort holds, for each port and each listener on it, the conflicts
 	// that listener is in -- the empty set included, which is what makes the diff
 	// below sound. previousConflictsByPort is the same table as of the previous

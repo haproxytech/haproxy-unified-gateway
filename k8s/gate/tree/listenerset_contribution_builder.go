@@ -14,6 +14,8 @@
 package tree
 
 import (
+	"slices"
+
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
@@ -107,8 +109,10 @@ func (b *ListenerSetContributionBuilder) mirrorListenerSets() {
 // This is a builder-level stand-in for an enqueue edge, and it does not replace one.
 // It only fires on cycles a ListenerSet event already reached, so a change to
 // something a ListenerSet depends on -- a Secret behind one of its certificateRefs,
-// a ReferenceGrant permitting it -- still reaches nothing. Those are watch edges on
-// the ListenerSet controller, which has none yet.
+// a ReferenceGrant permitting it -- still reaches nothing from here; those are watch
+// edges on the ListenerSet controller. What it cannot see is covered by
+// reprocessGatewaysWhoseContributorsChanged, which needs no event to have reached
+// the ListenerSet.
 func (b *ListenerSetContributionBuilder) reprocessGatewaysOfChangedListenerSets() {
 	for _, lsUpdate := range b.ClusterStore.Updates.ListenerSets {
 		listenerSet := lsUpdate.NewObject
@@ -123,18 +127,59 @@ func (b *ListenerSetContributionBuilder) reprocessGatewaysOfChangedListenerSets(
 		if !namesGateway {
 			continue
 		}
-		if _, alreadyUpdated := b.ClusterStore.Updates.Gateways[gwKey]; alreadyUpdated {
-			continue
-		}
-		parentGw, inStore := b.ClusterStore.Gateways[gwKey]
-		if !inStore || parentGw == nil {
-			continue
-		}
+		b.injectGatewayUpdate(gwKey)
+	}
+}
 
-		b.ClusterStore.Updates.Gateways[gwKey] = store.Update[*gatewayv1.Gateway]{
-			Status:    store.StatusUpserted,
-			NewObject: parentGw,
-			OldObject: parentGw,
+// injectGatewayUpdate puts a Gateway back in this cycle's updates, so the Gateway
+// builder rebuilds its merged list. An update already queued for it -- a real change,
+// a deletion, or an injection from another pass -- is left alone.
+func (b *ListenerSetContributionBuilder) injectGatewayUpdate(gwKey client.ObjectKey) {
+	parentGw, inStore := b.ClusterStore.Gateways[gwKey]
+	if !inStore || parentGw == nil {
+		return
+	}
+	injectIndirectUpdate(b.ClusterStore.Updates.Gateways, gwKey, parentGw)
+}
+
+// reprocessGatewaysWhoseContributorsChanged puts back in the Gateway updates every
+// Gateway whose set of contributing ListenerSets differs from the previous cycle.
+//
+// The events that change which ListenerSets contribute to a Gateway are not all
+// ListenerSet events, and that is the point of the diff. A namespace whose labels
+// change, under allowedListeners.from: Selector, or the Gateway's own
+// allowedListeners being edited, changes the answer for ListenerSets that did not
+// change at all: no ListenerSet event is raised, so no parent is enqueued, and the
+// merged list would keep serving listeners the Gateway no longer allows -- or keep
+// omitting ones it now does. Comparing the sets makes the merged list follow the
+// decision, whatever changed it.
+//
+// The same shape as the conflict-verdict diff: rebuild the whole table every cycle,
+// keep the previous one, and reprocess exactly what differs. The set is compared in
+// order because that order is the API's precedence order, and a reordering is a
+// change the merged list has to follow.
+//
+// On the first cycle the previous set is empty, so every Gateway that has a
+// contributor is reprocessed. That cycle is the initial sync, where those Gateways
+// are upserted anyway, and the set is then remembered -- so this happens once per
+// process, not once per cycle.
+func (b *ListenerSetContributionBuilder) reprocessGatewaysWhoseContributorsChanged(current map[client.ObjectKey][]client.ObjectKey) {
+	previous := b.ControllerStore.previousContributorsByGatewayKey
+
+	for gwKey, contributors := range current {
+		if !slices.Equal(previous[gwKey], contributors) {
+			b.injectGatewayUpdate(gwKey)
+		}
+	}
+
+	// A Gateway that had contributors and has none left is absent from `current`
+	// instead of present with an empty slice, so the loop above cannot see it.
+	for gwKey, hadContributors := range previous {
+		if len(hadContributors) == 0 {
+			continue
+		}
+		if _, stillContributing := current[gwKey]; !stillContributing {
+			b.injectGatewayUpdate(gwKey)
 		}
 	}
 }
@@ -156,6 +201,7 @@ func (b *ListenerSetContributionBuilder) reprocessGatewaysOfChangedListenerSets(
 // refusal is reported on its own status -- its entries never becoming listeners.
 func (b *ListenerSetContributionBuilder) contributeListeners() {
 	b.ControllerStore.contributedListenersByGatewayKey = make(map[client.ObjectKey][]*Listener)
+	contributorsByGatewayKey := make(map[client.ObjectKey][]client.ObjectKey)
 
 	for _, treeLs := range utils.MapToSortedListByCreationTimestamp(b.GateTree.ListenerSets) {
 		if treeLs == nil {
@@ -172,11 +218,18 @@ func (b *ListenerSetContributionBuilder) contributeListeners() {
 		}
 
 		gwKey, _ := parentGatewayKey(treeLs.K8sResource)
+		// Recorded even when the ListenerSet declares no entry at all: what is
+		// compared is which ListenerSets contribute, not how many listeners they
+		// brought, so a spec edit that removes every entry is still a change.
+		contributorsByGatewayKey[gwKey] = append(contributorsByGatewayKey[gwKey], client.ObjectKeyFromObject(treeLs.K8sResource))
 		b.ControllerStore.contributedListenersByGatewayKey[gwKey] = append(
 			b.ControllerStore.contributedListenersByGatewayKey[gwKey],
 			listenersFromEntries(gwKey, treeLs.K8sResource)...,
 		)
 	}
+
+	b.reprocessGatewaysWhoseContributorsChanged(contributorsByGatewayKey)
+	b.ControllerStore.previousContributorsByGatewayKey = contributorsByGatewayKey
 }
 
 // listenersFromEntries turns a ListenerSet's entries into listeners of the Gateway

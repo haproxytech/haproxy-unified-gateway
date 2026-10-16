@@ -35,20 +35,29 @@ type contributionFixture struct {
 	builder *ListenerSetContributionBuilder
 	store   *ControllerStore
 	gwKey   client.ObjectKey
+	// allowed is the policy the fixture's Gateway was built with, so a second
+	// Gateway added by a case allows ListenerSets the same way.
+	allowed *gatewayv1.AllowedListeners
 }
 
 func newContributionFixture(t *testing.T, allowedFrom *gatewayv1.FromNamespaces) *contributionFixture {
+	t.Helper()
+	var allowed *gatewayv1.AllowedListeners
+	if allowedFrom != nil {
+		allowed = &gatewayv1.AllowedListeners{Namespaces: &gatewayv1.ListenerNamespaces{From: allowedFrom}}
+	}
+	return newContributionFixtureWithPolicy(t, allowed)
+}
+
+// newContributionFixtureWithPolicy builds the same fixture for the policies an
+// AllowedListeners alone cannot express, a namespace Selector in particular.
+func newContributionFixtureWithPolicy(t *testing.T, allowed *gatewayv1.AllowedListeners) *contributionFixture {
 	t.Helper()
 	gwKey := client.ObjectKey{Namespace: "infra", Name: "gw"}
 
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name},
-		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "hug"},
-	}
-	if allowedFrom != nil {
-		gw.Spec.AllowedListeners = &gatewayv1.AllowedListeners{
-			Namespaces: &gatewayv1.ListenerNamespaces{From: allowedFrom},
-		}
+		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "hug", AllowedListeners: allowed},
 	}
 
 	controllerStore := &ControllerStore{
@@ -70,6 +79,28 @@ func newContributionFixture(t *testing.T, allowedFrom *gatewayv1.FromNamespaces)
 		builder: &ListenerSetContributionBuilder{ControllerStore: controllerStore},
 		store:   controllerStore,
 		gwKey:   gwKey,
+		allowed: allowed,
+	}
+}
+
+// addGateway puts a second Gateway in the cluster store, so a case can move a
+// ListenerSet from one parent to another. Only the cluster store needs it: the
+// contribution pass reads the cluster store, not the tree.
+func (f *contributionFixture) addGateway(namespace, name string) client.ObjectKey {
+	key := client.ObjectKey{Namespace: namespace, Name: name}
+	f.store.ClusterStore.Gateways[key] = &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "hug", AllowedListeners: f.allowed},
+	}
+	return key
+}
+
+// reparent points a ListenerSet at another Gateway, which is a legal edit: the API
+// declares no immutability on parentRef.
+func reparent(treeLs *ListenerSet, key client.ObjectKey) {
+	treeLs.K8sResource.Spec.ParentRef = gatewayv1.ParentGatewayReference{
+		Name:      gatewayv1.ObjectName(key.Name),
+		Namespace: (*gatewayv1.Namespace)(&key.Namespace),
 	}
 }
 
@@ -368,3 +399,109 @@ func TestReprocessGatewaysOfChangedListenerSets(t *testing.T) {
 		assert.Empty(t, f.store.ClusterStore.Updates.Gateways)
 	})
 }
+
+// The set of ListenerSets contributing to a Gateway is rebuilt from the whole tree
+// every cycle, so its contents say nothing about what moved. Comparing it with the
+// previous cycle is what finds the Gateways whose merged list is now wrong, and those
+// changes are not all ListenerSet events: a namespace whose labels change, under
+// allowedListeners.from: Selector, changes the answer for a ListenerSet that did not
+// change at all.
+func TestReprocessGatewaysWhoseContributorsChanged(t *testing.T) {
+	created := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("a ListenerSet that changes parent reaches both Gateways", func(t *testing.T) {
+		from := gatewayv1.NamespacesFromAll
+		f := newContributionFixture(t, &from)
+		otherGwKey := f.addGateway("infra", "gw-other")
+		treeLs := f.addListenerSet("tenant", "ls", created, "http")
+
+		f.builder.contributeListeners()
+		require.Equal(t, []string{"http"}, f.contributedNames())
+
+		// A new cycle, with no event at all: the ListenerSet moved to another
+		// Gateway, which the API allows -- parentRef is not immutable.
+		f.store.ClusterStore.Updates = store.NewClusterUpdates()
+		reparent(treeLs, otherGwKey)
+		f.builder.contributeListeners()
+
+		assert.Empty(t, f.store.contributedListenersByGatewayKey[f.gwKey],
+			"the former parent no longer receives the entries")
+		assert.Len(t, f.store.contributedListenersByGatewayKey[otherGwKey], 1,
+			"the new parent does")
+
+		_, orphaned := f.store.ClusterStore.Updates.Gateways[f.gwKey]
+		assert.True(t, orphaned,
+			"the former parent still holds those listeners in its merged list, so it has to rebuild it")
+		_, gained := f.store.ClusterStore.Updates.Gateways[otherGwKey]
+		assert.True(t, gained, "the new parent has to build a merged list")
+	})
+
+	t.Run("a namespace whose labels stop matching reaches its Gateway", func(t *testing.T) {
+		selector := &metav1.LabelSelector{MatchLabels: map[string]string{"tenant": "allowed"}}
+		f := newContributionFixtureWithPolicy(t, &gatewayv1.AllowedListeners{
+			Namespaces: &gatewayv1.ListenerNamespaces{
+				From:     ptrTo(gatewayv1.NamespacesFromSelector),
+				Selector: selector,
+			},
+		})
+		nsKey := types.NamespacedName{Name: "tenant"}
+		f.store.ClusterStore.Namespaces[nsKey] = &v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: "tenant", Labels: map[string]string{"tenant": "allowed"}},
+		}
+		f.addListenerSet("tenant", "ls", created, "http")
+
+		f.builder.contributeListeners()
+		require.Equal(t, []string{"http"}, f.contributedNames())
+
+		// The label is removed. Nothing about the ListenerSet changed, so no
+		// ListenerSet event is raised and no parent is enqueued from one.
+		f.store.ClusterStore.Updates = store.NewClusterUpdates()
+		f.store.ClusterStore.Namespaces[nsKey].Labels = nil
+		f.builder.contributeListeners()
+
+		assert.Empty(t, f.contributedNames(),
+			"a ListenerSet the Gateway no longer allows contributes nothing")
+		_, injected := f.store.ClusterStore.Updates.Gateways[f.gwKey]
+		assert.True(t, injected,
+			"otherwise the merged list keeps serving a listener the Gateway no longer allows")
+	})
+
+	t.Run("a namespace whose labels start matching reaches its Gateway", func(t *testing.T) {
+		selector := &metav1.LabelSelector{MatchLabels: map[string]string{"tenant": "allowed"}}
+		f := newContributionFixtureWithPolicy(t, &gatewayv1.AllowedListeners{
+			Namespaces: &gatewayv1.ListenerNamespaces{
+				From:     ptrTo(gatewayv1.NamespacesFromSelector),
+				Selector: selector,
+			},
+		})
+		nsKey := types.NamespacedName{Name: "tenant"}
+		f.store.ClusterStore.Namespaces[nsKey] = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tenant"}}
+		f.addListenerSet("tenant", "ls", created, "http")
+
+		f.builder.contributeListeners()
+		require.Empty(t, f.contributedNames())
+
+		f.store.ClusterStore.Updates = store.NewClusterUpdates()
+		f.store.ClusterStore.Namespaces[nsKey].Labels = map[string]string{"tenant": "allowed"}
+		f.builder.contributeListeners()
+
+		assert.Equal(t, []string{"http"}, f.contributedNames())
+		_, injected := f.store.ClusterStore.Updates.Gateways[f.gwKey]
+		assert.True(t, injected, "the newly allowed listener has to reach the merged list")
+	})
+
+	t.Run("an unchanged set reprocesses nothing", func(t *testing.T) {
+		from := gatewayv1.NamespacesFromAll
+		f := newContributionFixture(t, &from)
+		f.addListenerSet("tenant", "ls", created, "http")
+
+		f.builder.contributeListeners()
+		f.store.ClusterStore.Updates = store.NewClusterUpdates()
+		f.builder.contributeListeners()
+
+		assert.Empty(t, f.store.ClusterStore.Updates.Gateways,
+			"a cycle that changed nothing must not rebuild every Gateway that has a ListenerSet")
+	})
+}
+
+func ptrTo[T any](v T) *T { return &v }
