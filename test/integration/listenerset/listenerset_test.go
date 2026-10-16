@@ -209,7 +209,9 @@ func (s *ListenerSetSuite) Test_4_Deletion_On_A_Shared_Frontend() {
 	fixtureDir := "4-deletion-on-a-shared-frontend"
 	fixturePath := path.Join(utils.GetCRDFixturePath(), fixtureDir)
 	s.CreateFixtures(fixturePath, nil)
-	defer s.CleanupFixtures(fixturePath, nil)
+	// The ListenerSet is left out of the cleanup: this case deletes it itself, and a
+	// second deletion fails on an object that is already gone.
+	defer s.CleanupFixtures(fixturePath, []string{"gatewayclass.yaml", "http-echo.yaml", "gateway.yaml"})
 
 	ctx := s.Test().Ctx
 	ns := s.Test().Namespace
@@ -245,7 +247,13 @@ func (s *ListenerSetSuite) Test_5_Reparenting() {
 		"route.yaml", "listenerset.yaml",
 	}
 	s.CreateFixtures(fixturePath, first)
-	defer s.CleanupFixtures(fixturePath, nil)
+	// The cleanup names the ListenerSet once, through the manifest that describes it
+	// last: the two manifests are one object, and the deletion is per file, so
+	// listing both would delete it twice and fail on the second attempt.
+	defer s.CleanupFixtures(fixturePath, []string{
+		"gatewayclass.yaml", "http-echo.yaml", "gateway-a.yaml", "gateway-b.yaml",
+		"route.yaml", "listenerset-moved.yaml",
+	})
 
 	ctx := s.Test().Ctx
 	ns := s.Test().Namespace
