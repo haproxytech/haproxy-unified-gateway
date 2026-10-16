@@ -18,9 +18,17 @@ import (
 	"testing"
 
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/base"
+	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 
 	"github.com/stretchr/testify/suite"
+	v1 "k8s.io/api/core/v1"
 )
+
+// secretNamespace holds the Secret a ListenerSet's cross-namespace certificateRef
+// points at, and the ReferenceGrant that permits it. It is a second namespace
+// because that is what a ReferenceGrant is for: HUG owns no plumbing for a fixture
+// outside the test namespace, so the case creates one.
+const secretNamespace = "listenerset-secrets"
 
 type ListenerSetSuite struct {
 	base.BaseSuite
@@ -32,8 +40,16 @@ func TestListenerSetSuite(t *testing.T) {
 
 func (s *ListenerSetSuite) SetupSuite() {
 	s.BaseSuite.SetupSuite("", 0)
+
+	err := utils.CreateRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
+		Name: secretNamespace,
+	}, true)
+	s.Require().NoError(err)
 }
 
 func (s *ListenerSetSuite) TearDownSuite() {
+	_ = utils.DeleteRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
+		Name: secretNamespace,
+	}, false)
 	s.BaseSuite.TearDownSuite()
 }

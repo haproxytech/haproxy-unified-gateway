@@ -1,0 +1,21 @@
+## A Gateway that accepts ListenerSets, with a listener of its own so it is plainly
+## valid. The ListenerSet's listener is the one that carries the cross-namespace
+## certificateRef.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: hug-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "gateway.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  allowedListeners:
+    namespaces:
+      from: All

@@ -1,0 +1,27 @@
+## The listener's certificateRef points at a Secret in another namespace, so it needs
+## a ReferenceGrant whose `from` is this ListenerSet -- the ListenerSet is the
+## resource holding the reference, not the Gateway it attaches to. GEP-1713 is
+## explicit that a grant naming the Gateway does not cover its ListenerSets.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset-with-grant
+spec:
+  parentRef:
+    name: hug-gateway
+  listeners:
+  - name: ls-listener
+    port: 31444
+    protocol: HTTPS
+    hostname: "ls-grant.haproxy"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - group: ""
+        kind: Secret
+        name: tenant-cert
+        namespace: listenerset-secrets
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

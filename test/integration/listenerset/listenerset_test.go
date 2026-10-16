@@ -29,24 +29,18 @@
 // | case                                                | Gateway                 | ListenerSet                       | entry                                                             | route                    |
 // |-----------------------------------------------------|-------------------------|-----------------------------------|-------------------------------------------------------------------|--------------------------|
 // | 1 contribution                                      | attachedListenerSets=1  | Accepted=True, Programmed=True    | ResolvedRefs/Accepted/Programmed=True, attachedRoutes=1, exact     | attaches, no condition   |
-// | 2 sibling conflicts (A older, B refused)            | attachedListenerSets=2  | A Accepted/Programmed=True        | A: accepted, exact -- B: Accepted/Programmed=False + Conflicted, exact | -                        |
-// | 3 ReferenceGrant naming the ListenerSet             | -                       | Accepted/Programmed=True          | ResolvedRefs=True, present                                        | -                        |
-// | 3bis no grant covering the ListenerSet              | -                       | Accepted/Programmed=False, ListenersNotValid | ResolvedRefs=False/RefNotPermitted, present              | -                        |
-// | **4** deletion on a shared frontend                     | attachedListenerSets=0  | gone                              | gone, and the entry is gone from the surviving frontend's map     | -                        |
-// | **5** re-parenting to another Gateway                   | A: 1 then 0, B: 0 then 1 | Accepted/Programmed=True          | accepted, exact throughout, attachedRoutes=1                       | follows the ListenerSet  |
+// | 2 sibling conflicts (A older, B refused)            | attachedListenerSets=1  | A Accepted/Programmed=True        | A: accepted, exact -- B: Accepted/Programmed=False + Conflicted, exact | -                        |
+// | **3** ReferenceGrant naming the ListenerSet         | attachedListenerSets=1  | refused, then Accepted/Programmed=True | refused: ResolvedRefs=False/RefNotPermitted, present -- permitted: accepted, exact | -                        |
+// | **4** deletion on a shared frontend                 | attachedListenerSets=0  | gone                              | gone, and the entry is gone from the surviving frontend's map     | -                        |
+// | **5** re-parenting to another Gateway               | A: 1 then 0, B: 0 then 1 | Accepted/Programmed=True          | accepted, exact throughout, attachedRoutes=1                       | follows the ListenerSet  |
 //
-// Case 3 is not written yet: it needs a fixture in a second namespace -- the Secret
-// a listener's certificateRef points at -- and test/integration has no
-// cross-namespace fixture to copy the plumbing from. Its expectations are the ones
-// the conformance suite pins (ListenerSetReferenceGrant), recorded here so the case
-// can be written without rediscovering them.
-//
-// The condition values come from the same place: the conformance suite, whose
-// ListenerSet cases pass. An accepted entry carries exactly ResolvedRefs=True,
-// Accepted=True and Programmed=True; a rejected one carries exactly three conditions
-// with the conflict's reason on all of them (Accepted=False/<reason>,
-// Programmed=False/<reason>, Conflicted=True/<reason>), which is what
-// gatewayv1.ListenerReasonHostnameConflict means below.
+// The conditions each case asserts come from the conformance suite, whose ListenerSet
+// cases pass. An accepted entry carries exactly ResolvedRefs=True, Accepted=True and
+// Programmed=True; a rejected one carries exactly three conditions with the conflict's
+// reason on all of them (Accepted=False/<reason>, Programmed=False/<reason>,
+// Conflicted=True/<reason>), which is what gatewayv1.ListenerReasonHostnameConflict
+// means below. Where the API leaves a set open -- the conditions of an entry whose
+// reference is not permitted -- the case pins one condition instead of the set.
 package listenerset
 
 //revive:enable:line-length-limit
@@ -188,9 +182,10 @@ func (s *ListenerSetSuite) Test_2_SiblingConflicts() {
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset-b", listenerSetNotServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset-b", "ls-b-listener",
 		rejectedByConflict(gatewayv1.ListenerEntryReasonHostnameConflict))
-	// The refused ListenerSet is still counted as attached: it is attached and
-	// rejected, not absent.
-	s.ExpectAttachedListenerSets(ctx, ns, "hug-gateway", 2)
+	// One, not two: attachedListenerSets counts the ListenerSets whose own Accepted
+	// condition is true, and this one is refused. It stays in its own status, which
+	// is where the refusal is reported.
+	s.ExpectAttachedListenerSets(ctx, ns, "hug-gateway", 1)
 	// Losing a conflict did not disturb the winner.
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset-a", "ls-a-listener", acceptedEntry())
 }
@@ -265,4 +260,65 @@ func (s *ListenerSetSuite) Test_5_Reparenting() {
 	// proves the purge is the entry being gone from the map, not the frontend being
 	// gone with it.
 	s.ExpectNoMapEntry("hug_http_31081/listener_exact_match.map", "ls.haproxy")
+}
+
+// Test_3_ReferenceGrant_From_The_ListenerSet is a listener whose certificateRef
+// crosses a namespace: it is permitted only by a grant whose `from` names the
+// ListenerSet that holds the reference. A grant naming the parent Gateway does not
+// cover it, and GEP-1713 says so in both directions.
+//
+// Written as two steps -- refused, then permitted -- because that is also the only
+// way to exercise the ReferenceGrant edge of the ListenerSet controller: a grant
+// event has to re-enqueue a ListenerSet that did not change, or the listener stays
+// refused until something else touches it.
+func (s *ListenerSetSuite) Test_3_ReferenceGrant_From_The_ListenerSet() {
+	fixtureDir := "3-reference-grant-from-the-listener-set"
+	fixturePath := path.Join(utils.GetCRDFixturePath(), fixtureDir)
+	inTestNamespace := []string{"gatewayclass.yaml", "gateway.yaml", "listenerset.yaml"}
+	s.CreateFixtures(fixturePath, inTestNamespace)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	ctx := s.Test().Ctx
+	ns := s.Test().Namespace
+	lsetName := "listenerset-with-grant"
+
+	// The Secret is in the other namespace from the start: what the first step
+	// lacks is the grant, not the certificate.
+	s.CreateFixturesInNamespace(fixturePath, secretNamespace, []string{"secret.yaml"})
+
+	// Nothing permits the reference yet, so the entry cannot resolve it. Its other
+	// conditions are the implementation's to render, hence the presence assertion;
+	// the roll-up, which the conformance suite pins, is asserted as an exact set.
+	s.ExpectListenerSetEntryHasCondition(ctx, ns, lsetName, "ls-listener", metav1.Condition{
+		Type:   string(gatewayv1.ListenerEntryConditionResolvedRefs),
+		Status: metav1.ConditionFalse,
+		Reason: string(gatewayv1.ListenerEntryReasonRefNotPermitted),
+	})
+	s.ExpectListenerSetConditions(ctx, ns, lsetName, listenerSetNotServable())
+
+	// The grant, in the namespace of the Secret, naming the ListenerSet as the
+	// resource the reference comes from. Built here rather than kept as a manifest
+	// because it has to name the test's own namespace, which is derived per run.
+	grant := &gatewayv1.ReferenceGrant{
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-listener-set-cert", Namespace: secretNamespace},
+		Spec: gatewayv1.ReferenceGrantSpec{
+			From: []gatewayv1.ReferenceGrantFrom{{
+				Group:     gatewayv1.Group(gatewayv1.GroupName),
+				Kind:      "ListenerSet",
+				Namespace: gatewayv1.Namespace(ns),
+			}},
+			To: []gatewayv1.ReferenceGrantTo{{
+				Group: "",
+				Kind:  "Secret",
+			}},
+		},
+	}
+	err := utils.CreateRuntimeObject(ctx, s.Test().Client, grant, true)
+	s.Require().NoError(err)
+	defer func() {
+		_ = utils.DeleteRuntimeObject(ctx, s.Test().Client, grant, false)
+	}()
+
+	s.ExpectListenerSetEntryConditions(ctx, ns, lsetName, "ls-listener", acceptedEntry())
+	s.ExpectListenerSetConditions(ctx, ns, lsetName, listenerSetServable())
 }
