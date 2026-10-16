@@ -41,11 +41,11 @@ var _ Builder = &ListenerSetContributionBuilder{}
 // listener judged. The two are separate builders rather than one registered twice,
 // which would run the tree update twice over the same cluster updates.
 //
-// No condition is computed here, so an attached ListenerSet serves traffic while its
-// own status still says nothing. That is the reporting pass's job and it is not
-// written yet -- the gap is observability, not behaviour: a refused ListenerSet
-// contributes nothing, and a contributed entry is judged and programmed exactly like
-// a Gateway listener.
+// No condition is computed here: an entry is judged by the same checks and programmed
+// by the same feedback as a Gateway's own listener, and what this pass decides about a
+// ListenerSet is recorded on its Attachment for the reporting pass to turn into
+// conditions. The two halves stay apart because one decides and the other reports,
+// which is what keeps a status from disagreeing with the data plane.
 type ListenerSetContributionBuilder struct {
 	*ControllerStore
 }
@@ -107,12 +107,13 @@ func (b *ListenerSetContributionBuilder) mirrorListenerSets() {
 // merged list until something else happened to touch the Gateway.
 //
 // This is a builder-level stand-in for an enqueue edge, and it does not replace one.
-// It only fires on cycles a ListenerSet event already reached, so a change to
-// something a ListenerSet depends on -- a Secret behind one of its certificateRefs,
-// a ReferenceGrant permitting it -- still reaches nothing from here; those are watch
-// edges on the ListenerSet controller. What it cannot see is covered by
-// reprocessGatewaysWhoseContributorsChanged, which needs no event to have reached
-// the ListenerSet.
+// The two edges a ListenerSet owes towards the objects its certificateRefs depend on
+// -- their Secrets and the ReferenceGrants permitting them -- are watch edges on the
+// ListenerSet controller. The edge towards its parent Gateway cannot be one: the
+// parent is served by its own controller, which has no reason to watch every
+// ListenerSet that might name it. So a changed ListenerSet relays itself to its
+// parent here, and reprocessGatewaysWhoseContributorsChanged covers the changes that
+// reach no ListenerSet at all.
 func (b *ListenerSetContributionBuilder) reprocessGatewaysOfChangedListenerSets() {
 	for _, lsUpdate := range b.ClusterStore.Updates.ListenerSets {
 		listenerSet := lsUpdate.NewObject
