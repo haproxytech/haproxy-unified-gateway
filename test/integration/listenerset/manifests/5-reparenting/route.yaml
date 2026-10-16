@@ -1,0 +1,21 @@
+## The route's parent is the ListenerSet, not either Gateway: it follows the
+## ListenerSet, so it must stay attached across the move. A route parented to the
+## Gateway would have to be re-pointed, which is not what this case is about.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-after-the-listener-set
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: ListenerSet
+    name: listenerset-moving
+    sectionName: ls-listener
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /moving
+    backendRefs:
+    - name: http-echo
+      port: 80

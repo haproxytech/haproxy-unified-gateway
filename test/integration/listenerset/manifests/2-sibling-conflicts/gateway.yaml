@@ -1,0 +1,21 @@
+## The Gateway declares one listener of its own, on a hostname the two ListenerSets
+## do not claim: the conflict to observe is between the ListenerSets, not with the
+## Gateway.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: hug-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "gateway.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  allowedListeners:
+    namespaces:
+      from: All

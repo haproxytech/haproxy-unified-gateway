@@ -1,0 +1,21 @@
+## The first parent. It declares a listener of its own, on the same port as the
+## ListenerSet's but a different hostname, so the two share one frontend and the
+## ListenerSet's entry lands beside it -- which is what makes its purge observable.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: hug-gateway-a
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-a-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "a.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  allowedListeners:
+    namespaces:
+      from: All

@@ -1,0 +1,21 @@
+## A route whose parent is the ListenerSet, and the ListenerSet's entry by
+## sectionName. This is what makes the entry's attachedRoutes prove the wiring: the
+## route is counted on the contributed listener, not on the Gateway's own.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-via-listener-set
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: ListenerSet
+    name: listenerset-contributing
+    sectionName: ls-listener
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /via-listener-set
+    backendRefs:
+    - name: http-echo
+      port: 80

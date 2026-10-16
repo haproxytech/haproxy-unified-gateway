@@ -1,0 +1,19 @@
+## The same ListenerSet, pointed at the other Gateway. parentRef is not immutable,
+## so this is a legal edit -- and the one that used to leave the former parent
+## serving the entries, since no event reached it.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset-moving
+spec:
+  parentRef:
+    name: hug-gateway-b
+  listeners:
+  - name: ls-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "ls.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

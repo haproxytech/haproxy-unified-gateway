@@ -1,0 +1,19 @@
+## Deleted by the case once its entry is programmed. Its hostname is what the case
+## then looks for in the maps of the frontend the Gateway keeps: absent is the point,
+## and no route is needed to fill the listener maps.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset-contributing
+spec:
+  parentRef:
+    name: hug-gateway
+  listeners:
+  - name: ls-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "ls.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

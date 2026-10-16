@@ -1,0 +1,19 @@
+## Applied first, so its listener is the older of the two contenders and wins the
+## conflict. Only its being applied before listenerset-b matters: the case asserts
+## that precedence, so the two must not share a creation timestamp.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset-a
+spec:
+  parentRef:
+    name: hug-gateway
+  listeners:
+  - name: ls-a-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "shared.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

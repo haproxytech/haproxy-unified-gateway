@@ -1,0 +1,21 @@
+## The second parent, and the reason it listens on another port: two Gateways
+## claiming one port is a separate question (Addresses et sockets partagés, see
+## feature-gateway-address-scoping.md), and this case is about re-parenting alone.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: hug-gateway-b
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-b-listener
+    port: 8080
+    protocol: HTTP
+    hostname: "b.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  allowedListeners:
+    namespaces:
+      from: All

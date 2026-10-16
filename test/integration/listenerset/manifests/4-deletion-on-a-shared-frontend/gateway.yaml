@@ -1,0 +1,21 @@
+## The shared frontend: the Gateway keeps this listener when the ListenerSet is
+## deleted, which is why nothing tears the frontend down and the purge has to be a
+## diff rather than a removal.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: hug-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "gateway.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  allowedListeners:
+    namespaces:
+      from: All

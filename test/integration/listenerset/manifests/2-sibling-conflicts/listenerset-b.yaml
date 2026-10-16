@@ -1,0 +1,18 @@
+## Same hostname, same port, same Gateway as listenerset-a: applied second, so it is
+## the younger contender and the one the conflict refuses.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset-b
+spec:
+  parentRef:
+    name: hug-gateway
+  listeners:
+  - name: ls-b-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "shared.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

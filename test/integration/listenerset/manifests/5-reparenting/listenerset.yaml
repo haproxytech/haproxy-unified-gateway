@@ -1,0 +1,18 @@
+## Applied first, and parented to gateway A. listenerset-moved.yaml carries the same
+## name with the other parent, so applying it updates this object.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset-moving
+spec:
+  parentRef:
+    name: hug-gateway-a
+  listeners:
+  - name: ls-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "ls.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
