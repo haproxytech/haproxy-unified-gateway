@@ -267,6 +267,30 @@ func (b *BaseSuite) ExpectMapEntryMentions(mapFileRelativePath, key string, must
 	}
 }
 
+// ExpectListenerSetHasNoStatus waits for a ListenerSet to publish no conditions and no
+// entries at all.
+//
+// A case that asserts this has to establish that the object was processed, or the
+// assertion holds before the controller has seen it: pair it with a second ListenerSet
+// whose status is published, and wait for that one first. The pair is what makes the
+// absence meaningful rather than lucky.
+func (b *BaseSuite) ExpectListenerSetHasNoStatus(ctx context.Context, namespace, name string) {
+	var got []metav1.Condition
+	var entries int
+	if !utils.WaitFor(ctx, interval, timeout, func() bool {
+		lset := &gatewayv1.ListenerSet{}
+		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, lset); err != nil {
+			return false
+		}
+		got = lset.Status.Conditions
+		entries = len(lset.Status.Listeners)
+		return len(got) == 0 && entries == 0
+	}) {
+		b.T().Fatalf("ListenerSet %s/%s publishes %d conditions and %d entries, expected none: %+v",
+			namespace, name, len(got), entries, got)
+	}
+}
+
 // ExpectListenerSetDeleted waits for the ListenerSet to be gone. What the deletion
 // leaves behind -- the frontend that survives, the map entries that do not -- is
 // asserted separately, by the map and frontend expectations.

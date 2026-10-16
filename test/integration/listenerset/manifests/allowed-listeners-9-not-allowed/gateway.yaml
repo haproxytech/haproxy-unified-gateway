@@ -1,0 +1,13 @@
+## No allowedListeners at all: the API defaults it to None, so a ListenerSet is refused
+## by default rather than by an explicit policy.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: hug-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "gateway.haproxy"

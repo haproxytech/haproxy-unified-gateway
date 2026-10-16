@@ -1,0 +1,14 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-same
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-listener
+    port: 8080
+    protocol: HTTP
+    hostname: "same-gw.haproxy"
+  allowedListeners:
+    namespaces:
+      from: Same

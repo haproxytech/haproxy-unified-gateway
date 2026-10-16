@@ -1,0 +1,14 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-other-all
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-listener
+    port: 8080
+    protocol: HTTP
+    hostname: "other-all.haproxy"
+  allowedListeners:
+    namespaces:
+      from: All
