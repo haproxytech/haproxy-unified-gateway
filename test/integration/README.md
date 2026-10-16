@@ -73,6 +73,11 @@ Four things the framework does not show at the call site. Each one has cost a ru
   two steps, express a transition (a moved `parentRef`, a changed spec). Applied
   together they share a creation timestamp, which is not something to assert
   precedence on.
+- **Frontends are keyed on the port, not on the Gateway.** Two Gateways listening on
+  one port share a frontend, and so share its map files: a listener that moves from one
+  Gateway to another keeps its line in the same map, and what changes is the Gateway
+  the line attributes it to. Asserting such a line's *absence* asserts something else
+  entirely -- that the frontend is gone.
 - **Deletion is per file, with no deduplication.** A cleanup that lists two manifests
   for one object deletes it twice and fails on the second attempt, and a deferred
   cleanup that re-lists an object the case deleted itself fails the same way. Name the
