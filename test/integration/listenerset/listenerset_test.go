@@ -29,10 +29,10 @@
 // | case                                                | Gateway                 | ListenerSet                       | entry                                                             | route                    |
 // |-----------------------------------------------------|-------------------------|-----------------------------------|-------------------------------------------------------------------|--------------------------|
 // | 1 contribution                                      | attachedListenerSets=1  | Accepted=True, Programmed=True    | ResolvedRefs/Accepted/Programmed=True, attachedRoutes=1, exact     | attaches, no condition   |
-// | 2 sibling conflicts (A older, B refused)            | attachedListenerSets=1  | A Accepted/Programmed=True        | A: accepted, exact -- B: Accepted/Programmed=False + Conflicted, exact | -                        |
-// | **3** ReferenceGrant naming the ListenerSet         | attachedListenerSets=1  | refused, then Accepted/Programmed=True | refused: ResolvedRefs=False/RefNotPermitted, present -- permitted: accepted, exact | -                        |
+// | 2 sibling conflicts (A older, B refused)            | attachedListenerSets=1  | A Accepted/Programmed=True, B Accepted/Programmed=False/ListenersNotValid | A: accepted, exact -- B: Accepted/Programmed=False/<conflict> + Conflicted=True/<conflict> + ResolvedRefs=True, exact | -                        |
+// | **3** ReferenceGrant naming the ListenerSet         | not asserted            | refused, then Accepted/Programmed=True | refused: ResolvedRefs=False/RefNotPermitted, present -- permitted: accepted, exact | -                        |
 // | **4** deletion on a shared frontend                 | attachedListenerSets=0  | gone                              | gone, and the entry is gone from the surviving frontend's map     | -                        |
-// | **5** re-parenting to another Gateway               | A: 1 then 0, B: 0 then 1 | Accepted/Programmed=True          | accepted, exact throughout, attachedRoutes=1                       | follows the ListenerSet  |
+// | **5** re-parenting to another Gateway               | A: 1 then 0, B: 0 then 1 | Accepted/Programmed=True          | accepted, exact throughout, attachedRoutes=1, the map line names B | follows the ListenerSet  |
 //
 // The conditions each case asserts come from the conformance suite, whose ListenerSet
 // cases pass. An accepted entry carries exactly ResolvedRefs=True, Accepted=True and
