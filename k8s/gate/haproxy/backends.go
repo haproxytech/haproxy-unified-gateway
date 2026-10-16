@@ -161,7 +161,8 @@ func (b *HaproxyConfMgrImpl) onInvalidHTTPRouteUpserted(routeKey k8stypes.Namesp
 	impactedBackends := b.backendOwners.getBackendsReferencedByHTTPRoute(routeKey)
 	for beName := range impactedBackends {
 		b.backendOwners.removeHTTPRoute(beName, routeKey)
-		b.addImpactedBackendDeleted(beName)
+		// Other routes may still own this backend; cleanup decides whether to delete it.
+		b.backendsImpactedInCycle.Unreferenced[beName] = struct{}{}
 	}
 	return nil
 }
@@ -171,7 +172,8 @@ func (b *HaproxyConfMgrImpl) onDeletedHTTPRoute(routeKey k8stypes.NamespacedName
 	impactedBackends := b.backendOwners.getBackendsReferencedByHTTPRoute(routeKey)
 	for beName := range impactedBackends {
 		b.backendOwners.removeHTTPRoute(beName, routeKey)
-		b.addImpactedBackendDeleted(beName)
+		// Other routes may still own this backend; cleanup decides whether to delete it.
+		b.backendsImpactedInCycle.Unreferenced[beName] = struct{}{}
 	}
 	return nil
 }
@@ -181,7 +183,8 @@ func (b *HaproxyConfMgrImpl) onDeletedTLSRoute(routeKey k8stypes.NamespacedName,
 	impactedBackends := b.backendOwners.getBackendsReferencedByTLSRoute(routeKey)
 	for beName := range impactedBackends {
 		b.backendOwners.removeTLSRoute(beName, routeKey)
-		b.addImpactedBackendDeleted(beName)
+		// Other routes may still own this backend; cleanup decides whether to delete it.
+		b.backendsImpactedInCycle.Unreferenced[beName] = struct{}{}
 	}
 	return nil
 }
@@ -414,7 +417,8 @@ func (b *HaproxyConfMgrImpl) onInvalidTLSRouteUpserted(routeKey k8stypes.Namespa
 	impactedBackends := b.backendOwners.getBackendsReferencedByTLSRoute(routeKey)
 	for beName := range impactedBackends {
 		b.backendOwners.removeTLSRoute(beName, routeKey)
-		b.addImpactedBackendDeleted(beName)
+		// Other routes may still own this backend; cleanup decides whether to delete it.
+		b.backendsImpactedInCycle.Unreferenced[beName] = struct{}{}
 	}
 	return nil
 }
