@@ -36,10 +36,10 @@
 //
 // The conditions each case asserts come from the conformance suite, whose ListenerSet
 // cases pass. An accepted entry carries exactly ResolvedRefs=True, Accepted=True and
-// Programmed=True; a rejected one carries exactly three conditions with the conflict's
-// reason on all of them (Accepted=False/<reason>, Programmed=False/<reason>,
-// Conflicted=True/<reason>), which is what gatewayv1.ListenerReasonHostnameConflict
-// means below. Where the API leaves a set open -- the conditions of an entry whose
+// Programmed=True; a rejected one carries four -- the three that name the conflict,
+// with the conflict's reason on Accepted and Programmed as well
+// (Accepted=False/<reason>, Programmed=False/<reason>, Conflicted=True/<reason>),
+// plus ResolvedRefs=True, since losing a port is not a reference problem. Where the API leaves a set open -- the conditions of an entry whose
 // reference is not permitted -- the case pins one condition instead of the set.
 package listenerset
 
@@ -76,8 +76,14 @@ func acceptedEntry() []metav1.Condition {
 }
 
 // rejectedByConflict is what an entry carries when it loses a listener conflict:
-// three conditions, the conflict's reason on each of them. A conflict is not a
-// reference problem, so there is no ResolvedRefs condition at all.
+// four conditions. Three name the conflict, and carry its reason on all three --
+// Accepted and Programmed say why they are false, which is what the conformance
+// suite requires of a conflicted listener. The fourth is ResolvedRefs, and it is
+// true: a conflict is not a reference problem, and a listener that resolves its
+// references and loses a port says both.
+//
+// The conformance helper this shape was read from is a "must have these" check, not
+// an equality of sets, so it is the exact-set assertion here that pins the fourth.
 func rejectedByConflict(reason gatewayv1.ListenerEntryConditionReason) []metav1.Condition {
 	return []metav1.Condition{
 		{
@@ -94,6 +100,11 @@ func rejectedByConflict(reason gatewayv1.ListenerEntryConditionReason) []metav1.
 			Type:   string(gatewayv1.ListenerEntryConditionProgrammed),
 			Status: metav1.ConditionFalse,
 			Reason: string(reason),
+		},
+		{
+			Type:   string(gatewayv1.ListenerEntryConditionResolvedRefs),
+			Status: metav1.ConditionTrue,
+			Reason: string(gatewayv1.ListenerEntryReasonResolvedRefs),
 		},
 	}
 }
