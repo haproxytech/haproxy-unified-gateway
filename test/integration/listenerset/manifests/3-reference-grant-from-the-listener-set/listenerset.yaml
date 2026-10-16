@@ -2,6 +2,12 @@
 ## a ReferenceGrant whose `from` is this ListenerSet -- the ListenerSet is the
 ## resource holding the reference, not the Gateway it attaches to. GEP-1713 is
 ## explicit that a grant naming the Gateway does not cover its ListenerSets.
+##
+## The namespace below has to be secretNamespace in suite_test.go: "other", the second
+## namespace the controller under test watches. A namespace it does not watch makes the
+## Secret invisible, and the listener then reports a missing Secret rather than the
+## missing permission this case is about. It is spelled here because the harness
+## substitutes ports in fixture contents, not namespaces.
 apiVersion: gateway.networking.k8s.io/v1
 kind: ListenerSet
 metadata:
@@ -20,7 +26,7 @@ spec:
       - group: ""
         kind: Secret
         name: tenant-cert
-        namespace: listenerset-secrets
+        namespace: other
     allowedRoutes:
       kinds:
       - group: gateway.networking.k8s.io
