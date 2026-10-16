@@ -287,7 +287,10 @@ func (s *ListenerSetSuite) Test_3_ReferenceGrant_From_The_ListenerSet() {
 	fixturePath := path.Join(utils.GetCRDFixturePath(), fixtureDir)
 	inTestNamespace := []string{"gatewayclass.yaml", "gateway.yaml", "listenerset.yaml"}
 	s.CreateFixtures(fixturePath, inTestNamespace)
-	defer s.CleanupFixtures(fixturePath, nil)
+	// The manifest list is given explicitly: a bare cleanup walks every file of the
+	// directory in the test namespace, the Secret among them, and fails on a Secret
+	// that lives in another one.
+	defer s.CleanupFixtures(fixturePath, inTestNamespace)
 
 	ctx := s.Test().Ctx
 	ns := s.Test().Namespace
@@ -296,6 +299,7 @@ func (s *ListenerSetSuite) Test_3_ReferenceGrant_From_The_ListenerSet() {
 	// The Secret is in the other namespace from the start: what the first step
 	// lacks is the grant, not the certificate.
 	s.CreateFixturesInNamespace(fixturePath, secretNamespace, []string{"secret.yaml"})
+	defer s.CleanupFixturesInNamespace(fixturePath, secretNamespace, []string{"secret.yaml"})
 
 	// Nothing permits the reference yet, so the entry cannot resolve it. Its other
 	// conditions are the implementation's to render, hence the presence assertion;

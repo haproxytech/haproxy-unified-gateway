@@ -26,9 +26,14 @@ import (
 
 // secretNamespace holds the Secret a ListenerSet's cross-namespace certificateRef
 // points at, and the ReferenceGrant that permits it. It is a second namespace
-// because that is what a ReferenceGrant is for: HUG owns no plumbing for a fixture
-// outside the test namespace, so the case creates one.
-const secretNamespace = "listenerset-secrets"
+// because that is what a ReferenceGrant is for.
+//
+// It is "other" and not a namespace of our own because the controller under test
+// watches a fixed list -- the test namespace, "other" and "test" (base/hugconfig.go)
+// -- so a Secret anywhere else is invisible to it, and the case would report a
+// missing Secret rather than the missing permission it is about. "other" is watched
+// but never created, which is why the suite creates it.
+const secretNamespace = "other"
 
 type ListenerSetSuite struct {
 	base.BaseSuite
