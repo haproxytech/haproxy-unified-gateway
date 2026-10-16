@@ -227,6 +227,46 @@ func (b *BaseSuite) ExpectNoMapEntry(mapFileRelativePath, value string) {
 	}
 }
 
+// ExpectMapEntryMentions waits for the line of a map file whose key is `key` to
+// mention every value of mustMention and none of mustNotMention.
+//
+// What it asserts is attribution, which is what a value carries when several
+// resources share a port: the frontends are keyed on the port, so a listener that
+// moves from one Gateway to another keeps its line in the same map -- under the new
+// Gateway's key. Asserting the entry's absence there would be asserting the frontend
+// had gone, which is a different question.
+func (b *BaseSuite) ExpectMapEntryMentions(mapFileRelativePath, key string, mustMention, mustNotMention []string) {
+	var offending []string
+	if !utils.WaitFor(context.Background(), interval, timeout, func() bool {
+		lines, err := b.GetMapFileFrom(mapFileRelativePath)
+		if err != nil {
+			return false
+		}
+		offending = nil
+		for _, line := range lines {
+			fields := strings.Fields(line)
+			if len(fields) == 0 || fields[0] != key {
+				continue
+			}
+			for _, wanted := range mustMention {
+				if !strings.Contains(line, wanted) {
+					offending = append(offending, fmt.Sprintf("%s should mention %s: %s", key, wanted, line))
+				}
+			}
+			for _, unwanted := range mustNotMention {
+				if strings.Contains(line, unwanted) {
+					offending = append(offending, fmt.Sprintf("%s should not mention %s: %s", key, unwanted, line))
+				}
+			}
+			return len(offending) == 0
+		}
+		offending = append(offending, fmt.Sprintf("no line of %s has %s as its key", mapFileRelativePath, key))
+		return false
+	}) {
+		b.T().Fatalf("%s: %v", mapFileRelativePath, offending)
+	}
+}
+
 // ExpectListenerSetDeleted waits for the ListenerSet to be gone. What the deletion
 // leaves behind -- the frontend that survives, the map entries that do not -- is
 // asserted separately, by the map and frontend expectations.

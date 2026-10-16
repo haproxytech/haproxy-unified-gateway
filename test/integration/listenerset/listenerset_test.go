@@ -274,11 +274,16 @@ func (s *ListenerSetSuite) Test_5_Reparenting() {
 	// The route is parented to the ListenerSet, so it followed it.
 	s.ExpectListenerSetEntryAttachedRoutes(ctx, ns, lsetName, "ls-listener", 1)
 	s.ExpectListenerSetEntryConditions(ctx, ns, lsetName, "ls-listener", acceptedEntry())
-	// And the first Gateway's frontend no longer carries the entry: the shared
-	// frontend survives, since the Gateway declares a listener of its own, so what
-	// proves the purge is the entry being gone from the map, not the frontend being
-	// gone with it.
-	s.ExpectNoMapEntry("hug_http_31081/listener_exact_match.map", "ls.haproxy")
+	// The entry keeps its line in the map of that port, and the line changes hands:
+	// it names the second Gateway now, and no longer the first. The line does not
+	// disappear, because HUG's frontends are keyed on the port, not on the Gateway --
+	// the ListenerSet's listener still listens on 31081, and the frontend that serves
+	// that port is the one Gateway A's own listener sits in. What the move changes is
+	// whose listener it is, which is what this asserts, and it is the assertion that
+	// tells the fixed behaviour from the broken one: before, the former parent kept
+	// the entry in its merged list and the line still named it.
+	s.ExpectMapEntryMentions("hug_http_31081/listener_exact_match.map", "ls.haproxy",
+		[]string{"hug-gateway-b"}, []string{"hug-gateway-a"})
 }
 
 // Test_3_ReferenceGrant_From_The_ListenerSet is a listener whose certificateRef
