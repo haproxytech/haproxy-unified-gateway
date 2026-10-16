@@ -150,18 +150,19 @@ func (s *ListenerSetSuite) Test_ParentRef_4_Becomes_Managed() {
 }
 
 // Test_ParentRef_5_Stops_Being_Managed repoints a GatewayClass away from this
-// controller and pins what happens: **nothing**. The ListenerSet stays attached and
-// served, which is not what the transition should do.
+// controller: the Gateway stops being ours, and the ListenerSet's entries leave HAProxy
+// with it.
 //
-// The asymmetry with case 4 is where it comes from. A foreign class produces no tree
-// entry -- the watch predicate drops its create event -- so repointing it at us creates
-// one, with Managed true. The way back accepts the event too (the predicate matches when
-// either side carries our controllerName) but does not recompute anything: Managed is set
-// once, when the tree object is built, and a class that is no longer ours keeps its entry.
-// A Gateway whose class another controller has taken over goes on being served here.
+// The status is not touched, and that is deliberate: once nothing is contributed, the
+// attachment is no longer ours to report, and writing there would risk colliding with
+// the controller that has taken the Gateway over. Whichever controller speaks about the
+// ListenerSet next replaces the whole status anyway -- every patcher writes the status
+// outright rather than merging -- so the last status we published stays until someone
+// with a claim to it overwrites it.
 //
-// Pinned as it is, not as it should be, until that is decided: the expectation below is
-// what the code does today, and it is the assertion a fix would have to change.
+// The assertion that matters here is the data plane one: the listener is gone from the
+// port's map. Reading the map is what tells a detached Gateway from one that is still
+// served, which is the difference this transition is about.
 func (s *ListenerSetSuite) Test_ParentRef_5_Stops_Being_Managed() {
 	fixturePath := path.Join(utils.GetCRDFixturePath(), "parentref-5-stops-being-managed")
 	manifests := []string{"gatewayclass-foreign.yaml", "gateway-foreign.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"}
@@ -175,16 +176,13 @@ func (s *ListenerSetSuite) Test_ParentRef_5_Stops_Being_Managed() {
 	s.CreateFixtures(fixturePath, []string{"gatewayclass-foreign-ours.yaml"})
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset", "ls-listener", acceptedEntry())
+	s.ExpectMapEntryMentions("hug_http_31081/listener_exact_match.map", "ls.haproxy",
+		[]string{"foreign-gateway"}, nil)
 
 	// And away from us again.
 	s.CreateFixtures(fixturePath, []string{"gatewayclass-foreign.yaml"})
 
-	// The gap: the ListenerSet is still served, entry and all. The listener is supposed
-	// to leave with the Gateway, and the status is supposed to stop reading as accepted
-	// -- which is the question case 2 already raises, here with no status change at all
-	// to explain it.
-	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
-	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset", "ls-listener", acceptedEntry())
+	s.ExpectNoMapEntry("hug_http_31081/listener_exact_match.map", "ls.haproxy")
 }
 
 // Test_ParentRef_6_Wrong_Shape is the three ways a parentRef fails to name a Gateway at

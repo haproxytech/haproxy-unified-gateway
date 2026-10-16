@@ -99,6 +99,10 @@ func (b *GatewayClassBuilderImpl) computeTreeGatewayClassUpdate(gwcKey client.Ob
 		} else {
 			treeGwc = NewGatewayClass(gwcUpdate.NewObject)
 		}
+		// Managed is a conclusion about the resource, so it is re-derived here rather than
+		// carried over from the previous cycle: a class handed to another controller must
+		// leave the managed tree, and with it its Gateways.
+		treeGwc.UpdateManaged(b.ControllerName)
 		// Perform Validity Check on all updated GatewayClasses
 		// Do we keep it in Managed or Unmanaged???
 		treeGwc.checkParametersRef(*b.ControllerStore)

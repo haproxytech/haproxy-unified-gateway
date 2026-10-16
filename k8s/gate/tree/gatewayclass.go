@@ -80,6 +80,20 @@ func (g *GatewayClass) ResetChecks() {
 	g.Valid = false
 }
 
+// UpdateManaged recomputes whether this GatewayClass is one this controller serves,
+// from the only field that says so: its controllerName.
+//
+// It runs on every update because the answer changes: a class another controller wrote
+// can be repointed at us, and one of ours can be handed to another controller. Managed
+// used to be set once, when the tree entry was built, and never revisited -- so a class
+// handed over kept its entry in the managed tree, CheckGatewayClassExists kept answering
+// true for its Gateways, and they went on being served here while their class belonged
+// to someone else. The two directions were not even symmetric: the other way round
+// worked, because that is when the tree entry is created.
+func (g *GatewayClass) UpdateManaged(controllerName string) {
+	g.Managed = g.K8sResource != nil && string(g.K8sResource.Spec.ControllerName) == controllerName
+}
+
 func (g *GatewayClass) SetAsManaged(logger *slog.Logger, controllerStore ControllerStore) {
 	logger.LogAttrs(context.Background(), slog.LevelDebug, fmt.Sprintf("%T MANAGED", *g),
 		logging.LogAttrObjectKey(g.K8sResource))
