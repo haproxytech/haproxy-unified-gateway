@@ -827,13 +827,9 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 						predicate.NewNamespacePredicate(cfg.Namespaces),
 					),
 				),
-				// No WithEnqueueFor yet. A ListenerSet does have secondary
-				// dependencies -- the Secrets of its certificateRefs, the
-				// ReferenceGrants permitting them, and the Gateway it attaches to --
-				// and it also has to enqueue that Gateway, since a ListenerSet alone
-				// produces no configuration. Those edges are added with the builder
-				// that consumes them; registering them before there is anything to
-				// rebuild would only cost cycles.
+				// No WithEnqueueFor: this controller's primary object is the grant itself,
+				// and a consumer re-enqueues on a grant change from its own config. The
+				// ListenerSet controller does, a few blocks above.
 			},
 		},
 	}
