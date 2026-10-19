@@ -359,3 +359,31 @@ func derefSectionName(name *gatewayv1.SectionName) string {
 	}
 	return string(*name)
 }
+
+// ExpectRouteHasNoParent waits for a route to publish no status for a given parent.
+//
+// It is the mirror of ExpectRouteParentHasCondition and has the same blind spot in
+// reverse: "no entry" is true before the controller has looked at the route, so a case
+// that asserts it must first wait for another parent of the same route to be published.
+// The pair is what makes the absence a statement about the controller rather than about
+// the test's timing.
+func (b *BaseSuite) ExpectRouteHasNoParent(ctx context.Context, namespace, routeName string, parent gatewayv1.ParentReference) {
+	var seen []string
+	if !utils.WaitFor(ctx, interval, timeout, func() bool {
+		route := &gatewayv1.HTTPRoute{}
+		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: routeName, Namespace: namespace}, route); err != nil {
+			return false
+		}
+		seen = seen[:0]
+		for _, parentStatus := range route.Status.Parents {
+			if sameParentRef(parentStatus.ParentRef, parent) {
+				seen = append(seen, fmt.Sprintf("%s/%s/%s", derefKind(parentStatus.ParentRef.Kind), parentStatus.ParentRef.Name, derefSectionName(parentStatus.ParentRef.SectionName)))
+				return false
+			}
+		}
+		return true
+	}) {
+		b.T().Fatalf("route %s/%s publishes a status for a parent it should say nothing about: %v",
+			namespace, routeName, seen)
+	}
+}

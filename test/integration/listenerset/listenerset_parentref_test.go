@@ -377,3 +377,78 @@ func (s *ListenerSetSuite) Test_IncompatibleKinds_Make_The_ListenerSet_Unservabl
 	// With no valid entry left, the ListenerSet is not accepted and not programmed.
 	s.ExpectListenerSetConditions(ctx, ns, lsetName, listenerSetNotServable())
 }
+
+// Test_Route_Naming_A_Refused_ListenerSet is the route side of a refusal the
+// ListenerSet already reports: the Gateway does not allow ListenerSets, so the entry
+// contributes nothing, and a route naming it has nothing to attach to.
+//
+// The route carries two parents on purpose. The one naming the Gateway is served, which
+// is what proves the route was processed at all; the one naming the ListenerSet is
+// refused with NoMatchingParent -- the same answer a deleted parent gets, and not an
+// entry with no conditions.
+func (s *ListenerSetSuite) Test_Route_Naming_A_Refused_ListenerSet() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "route-refused-listener-set")
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	ctx := s.Test().Ctx
+	ns := s.Test().Namespace
+
+	// The ListenerSet says why it contributes nothing.
+	s.ExpectListenerSetConditions(ctx, ns, "listenerset-refused", listenerSetNotAllowed())
+
+	// The witness: the parent naming the Gateway is accepted.
+	s.ExpectRouteParentHasCondition(ctx, ns, "route-two-parents", gatewayParentRef("gateway-listener"), metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.RouteReasonAccepted),
+	})
+
+	// And the refusal, blamed on the ListenerSet.
+	s.ExpectRouteParentHasCondition(ctx, ns, "route-two-parents", listenerSetParentRef("listenerset-refused", "ls-listener"), metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
+		Status: metav1.ConditionFalse,
+		Reason: string(gatewayv1.RouteReasonNoMatchingParent),
+	})
+}
+
+// Test_Route_Naming_An_Absent_ListenerSet is the other refusal, and this one owes
+// silence: the parentRef names no resource of ours, and the API allows the Accepted
+// condition to be omitted when a controller cannot judge a parent.
+//
+// Silence is only meaningful next to something published, so the route again carries a
+// parent naming the Gateway, waited for first.
+func (s *ListenerSetSuite) Test_Route_Naming_An_Absent_ListenerSet() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "route-absent-listener-set")
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	ctx := s.Test().Ctx
+	ns := s.Test().Namespace
+
+	s.ExpectRouteParentHasCondition(ctx, ns, "route-two-parents", gatewayParentRef("gateway-listener"), metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.RouteReasonAccepted),
+	})
+
+	s.ExpectRouteHasNoParent(ctx, ns, "route-two-parents", listenerSetParentRef("listenerset-absent", "ls-listener"))
+}
+
+// gatewayParentRef names one of the Gateway's own listeners.
+func gatewayParentRef(sectionName string) gatewayv1.ParentReference {
+	return gatewayv1.ParentReference{
+		Name:        "hug-gateway",
+		SectionName: ptrTo(gatewayv1.SectionName(sectionName)),
+	}
+}
+
+// listenerSetParentRef names an entry a ListenerSet contributes.
+func listenerSetParentRef(name, sectionName string) gatewayv1.ParentReference {
+	return gatewayv1.ParentReference{
+		Group:       ptrTo(gatewayv1.Group(gatewayv1.GroupName)),
+		Kind:        ptrTo(gatewayv1.Kind("ListenerSet")),
+		Name:        gatewayv1.ObjectName(name),
+		SectionName: ptrTo(gatewayv1.SectionName(sectionName)),
+	}
+}
