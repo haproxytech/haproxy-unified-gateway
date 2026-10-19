@@ -1,0 +1,8 @@
+## The same name, another controller. A GatewayClass cannot be repointed, but it can
+## be deleted and recreated, and that is a name changing hands.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: haproxy
+spec:
+  controllerName: example.com/another-controller

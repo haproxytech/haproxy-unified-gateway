@@ -454,3 +454,37 @@ func listenerSetParentRef(name, sectionName string) gatewayv1.ParentReference {
 		SectionName: ptrTo(gatewayv1.SectionName(sectionName)),
 	}
 }
+
+// Test_ParentRef_Class_Handed_Over is the one way a GatewayClass changes hands: not by
+// repointing it -- its controllerName is immutable -- but by deleting it and recreating
+// the same name under another controller. The Gateway and the ListenerSet are untouched;
+// what changes is whose the class is.
+//
+// It is what the earlier attempt at this scenario missed, and it is the most telling
+// form of it: nothing in the test's own objects changes between the two halves.
+func (s *ListenerSetSuite) Test_ParentRef_Class_Handed_Over() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "parentref-class-handed-over")
+	s.CreateFixtures(fixturePath, nil)
+	// The class our controller owns is deleted by the case itself; the deferred cleanup
+	// names the other, and each Gateway manifest once.
+	defer s.CleanupFixtures(fixturePath, []string{"gatewayclass-taken.yaml", "gateway.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"})
+
+	ctx := s.Test().Ctx
+	ns := s.Test().Namespace
+
+	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
+	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset", "ls-listener", acceptedEntry())
+	s.ExpectMapEntryMentions("hug_http_31081/listener_exact_match.map", "ls.haproxy",
+		[]string{"hug-gateway"}, nil)
+
+	// The name changes hands: ours goes, another controller's arrives under the same
+	// name. The Gateway names it throughout.
+	s.CleanupFixtures(fixturePath, []string{"gatewayclass.yaml"})
+	s.CreateFixtures(fixturePath, []string{"gatewayclass-taken.yaml"})
+
+	// The listener leaves HAProxy with the Gateway that is no longer ours, and the
+	// status stays, as in the cases above: nothing is contributed, so nothing is ours
+	// to report.
+	s.ExpectNoMapEntry("hug_http_31081/listener_exact_match.map", "ls.haproxy")
+	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
+}

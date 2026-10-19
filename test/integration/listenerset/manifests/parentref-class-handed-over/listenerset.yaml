@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset
+spec:
+  parentRef:
+    name: hug-gateway
+  listeners:
+  - name: ls-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "ls.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
