@@ -92,9 +92,10 @@ func (s *ListenerSetSuite) Test_ParentRef_1_Does_Not_Exist() {
 // programmed while nothing serves it. Pinned as it is, not as it should be.
 func (s *ListenerSetSuite) Test_ParentRef_2_Parent_Deleted() {
 	fixturePath := path.Join(utils.GetCRDFixturePath(), "parentref-2-parent-deleted")
-	manifests := []string{"gatewayclass.yaml", "gateway.yaml", "listenerset.yaml"}
-	s.CreateFixtures(fixturePath, manifests)
-	defer s.CleanupFixtures(fixturePath, manifests)
+	s.CreateFixtures(fixturePath, nil)
+	// The Gateway is left out of the cleanup: this case deletes it itself, and a second
+	// deletion fails on an object that is already gone.
+	defer s.CleanupFixtures(fixturePath, []string{"gatewayclass.yaml", "listenerset.yaml"})
 
 	ctx := s.Test().Ctx
 	ns := s.Test().Namespace
