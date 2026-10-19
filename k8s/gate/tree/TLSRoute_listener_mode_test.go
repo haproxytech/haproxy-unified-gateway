@@ -15,8 +15,10 @@ package tree
 
 import (
 	"testing"
+	"time"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
+	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -172,4 +174,53 @@ func TestTLSRouteAttachesOnlyToPassthroughListener(t *testing.T) {
 	assert.Len(t, gw.OwnListenerByName("tls-passthrough").AttachedRoutes, 1,
 		"the only listener that may carry a TLSRoute")
 	assert.Empty(t, gw.OwnListenerByName("tls-terminate").AttachedRoutes)
+}
+
+// The refusal a route gets when its ListenerSet parent is refused, on the other route
+// type. The resolution is written once per route kind, so a guard added to one has to be
+// checked on both -- which is exactly how the gap it fixes went unnoticed.
+func TestTLSRouteRefusedListenerSetIsRefusedWithNoMatchingParent(t *testing.T) {
+	from := gatewayv1.NamespacesFromAll
+	f := newContributionFixture(t, &from)
+	treeLs := f.addListenerSet("tenant", "ls", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), "contributed")
+	f.builder.contributeListeners()
+	require.Equal(t, attachmentAllowed, treeLs.Attachment,
+		"fixture: the ListenerSet starts out one we report on")
+
+	// The refusal, and what it implies: a refused ListenerSet contributes nothing, so
+	// the Gateway's merged list holds no entry of it.
+	treeLs.Attachment = attachmentNotAllowed
+	gwK8s := f.store.ClusterStore.Gateways[f.gwKey]
+	treeGw := &Gateway{
+		K8sResource: gwK8s,
+		TreeStatus:  TreeUpdate[Gateway]{Status: store.StatusUpserted},
+	}
+	treeGw.constructListeners(nil)
+	f.store.GateTree.Gateways[f.gwKey] = treeGw
+
+	group := gatewayv1.Group(gatewayv1.GroupName)
+	kind := gatewayv1.Kind("ListenerSet")
+	namespace := gatewayv1.Namespace("tenant")
+	parentRef := gatewayv1.ParentReference{
+		Group:     &group,
+		Kind:      &kind,
+		Namespace: &namespace,
+		Name:      "ls",
+	}
+	r := NewTLSRoute(&gatewayv1alpha2.TLSRoute{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "tlsroute"},
+		Spec: gatewayv1alpha2.TLSRouteSpec{
+			CommonRouteSpec: gatewayv1.CommonRouteSpec{
+				ParentRefs: []gatewayv1.ParentReference{parentRef},
+			},
+		},
+	}, "controller")
+
+	result := r.checkParentRef(parentRef, *f.store)
+
+	assert.True(t, result.Managed, "the parent is ours, so the refusal is ours to report")
+	assert.False(t, result.Valid)
+	assert.Len(t, result.Conditions, 1,
+		"an entry with no conditions at all announces a parent and says nothing about it")
+	assert.True(t, result.Conditions.Equal(rc.ConditionNotAcceptedNoMatchingParent()))
 }

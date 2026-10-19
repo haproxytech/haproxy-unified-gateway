@@ -24,9 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // contributionFixture is one Gateway that allows ListenerSets from anywhere, plus
@@ -73,6 +75,20 @@ func newContributionFixtureWithPolicy(t *testing.T, allowed *gatewayv1.AllowedLi
 			GatewayClasses: map[types.NamespacedName]*GatewayClass{{Name: "hug"}: {}},
 			ListenerSets:   map[types.NamespacedName]*ListenerSet{},
 		},
+	}
+
+	// The GVK stubs every fixture built on this one needs to resolve a parentRef kind.
+	controllerStore.ExtractGVK = func(obj client.Object) schema.GroupVersionKind {
+		switch obj.(type) {
+		case *gatewayv1.ListenerSet:
+			return schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: "v1", Kind: "ListenerSet"}
+		case *gatewayv1.HTTPRoute:
+			return schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: "v1", Kind: "HTTPRoute"}
+		case *gatewayv1alpha2.TLSRoute:
+			return schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: "v1alpha2", Kind: "TLSRoute"}
+		default:
+			return schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: "v1", Kind: "Gateway"}
+		}
 	}
 
 	return &contributionFixture{

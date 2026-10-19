@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -42,17 +41,6 @@ func newRouteAttachFixture(t *testing.T) *routeAttachFixture {
 
 	from := gatewayv1.NamespacesFromAll
 	f := newContributionFixture(t, &from)
-	f.store.ExtractGVK = func(obj client.Object) schema.GroupVersionKind {
-		switch obj.(type) {
-		case *gatewayv1.ListenerSet:
-			return schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: "v1", Kind: "ListenerSet"}
-		case *gatewayv1.HTTPRoute:
-			return schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: "v1", Kind: "HTTPRoute"}
-		default:
-			return schema.GroupVersionKind{Group: gatewayv1.GroupName, Version: "v1", Kind: "Gateway"}
-		}
-	}
-
 	// One listener the Gateway declares itself, so the tests can show it is not
 	// reachable by naming the ListenerSet -- and that the entry is not reachable
 	// by naming the Gateway.
