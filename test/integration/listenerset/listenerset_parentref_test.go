@@ -49,6 +49,26 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// listenerSetParentNotAccepted is the pair of conditions a ListenerSet publishes when it
+// is attached to a Gateway that is not accepted -- a Gateway whose class has been handed
+// to another controller, or one that failed its own checks.
+func listenerSetParentNotAccepted() []metav1.Condition {
+	return []metav1.Condition{
+		{
+			Type:   string(gatewayv1.ListenerSetConditionAccepted),
+			Status: metav1.ConditionFalse,
+			Reason: string(gatewayv1.ListenerSetReasonParentNotAccepted),
+		},
+		{
+			Type:   string(gatewayv1.ListenerSetConditionProgrammed),
+			Status: metav1.ConditionFalse,
+			// The API names this reason in the Programmed field's documentation and
+			// declares no constant for it, so it is spelled here.
+			Reason: "ParentNotProgrammed",
+		},
+	}
+}
+
 // listenerSetNotAllowed is the pair of conditions a Gateway's refusal publishes. Both
 // carry NotAllowed: the API declares that reason for the Accepted condition, and the
 // conformance suite requires it on Programmed as well.
@@ -486,9 +506,14 @@ func (s *ListenerSetSuite) Test_ParentRef_Class_Handed_Over() {
 	s.CleanupFixtures(fixturePath, []string{"gatewayclass.yaml"})
 	s.CreateFixtures(fixturePath, []string{"gatewayclass-taken.yaml"})
 
-	// The listener leaves HAProxy with the Gateway that is no longer ours, and the
-	// status stays, as in the cases above: nothing is contributed, so nothing is ours
-	// to report.
+	// The listener leaves HAProxy with the Gateway that is no longer ours.
 	s.ExpectNoMapEntry("hug_http_31081/listener_exact_match.map", "ls.haproxy")
-	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
+
+	// The status, though, is republished rather than left as it was -- unlike a deleted
+	// parent, or a Gateway that stops naming our class. There the ListenerSet stops being
+	// attached to anything of ours and owes silence; here it is still attached, to a
+	// Gateway whose class is gone, so the Gateway is not accepted and the ListenerSet
+	// echoes that: ParentNotAccepted is the only thing it can truthfully say, and saying
+	// it is what tells its reader the parent can no longer be trusted.
+	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetParentNotAccepted())
 }
