@@ -81,6 +81,10 @@ func (b *BaseSuite) ExpectListenerSetConditions(ctx context.Context, namespace, 
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
 		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, lset); err != nil {
+			// Recorded rather than left blank: a read that keeps failing is a case
+			// naming something that is not there, and an empty explanation reads as a
+			// comparison that found nothing to say.
+			why = fmt.Sprintf("the ListenerSet could not be read: %v", err)
 			return false
 		}
 		got = lset.Status.Conditions
@@ -100,6 +104,7 @@ func (b *BaseSuite) ExpectListenerSetEntryConditions(ctx context.Context, namesp
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
 		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
+			why = fmt.Sprintf("the ListenerSet could not be read: %v", err)
 			return false
 		}
 		for _, entry := range lset.Status.Listeners {

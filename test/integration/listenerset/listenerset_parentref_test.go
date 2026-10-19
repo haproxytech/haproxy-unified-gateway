@@ -242,8 +242,8 @@ func (s *ListenerSetSuite) Test_ParentRef_8_Same_Namespace() {
 	ns := s.Test().Namespace
 
 	// The absent namespace: attached, since it means the ListenerSet's own.
-	s.ExpectListenerSetConditions(ctx, ns, "listenerset-empty-namespace", listenerSetServable())
-	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset-empty-namespace", "ls-listener", acceptedEntry())
+	s.ExpectListenerSetConditions(ctx, ns, "ls-empty-namespace", listenerSetServable())
+	s.ExpectListenerSetEntryConditions(ctx, ns, "ls-empty-namespace", "ls-listener", acceptedEntry())
 
 	// The same namespace, named: same behaviour, built here for the reason above.
 	named := &gatewayv1.ListenerSet{
