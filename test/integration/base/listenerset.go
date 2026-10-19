@@ -267,14 +267,21 @@ func (b *BaseSuite) ExpectMapEntryMentions(mapFileRelativePath, key string, must
 	}
 }
 
-// ExpectListenerSetHasNoStatus waits for a ListenerSet to publish no conditions and no
-// entries at all.
+// ExpectListenerSetReportsNothing waits for a ListenerSet to carry nothing but the
+// conditions the API itself seeded, and no entry at all.
 //
-// A case that asserts this has to establish that the object was processed, or the
-// assertion holds before the controller has seen it: pair it with a second ListenerSet
-// whose status is published, and wait for that one first. The pair is what makes the
-// absence meaningful rather than lucky.
-func (b *BaseSuite) ExpectListenerSetHasNoStatus(ctx context.Context, namespace, name string) {
+// "Nothing published" cannot be asserted as an absence of conditions: the ListenerSet
+// CRD declares a default status of Accepted and Programmed, both Unknown with the reason
+// Pending and the message "Waiting for controller", so a freshly created ListenerSet
+// already carries them and a controller that stays silent leaves them exactly as they
+// are. Silence is therefore observable as those placeholders surviving untouched, which
+// is also a sharper assertion than an absence: any write of ours moves
+// observedGeneration to the object's generation and replaces the reason.
+//
+// As with any assertion of silence, the case has to establish that the object was
+// processed: pair it with a second ListenerSet whose status is published, and wait for
+// that one first.
+func (b *BaseSuite) ExpectListenerSetReportsNothing(ctx context.Context, namespace, name string) {
 	var got []metav1.Condition
 	var entries int
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
@@ -284,10 +291,25 @@ func (b *BaseSuite) ExpectListenerSetHasNoStatus(ctx context.Context, namespace,
 		}
 		got = lset.Status.Conditions
 		entries = len(lset.Status.Listeners)
-		return len(got) == 0 && entries == 0
+		return len(got) == 2 && entries == 0 &&
+			conditionPresents(seededCondition(gatewayv1.ListenerSetConditionAccepted), got) &&
+			conditionPresents(seededCondition(gatewayv1.ListenerSetConditionProgrammed), got)
 	}) {
-		b.T().Fatalf("ListenerSet %s/%s publishes %d conditions and %d entries, expected none: %+v",
-			namespace, name, len(got), entries, got)
+		b.T().Fatalf("ListenerSet %s/%s reports more than the API's seeded conditions: %d entries, %+v",
+			namespace, name, entries, got)
+	}
+}
+
+// seededCondition is one of the placeholders the ListenerSet CRD puts in status.conditions
+// at creation: Unknown, Pending, "Waiting for controller", and an observedGeneration of
+// zero -- the generation of nobody having spoken.
+func seededCondition(conditionType gatewayv1.ListenerSetConditionType) metav1.Condition {
+	return metav1.Condition{
+		Type:               string(conditionType),
+		Status:             metav1.ConditionUnknown,
+		Reason:             string(gatewayv1.ListenerSetReasonPending),
+		Message:            "Waiting for controller",
+		ObservedGeneration: 0,
 	}
 }
 

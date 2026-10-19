@@ -79,7 +79,7 @@ func (s *ListenerSetSuite) Test_ParentRef_1_Does_Not_Exist() {
 	ns := s.Test().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "ls-control", listenerSetServable())
-	s.ExpectListenerSetHasNoStatus(ctx, ns, "ls-silent")
+	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-silent")
 }
 
 // Test_ParentRef_2_Parent_Deleted attaches first, then deletes the Gateway it points
@@ -121,7 +121,7 @@ func (s *ListenerSetSuite) Test_ParentRef_3_Not_Managed() {
 	ns := s.Test().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "ls-control", listenerSetServable())
-	s.ExpectListenerSetHasNoStatus(ctx, ns, "ls-silent")
+	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-silent")
 }
 
 // Test_ParentRef_4_Becomes_Managed is the same shape the other way round: the parent is
@@ -139,7 +139,7 @@ func (s *ListenerSetSuite) Test_ParentRef_4_Becomes_Managed() {
 	ctx := s.Test().Ctx
 	ns := s.Test().Namespace
 
-	s.ExpectListenerSetHasNoStatus(ctx, ns, "listenerset")
+	s.ExpectListenerSetReportsNothing(ctx, ns, "listenerset")
 
 	// The class becomes ours. Nothing about the ListenerSet changed.
 	s.CreateFixtures(fixturePath, []string{"gatewayclass-foreign-ours.yaml"})
@@ -198,9 +198,9 @@ func (s *ListenerSetSuite) Test_ParentRef_6_Wrong_Shape() {
 	ns := s.Test().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "ls-control", listenerSetServable())
-	s.ExpectListenerSetHasNoStatus(ctx, ns, "ls-wrong-group")
-	s.ExpectListenerSetHasNoStatus(ctx, ns, "ls-wrong-kind")
-	s.ExpectListenerSetHasNoStatus(ctx, ns, "ls-other-namespace")
+	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-wrong-group")
+	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-wrong-kind")
+	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-other-namespace")
 }
 
 // Test_ParentRef_7_Cross_Namespace is a parentRef naming a Gateway in another
