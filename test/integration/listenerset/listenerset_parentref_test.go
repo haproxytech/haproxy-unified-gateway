@@ -464,7 +464,11 @@ func listenerSetParentRef(name, sectionName string) gatewayv1.ParentReference {
 // form of it: nothing in the test's own objects changes between the two halves.
 func (s *ListenerSetSuite) Test_ParentRef_Class_Handed_Over() {
 	fixturePath := path.Join(utils.GetCRDFixturePath(), "parentref-class-handed-over")
-	s.CreateFixtures(fixturePath, nil)
+	// The two manifests of the class name it once each: applying the directory whole would
+	// try to repoint a GatewayClass at this controller before the case has deleted it, and
+	// its controllerName is immutable.
+	ownClass := []string{"gatewayclass.yaml", "gateway.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"}
+	s.CreateFixtures(fixturePath, ownClass)
 	// The class our controller owns is deleted by the case itself; the deferred cleanup
 	// names the other, and each Gateway manifest once.
 	defer s.CleanupFixtures(fixturePath, []string{"gatewayclass-taken.yaml", "gateway.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"})
