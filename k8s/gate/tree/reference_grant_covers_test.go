@@ -37,61 +37,73 @@ func TestReferenceGrantCoversMatchesIsAccessGranted(t *testing.T) {
 	}{
 		{
 			name: "named To, matching From",
-			rg: &gatewayv1beta1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+			rg: &gatewayv1beta1.ReferenceGrant{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
-				}},
+				},
+			},
 			from: GrantFrom{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"},
 			to:   GrantTo{Group: "", Kind: "Secret", Namespace: "certs", Name: "shared"},
 		},
 		{
 			name: "wildcard To, matching From",
-			rg: &gatewayv1beta1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+			rg: &gatewayv1beta1.ReferenceGrant{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: nil}},
-				}},
+				},
+			},
 			from: GrantFrom{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"},
 			to:   GrantTo{Group: "", Kind: "Secret", Namespace: "certs", Name: "anything"},
 		},
 		{
 			name: "named To, another name",
-			rg: &gatewayv1beta1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+			rg: &gatewayv1beta1.ReferenceGrant{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
-				}},
+				},
+			},
 			from: GrantFrom{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"},
 			to:   GrantTo{Group: "", Kind: "Secret", Namespace: "certs", Name: "other"},
 		},
 		{
 			name: "From of another kind",
-			rg: &gatewayv1beta1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+			rg: &gatewayv1beta1.ReferenceGrant{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
-				}},
+				},
+			},
 			from: GrantFrom{Group: gatewayv1.GroupName, Kind: "Gateway", Namespace: "tenant"},
 			to:   GrantTo{Group: "", Kind: "Secret", Namespace: "certs", Name: "shared"},
 		},
 		{
 			name: "To of another kind",
-			rg: &gatewayv1beta1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+			rg: &gatewayv1beta1.ReferenceGrant{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
-				}},
+				},
+			},
 			from: GrantFrom{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"},
 			to:   GrantTo{Group: "", Kind: "Service", Namespace: "certs", Name: "shared"},
 		},
 		{
 			name: "same namespace needs no grant",
-			rg: &gatewayv1beta1.ReferenceGrant{ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "g"},
+			rg: &gatewayv1beta1.ReferenceGrant{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "g"},
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
-				}},
+				},
+			},
 			from: GrantFrom{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"},
 			to:   GrantTo{Group: "", Kind: "Secret", Namespace: "tenant", Name: "shared"},
 		},

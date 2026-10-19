@@ -118,8 +118,8 @@ func (f *verdictFixture) addContributedEntry(namespace, name, entryName string, 
 			Port:     8080,
 			Protocol: gatewayv1.HTTPProtocolType,
 		},
-		OwnerKind:      kindListenerSet,
-		Accepted:       accepted,
+		OwnerKind: kindListenerSet,
+		Accepted:  accepted,
 		// Valid is what production sets from the checks: an entry the checks refused
 		// is not accepted, and an entry that is accepted but not programmable -- an
 		// unresolved reference -- is accepted without being valid. The fixture only

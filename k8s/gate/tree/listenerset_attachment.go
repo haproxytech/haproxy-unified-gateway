@@ -60,7 +60,6 @@ const (
 // unset namespace means the ListenerSet's own, and an unset group or kind means the
 // defaults the API stamps in, so both are read as Gateway references.
 func parentGatewayKey(listenerSet *gatewayv1.ListenerSet) (client.ObjectKey, bool) {
-
 	if listenerSet == nil {
 		return client.ObjectKey{}, false
 	}

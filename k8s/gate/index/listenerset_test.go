@@ -29,8 +29,10 @@ func listenerSetWithCertificateRefs(namespace string, refs ...gatewayv1.SecretOb
 		Spec: gatewayv1.ListenerSetSpec{Listeners: []gatewayv1.ListenerEntry{
 			// No TLS: nothing to index.
 			{Name: "http", Port: 8080, Protocol: gatewayv1.HTTPProtocolType},
-			{Name: "https", Port: 8443, Protocol: gatewayv1.HTTPSProtocolType,
-				TLS: &gatewayv1.ListenerTLSConfig{CertificateRefs: refs}},
+			{
+				Name: "https", Port: 8443, Protocol: gatewayv1.HTTPSProtocolType,
+				TLS: &gatewayv1.ListenerTLSConfig{CertificateRefs: refs},
+			},
 		}},
 	}
 }
