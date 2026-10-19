@@ -224,3 +224,41 @@ func TestHTTPRouteRefusedListenerSetIsRefusedWithNoMatchingParent(t *testing.T) 
 		"an entry with no conditions at all announces a parent and says nothing about it")
 	assert.True(t, result.Conditions.Equal(rc.ConditionNotAcceptedNoMatchingParent()))
 }
+
+// A parentRef naming a ListenerSet that is not in the tree at all -- never created, or
+// already reaped -- owes silence rather than a condition. The API allows the Accepted
+// condition to be omitted when a controller cannot judge the parent, and there is
+// nothing here to judge: the parentRef names no resource of ours.
+func TestHTTPRouteAbsentListenerSetStaysSilent(t *testing.T) {
+	f := newRouteAttachFixture(t)
+	delete(f.store.GateTree.ListenerSets, client.ObjectKey{Namespace: "tenant", Name: "ls"})
+
+	parentRef := f.listenerSetParentRef(nil)
+	r := f.route(parentRef)
+
+	result := r.checkParentRef(parentRef, *f.store)
+
+	assert.False(t, result.Managed, "nothing of ours is named, so nothing is ours to report")
+	assert.False(t, result.Valid)
+	assert.Empty(t, result.Conditions)
+}
+
+// A ListenerSet that is deleted while the tree still holds it -- the cycle of its
+// deletion -- is a parent that existed and no longer does: the route gets
+// NoMatchingParent. Once the tree has reaped it, the case above applies and the entry
+// stops being published, this controller's entries being rewritten from the tree each
+// cycle rather than appended to.
+func TestHTTPRouteDeletedListenerSetIsRefusedWithNoMatchingParent(t *testing.T) {
+	f := newRouteAttachFixture(t)
+	f.treeLs.SetAsDeleted(f.store.Logger)
+
+	parentRef := f.listenerSetParentRef(nil)
+	r := f.route(parentRef)
+
+	result := r.checkParentRef(parentRef, *f.store)
+
+	assert.True(t, result.Managed, "the parent was ours, and the deletion is knowable")
+	assert.False(t, result.Valid)
+	assert.Len(t, result.Conditions, 1)
+	assert.True(t, result.Conditions.Equal(rc.ConditionNotAcceptedNoMatchingParent()))
+}
