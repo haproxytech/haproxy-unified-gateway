@@ -148,12 +148,11 @@ func (b *HaproxyConfMgrImpl) clearListenerMapOrigins(vlName string, l *tree.List
 	listenerWildcardMatchMap.RemoveEntriesFrom(resourceOrigin)
 
 	for routeKey := range l.AttachedRoutes {
-		routeOrigin := maps.ResourceOrigin{
-			Namespace: routeKey.Namespace,
-			Name:      listenerKeyName + "/" + routeKey.Name,
+		for _, kind := range []string{"HTTPRoute", "TLSRoute"} {
+			routeOrigin := maps.NewRouteOrigin(kind, listenerKeyName, routeKey)
+			listenerRouteExactMatchMap.RemoveEntriesFrom(routeOrigin)
+			listenerRouteWildcardMatchMap.RemoveEntriesFrom(routeOrigin)
 		}
-		listenerRouteExactMatchMap.RemoveEntriesFrom(routeOrigin)
-		listenerRouteWildcardMatchMap.RemoveEntriesFrom(routeOrigin)
 	}
 }
 

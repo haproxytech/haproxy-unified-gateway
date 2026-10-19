@@ -675,7 +675,7 @@ func TestMapFileState_RemoveEntriesFromRoute(t *testing.T) {
 	otherNamespace := types.NamespacedName{Namespace: "elsewhere", Name: "route"}
 
 	originOf := func(listener string, key types.NamespacedName) ResourceOrigin {
-		return ResourceOrigin{Namespace: key.Namespace, Name: listener + "/" + key.Name}
+		return NewRouteOrigin("HTTPRoute", listener, key)
 	}
 	// ApplyRoute is the entry point the production code uses, and the one that keeps
 	// EntriesByResource: ApplyDesiredBackends alone does not, so a test built on it
@@ -694,7 +694,7 @@ func TestMapFileState_RemoveEntriesFromRoute(t *testing.T) {
 		applied(m, "b.com", "be-b", originOf("gw_listener-b", route))
 		applied(m, "kept.com", "be-c", originOf("gw_listener-a", otherRoute))
 
-		removed := m.RemoveEntriesFromRoute(route)
+		removed := m.RemoveEntriesFromRoute("HTTPRoute", route)
 
 		assert.Equal(t, 2, removed)
 		assert.Empty(t, m.EntriesByResource[originOf("gw_listener-a", route)])
@@ -708,7 +708,7 @@ func TestMapFileState_RemoveEntriesFromRoute(t *testing.T) {
 		applied(m, "a.com", "be-a", originOf("gw_listener", route))
 		applied(m, "b.com", "be-b", originOf("gw_listener", otherNamespace))
 
-		removed := m.RemoveEntriesFromRoute(route)
+		removed := m.RemoveEntriesFromRoute("HTTPRoute", route)
 
 		assert.Equal(t, 1, removed)
 		assert.Empty(t, m.EntriesByResource[originOf("gw_listener", route)])
@@ -719,9 +719,27 @@ func TestMapFileState_RemoveEntriesFromRoute(t *testing.T) {
 		m := newTestState()
 		applied(m, "a.com", "be-a", originOf("gw_listener", otherRoute))
 
-		removed := m.RemoveEntriesFromRoute(route)
+		removed := m.RemoveEntriesFromRoute("HTTPRoute", route)
 
 		assert.Equal(t, 0, removed, "the name is a path segment, not a suffix match")
 		assert.NotEmpty(t, m.EntriesByResource[originOf("gw_listener", otherRoute)])
+	})
+
+	t.Run("another kind and a listener origin are left alone", func(t *testing.T) {
+		m := newTestState()
+		httpOrigin := originOf("gw_listener", route)
+		tlsOrigin := NewRouteOrigin("TLSRoute", "gw_listener", route)
+		listenerOrigin := ResourceOrigin{Namespace: route.Namespace, Name: "gw_listener/" + route.Name}
+		applied(m, "http.com", "be-http", httpOrigin)
+		applied(m, "tls.com", "be-tls", tlsOrigin)
+		applied(m, "listener.com", "listener", listenerOrigin)
+		m.ProcessMapFiles()
+		m.Reset()
+
+		assert.Equal(t, 1, m.RemoveEntriesFromRoute("HTTPRoute", route))
+		m.ProcessMapFiles()
+		assert.Empty(t, m.Entries[EntryKey{Hostname: "http.com"}].DesiredValue)
+		assert.Contains(t, m.Entries[EntryKey{Hostname: "tls.com"}].DesiredValue, "be-tls")
+		assert.Contains(t, m.Entries[EntryKey{Hostname: "listener.com"}].DesiredValue, "listener")
 	})
 }

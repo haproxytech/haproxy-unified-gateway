@@ -212,6 +212,16 @@ func (ro ResourceOrigin) String() string {
 	return fmt.Sprintf("ResourceOrigin {Namespace: %s, Name: %s}", ro.Namespace, ro.Name)
 }
 
+// NewRouteOrigin identifies one route's contribution through one listener. Kind is
+// part of the internal provenance, not the HAProxy map key or value: homonymous
+// HTTPRoutes and TLSRoutes must never share a cleanup identity.
+func NewRouteOrigin(kind, listenerKey string, routeKey types.NamespacedName) ResourceOrigin {
+	return ResourceOrigin{
+		Namespace: routeKey.Namespace,
+		Name:      kind + "/" + listenerKey + "/" + routeKey.Name,
+	}
+}
+
 type IntentValue struct {
 	Operation
 	WeightedValue
@@ -398,13 +408,13 @@ func (m *MapFileState) RemoveEntriesFrom(ro ResourceOrigin) {
 // deleted without an intervening update has never had its attachments filled, so that
 // route would leave its entries behind forever.
 //
-// Origins belonging to a route are the ones in its namespace whose name ends with its
-// name, the name being "<listener key>/<route>" or "<listener key>/<namespace>/<route>".
-// A route name cannot contain a slash, so no other origin can end the same way.
-func (m *MapFileState) RemoveEntriesFromRoute(routeKey types.NamespacedName) int {
+// NewRouteOrigin prefixes the name with the kind and ends it with the route name.
+// The namespace, kind and final path segment together identify the owning route;
+// listener origins and another kind's homonyms are left alone.
+func (m *MapFileState) RemoveEntriesFromRoute(kind string, routeKey types.NamespacedName) int {
 	var owned []ResourceOrigin
 	for ro := range m.EntriesByResource {
-		if ro.Namespace != routeKey.Namespace {
+		if ro.Namespace != routeKey.Namespace || !strings.HasPrefix(ro.Name, kind+"/") {
 			continue
 		}
 		if !strings.HasSuffix(ro.Name, "/"+routeKey.Name) {

@@ -46,6 +46,7 @@ func (e *ErrMapRuntimeUpdate) Error() string {
 }
 
 func (b *RouteMgrImpl) fillMaps() {
+	b.clearChangedRouteMaps()
 	b.fillMapsForHTTPRoutes()
 	b.fillListenerRouteMapsForHTTPRoutes()
 	b.fillMapsForTLSRoutes()
@@ -65,15 +66,7 @@ func (b *RouteMgrImpl) fillMaps() {
 func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 	controllerStore := b.topManager.controllerStore
 
-	// Pre-loop: clear old state for routes that have been updated.
-	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
-		if route.TreeStatus.OldTreeResource == nil {
-			continue
-		}
-		b.clearRouteListenerRouteEntries(routeKey)
-	}
-
-	// Main loop: fill for the current state of each route.
+	// Fill for the current state of each route.
 	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
 		for _, listener := range b.listenersForRoute(route) {
 			b.applyHTTPRouteListenerMaps(routeKey, route, listener)
@@ -81,8 +74,24 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 	}
 }
 
-// clearRouteListenerRouteEntries drops every listener-route entry a route wrote, in every
-// frontend, without asking which listeners it was attached to.
+// clearChangedRouteMaps runs once before all refill passes: a purge between the path and
+// listener-route passes would erase the backend entries the path pass just wrote.
+func (b *RouteMgrImpl) clearChangedRouteMaps() {
+	controllerStore := b.topManager.controllerStore
+	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
+		if route.TreeStatus.OldTreeResource != nil {
+			b.clearRouteMapEntries("HTTPRoute", routeKey)
+		}
+	}
+	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
+		if route.TreeStatus.OldTreeResource != nil {
+			b.clearRouteMapEntries("TLSRoute", routeKey)
+		}
+	}
+}
+
+// clearRouteMapEntries drops every map entry a route wrote, in every frontend and in
+// every map, without asking which listeners it was attached to.
 //
 // Asking that question is what this replaced, and it cannot be answered reliably at the
 // moment the entries have to go. Deriving the listeners from the route's spec misses the
@@ -92,14 +101,16 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 // left its entries behind.
 //
 // The storage already knows which entries each origin wrote, and an origin names the
-// route it belongs to, so this asks the files instead of a reconstruction.
-func (b *RouteMgrImpl) clearRouteListenerRouteEntries(routeKey k8stypes.NamespacedName) {
+// route it belongs to, so this asks the files instead of a reconstruction. It serves the
+// listener-route maps and the path maps alike: both are written from an origin that names
+// the route, and both used to reconstruct the route's listeners to find them.
+func (b *RouteMgrImpl) clearRouteMapEntries(kind string, routeKey k8stypes.NamespacedName) {
 	for _, mapDir := range b.topManager.params.mapsStorage.GetMaps() {
 		for _, mapFile := range mapDir {
 			if mapFile == nil {
 				continue
 			}
-			mapFile.RemoveEntriesFromRoute(routeKey)
+			mapFile.RemoveEntriesFromRoute(kind, routeKey)
 		}
 	}
 }
@@ -117,10 +128,7 @@ func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
 	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
 	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
 	listenerKeyName := listener.Key().String()
-	routeOrigin := maps.ResourceOrigin{
-		Namespace: routeKey.Namespace,
-		Name:      listenerKeyName + "/" + routeKey.Name,
-	}
+	routeOrigin := maps.NewRouteOrigin("HTTPRoute", listenerKeyName, routeKey)
 
 	switch route.TreeStatus.Status {
 	case store.StatusUnchanged:
@@ -211,7 +219,7 @@ func listenersFromAttachments[K any](attached utils.KeyMap[K, []*tree.Listener])
 	return result
 }
 
-func (b *RouteMgrImpl) listenersForRoute(route *tree.HTTPRoute) []*tree.Listener {
+func (*RouteMgrImpl) listenersForRoute(route *tree.HTTPRoute) []*tree.Listener {
 	if route.K8sResource == nil {
 		return nil
 	}
@@ -222,27 +230,6 @@ func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
 	var errs utils.Errors
 	controllerStore := b.topManager.controllerStore
 	mapsStorage := b.topManager.params.mapsStorage
-	// Managed TLSRoutes => if there is a old resource, clean the state before update
-	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
-		if route.TreeStatus.OldTreeResource == nil {
-			continue
-		}
-		route = route.TreeStatus.OldTreeResource
-		for _, listeners := range route.Listeners.Iterate {
-			for _, listener := range listeners {
-				if listener.VirtualListenerName == "" {
-					continue
-				}
-				frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
-				routeValueName := listener.Key().String() + "/" + routeKey.String()
-				routeOrigin := maps.ResourceOrigin{Namespace: routeKey.Namespace, Name: routeValueName}
-				mapSNIMap := mapsStorage.GetSniMapFile(frontendName)
-				err := b.onDeletedTLSRoute(routeOrigin, route, mapSNIMap)
-				// errs.Add(err)
-				_ = err // TODO ignore error for now
-			}
-		}
-	}
 	// Managed TLSRoutes => Create / update/ delete backends
 	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
 		for _, listener := range route.Listeners.Iterate {
@@ -252,7 +239,7 @@ func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
 				}
 				frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
 				routeValueName := listener.Key().String() + "/" + routeKey.String()
-				routeOrigin := maps.ResourceOrigin{Namespace: routeKey.Namespace, Name: routeValueName}
+				routeOrigin := maps.NewRouteOrigin("TLSRoute", listener.Key().String(), routeKey)
 				mapSNIMap := mapsStorage.GetSniMapFile(frontendName)
 				switch route.TreeStatus.Status {
 				case store.StatusUnchanged:
@@ -281,15 +268,7 @@ func (b *RouteMgrImpl) fillMapsForTLSRoutes() {
 func (b *RouteMgrImpl) fillListenerRouteMapsForTLSRoutes() {
 	controllerStore := b.topManager.controllerStore
 
-	// Pre-loop: clear old state for routes that have been updated.
-	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
-		if route.TreeStatus.OldTreeResource == nil {
-			continue
-		}
-		b.clearRouteListenerRouteEntries(routeKey)
-	}
-
-	// Main loop: fill for the current state of each route.
+	// Fill for the current state of each route.
 	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
 		for _, listener := range b.listenersForTLSRoute(route) {
 			b.applyTLSRouteListenerMaps(routeKey, route, listener)
@@ -310,10 +289,7 @@ func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
 	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
 	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
 	listenerKeyName := listener.Key().String()
-	routeOrigin := maps.ResourceOrigin{
-		Namespace: routeKey.Namespace,
-		Name:      listenerKeyName + "/" + routeKey.Name,
-	}
+	routeOrigin := maps.NewRouteOrigin("TLSRoute", listenerKeyName, routeKey)
 
 	switch route.TreeStatus.Status {
 	case store.StatusUnchanged:
@@ -369,7 +345,7 @@ func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
 	listenerRouteWildcardMap.ApplyRoute(routeOrigin, wildcardEntries)
 }
 
-func (b *RouteMgrImpl) listenersForTLSRoute(route *tree.TLSRoute) []*tree.Listener {
+func (*RouteMgrImpl) listenersForTLSRoute(route *tree.TLSRoute) []*tree.Listener {
 	if route.K8sResource == nil {
 		return nil
 	}
@@ -380,30 +356,6 @@ func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
 	var errs utils.Errors
 	controllerStore := b.topManager.controllerStore
 	mapsStorage := b.topManager.params.mapsStorage
-	// Managed HTTPRoutes => if there is a old resource, clean the state before update
-	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
-		if route.TreeStatus.OldTreeResource == nil {
-			continue
-		}
-		route = route.TreeStatus.OldTreeResource
-		for _, listeners := range route.Listeners.Iterate {
-			for _, listener := range listeners {
-				vListenerName := listener.VirtualListenerName
-				if vListenerName == "" {
-					continue
-				}
-				frontendName := b.topManager.getFrontendName(vListenerName)
-				routeValueName := listener.Key().String() + "/" + routeKey.String()
-				origin := maps.ResourceOrigin{Namespace: routeKey.Namespace, Name: routeValueName}
-				mapExact := mapsStorage.GetPathExactMapFile(frontendName)
-				mapPrefix := mapsStorage.GetPathPrefixMapFile(frontendName)
-				mapRegex := mapsStorage.GetPathRegexMapFile(frontendName)
-				err := b.onDeletedHTTPRoute(origin, route, mapExact, mapPrefix, mapRegex)
-				// errs.Add(err)
-				_ = err // TODO ignore error for now
-			}
-		}
-	}
 
 	// Managed HTTPRoutes => Create / update/ delete backends
 	for routeKey, route := range controllerStore.GateTree.HTTPRoutes {
@@ -417,7 +369,7 @@ func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {
 				}
 				frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
 				routeValueName := listener.Key().String() + "/" + routeKey.String()
-				origin := maps.ResourceOrigin{Namespace: routeKey.Namespace, Name: routeValueName}
+				origin := maps.NewRouteOrigin("HTTPRoute", listener.Key().String(), routeKey)
 				mapExact := mapsStorage.GetPathExactMapFile(frontendName)
 				mapPrefix := mapsStorage.GetPathPrefixMapFile(frontendName)
 				mapRegex := mapsStorage.GetPathRegexMapFile(frontendName)
