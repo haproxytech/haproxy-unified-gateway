@@ -311,3 +311,69 @@ func (s *ListenerSetSuite) Test_AllowedListeners_10_Same() {
 }
 
 func ptrTo[T any](v T) *T { return &v }
+
+// Test_DisallowedKind_Through_A_ListenerSet is an HTTPRoute naming a ListenerSet whose
+// listener can only serve TLSRoutes: the refusal has to come from the contributed
+// listener, and has to name the ListenerSet as the parent it blamed.
+//
+// The conformance suite covers each half of this rule on a different path --
+// HTTPRouteDisallowedKind refuses an HTTPRoute through a Gateway's own listener, and
+// ListenerSetAllowedRoutesSupportedKinds checks the listener side of a Kind that does
+// not fit its protocol. Neither exercises the route through a ListenerSet, which is a
+// distinct path in the controller: the attachable listeners come from
+// ContributedListeners, and the resource a refused route names is the ListenerSet.
+func (s *ListenerSetSuite) Test_DisallowedKind_Through_A_ListenerSet() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "httproute-disallowed-kind-via-listener-set")
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	ctx := s.Test().Ctx
+	ns := s.Test().Namespace
+
+	// The ListenerSet itself is fine: its listener is served, and it is the route that
+	// has no business there.
+	s.ExpectListenerSetConditions(ctx, ns, "listenerset-tls-only", listenerSetServable())
+
+	s.ExpectRouteParentHasCondition(ctx, ns, "route-wrong-kind", gatewayv1.ParentReference{
+		Group:       ptrTo(gatewayv1.Group(gatewayv1.GroupName)),
+		Kind:        ptrTo(gatewayv1.Kind("ListenerSet")),
+		Name:        "listenerset-tls-only",
+		SectionName: ptrTo(gatewayv1.SectionName("ls-tls-listener")),
+	}, metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
+		Status: metav1.ConditionFalse,
+		// NotAllowedByListeners and not NoMatchingParent: the parentRef did select a
+		// listener, and what failed is that listener's permission to serve this kind.
+		Reason: string(gatewayv1.RouteReasonNotAllowedByListeners),
+	})
+}
+
+// Test_IncompatibleKinds_Make_The_ListenerSet_Unservable is the aggregate reading of a
+// listener whose allowedRoutes.kinds contradict its protocol: the entry reports
+// InvalidRouteKinds and cannot serve any kind at all, so the ListenerSet has nothing
+// left and says so.
+//
+// The conformance suite asserts the entry's ResolvedRefs condition for this fixture and
+// stops there. What a tenant reads is the ListenerSet's own roll-up, and it is the one
+// that decides between "this listener has a problem" and "this ListenerSet is unusable".
+func (s *ListenerSetSuite) Test_IncompatibleKinds_Make_The_ListenerSet_Unservable() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "listener-set-listener-incompatible-kinds")
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	ctx := s.Test().Ctx
+	ns := s.Test().Namespace
+	lsetName := "listenerset-incompatible-kinds"
+
+	// The kinds declared are the ones this protocol cannot serve, so none survives:
+	// the entry is reported InvalidRouteKinds, and its other conditions are the
+	// implementation's to render -- hence the presence assertion.
+	s.ExpectListenerSetEntryHasCondition(ctx, ns, lsetName, "ls-listener", metav1.Condition{
+		Type:   string(gatewayv1.ListenerEntryConditionResolvedRefs),
+		Status: metav1.ConditionFalse,
+		Reason: string(gatewayv1.ListenerEntryReasonInvalidRouteKinds),
+	})
+
+	// With no valid entry left, the ListenerSet is not accepted and not programmed.
+	s.ExpectListenerSetConditions(ctx, ns, lsetName, listenerSetNotServable())
+}

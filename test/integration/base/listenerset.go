@@ -303,3 +303,59 @@ func (b *BaseSuite) ExpectListenerSetDeleted(ctx context.Context, namespace, nam
 		b.T().Fatalf("ListenerSet %s/%s still exists", namespace, name)
 	}
 }
+
+// ExpectRouteParentHasCondition waits for one route to carry a condition on a given
+// parent, and asserts it by presence rather than by set.
+//
+// The exact set a route publishes for a parent is assembled by two passes -- the
+// parentRef check, then the resolution of its rules' references -- so which conditions
+// accompany the one asserted here is not something a caller should have to know. The
+// parent is identified by kind, name and sectionName, which is also what says *which*
+// parent the route blamed: a refusal that names a ListenerSet is a different claim from
+// one that names its Gateway.
+func (b *BaseSuite) ExpectRouteParentHasCondition(ctx context.Context, namespace, routeName string, parent gatewayv1.ParentReference, expected metav1.Condition) {
+	var got []metav1.Condition
+	var seen []string
+	if !utils.WaitFor(ctx, interval, timeout, func() bool {
+		route := &gatewayv1.HTTPRoute{}
+		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: routeName, Namespace: namespace}, route); err != nil {
+			return false
+		}
+		seen = seen[:0]
+		for _, parentStatus := range route.Status.Parents {
+			seen = append(seen, fmt.Sprintf("%s/%s/%s", derefKind(parentStatus.ParentRef.Kind), parentStatus.ParentRef.Name, derefSectionName(parentStatus.ParentRef.SectionName)))
+			if !sameParentRef(parentStatus.ParentRef, parent) {
+				continue
+			}
+			got = parentStatus.Conditions
+			return conditionPresents(expected, got)
+		}
+		return false
+	}) {
+		b.T().Fatalf("route %s/%s has no %s=%s/%s on parent %s/%s/%s; conditions found: %+v; parents seen: %v",
+			namespace, routeName, expected.Type, expected.Status, expected.Reason,
+			derefKind(parent.Kind), parent.Name, derefSectionName(parent.SectionName), got, seen)
+	}
+}
+
+// sameParentRef compares the fields a route's parentRef is identified by. Kind and
+// sectionName are optional in the spec, so an absent one matches an absent one.
+func sameParentRef(got, expected gatewayv1.ParentReference) bool {
+	return derefKind(got.Kind) == derefKind(expected.Kind) &&
+		got.Name == expected.Name &&
+		derefSectionName(got.SectionName) == derefSectionName(expected.SectionName)
+}
+
+func derefKind(kind *gatewayv1.Kind) string {
+	if kind == nil {
+		return "Gateway"
+	}
+	return string(*kind)
+}
+
+func derefSectionName(name *gatewayv1.SectionName) string {
+	if name == nil {
+		return ""
+	}
+	return string(*name)
+}

@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset-tls-only
+spec:
+  parentRef:
+    name: hug-gateway
+  listeners:
+  - name: ls-tls-listener
+    port: 31444
+    protocol: TLS
+    tls:
+      mode: Passthrough
+    allowedRoutes:
+      namespaces:
+        from: All
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: TLSRoute
