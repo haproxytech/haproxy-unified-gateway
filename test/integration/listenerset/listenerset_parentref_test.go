@@ -125,16 +125,19 @@ func (s *ListenerSetSuite) Test_ParentRef_3_Not_Managed() {
 	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-silent")
 }
 
-// Test_ParentRef_4_Becomes_Managed is the same shape the other way round: the parent is
-// another controller's Gateway at first, and its GatewayClass is repointed at this
-// controller. The ListenerSet, which did not change, then attaches and its listener is
-// served -- the transition that the contributor-set diff was written for.
+// Test_ParentRef_4_Becomes_Managed is a Gateway that is another controller's at first,
+// and becomes ours. The ListenerSet, which did not change, then attaches and its listener
+// is served -- the transition the contributor-set diff was written for.
+//
+// The Gateway changes its class rather than the class being repointed at us: a
+// GatewayClass's controllerName is immutable, so the only way a Gateway changes hands is
+// the Gateway naming another class. That is what the API allows, and what this follows.
 func (s *ListenerSetSuite) Test_ParentRef_4_Becomes_Managed() {
 	fixturePath := path.Join(utils.GetCRDFixturePath(), "parentref-4-becomes-managed")
-	manifests := []string{"gatewayclass-foreign.yaml", "gateway-foreign.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"}
+	// The cleanup names each class once, and each Gateway variant once: the two
+	// manifests of a name describe one object.
+	manifests := []string{"gatewayclass.yaml", "gatewayclass-foreign.yaml", "gateway-foreign.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"}
 	s.CreateFixtures(fixturePath, manifests)
-	// The cleanup names the class once: two manifests describe it, and the deletion is
-	// per file.
 	defer s.CleanupFixtures(fixturePath, manifests)
 
 	ctx := s.Test().Ctx
@@ -142,46 +145,44 @@ func (s *ListenerSetSuite) Test_ParentRef_4_Becomes_Managed() {
 
 	s.ExpectListenerSetReportsNothing(ctx, ns, "listenerset")
 
-	// The class becomes ours. Nothing about the ListenerSet changed.
-	s.CreateFixtures(fixturePath, []string{"gatewayclass-foreign-ours.yaml"})
+	// The Gateway starts naming our class. Nothing about the ListenerSet changed.
+	s.CreateFixtures(fixturePath, []string{"gateway-ours.yaml"})
 
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset", "ls-listener", acceptedEntry())
 	s.ExpectListenerSetEntryAttachedRoutes(ctx, ns, "listenerset", "ls-listener", 1)
 }
 
-// Test_ParentRef_5_Stops_Being_Managed repoints a GatewayClass away from this
-// controller: the Gateway stops being ours, and the ListenerSet's entries leave HAProxy
-// with it.
+// Test_ParentRef_5_Stops_Being_Managed is the same transition backwards: the Gateway
+// stops naming our class, so it stops being ours, and the ListenerSet's entries leave
+// HAProxy with it.
 //
 // The status is not touched, and that is deliberate: once nothing is contributed, the
-// attachment is no longer ours to report, and writing there would risk colliding with
-// the controller that has taken the Gateway over. Whichever controller speaks about the
+// attachment is no longer ours to report, and writing there would risk colliding with the
+// controller that has taken the Gateway over. Whichever controller speaks about the
 // ListenerSet next replaces the whole status anyway -- every patcher writes the status
 // outright rather than merging -- so the last status we published stays until someone
 // with a claim to it overwrites it.
 //
 // The assertion that matters here is the data plane one: the listener is gone from the
-// port's map. Reading the map is what tells a detached Gateway from one that is still
-// served, which is the difference this transition is about.
+// port's map. Reading the map is what tells a detached Gateway from one still served.
 func (s *ListenerSetSuite) Test_ParentRef_5_Stops_Being_Managed() {
 	fixturePath := path.Join(utils.GetCRDFixturePath(), "parentref-5-stops-being-managed")
-	manifests := []string{"gatewayclass-foreign.yaml", "gateway-foreign.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"}
+	manifests := []string{"gatewayclass.yaml", "gatewayclass-foreign.yaml", "gateway-ours.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"}
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
 	ctx := s.Test().Ctx
 	ns := s.Test().Namespace
 
-	// Start attached: applying the "ours" version of the class the Gateway names.
-	s.CreateFixtures(fixturePath, []string{"gatewayclass-foreign-ours.yaml"})
+	// Served by the Gateway while it names our class.
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset", "ls-listener", acceptedEntry())
 	s.ExpectMapEntryMentions("hug_http_31081/listener_exact_match.map", "ls.haproxy",
 		[]string{"foreign-gateway"}, nil)
 
-	// And away from us again.
-	s.CreateFixtures(fixturePath, []string{"gatewayclass-foreign.yaml"})
+	// And away from us: the Gateway now names another controller's class.
+	s.CreateFixtures(fixturePath, []string{"gateway-foreign.yaml"})
 
 	s.ExpectNoMapEntry("hug_http_31081/listener_exact_match.map", "ls.haproxy")
 }

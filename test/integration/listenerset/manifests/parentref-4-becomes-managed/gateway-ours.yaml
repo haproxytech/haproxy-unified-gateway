@@ -1,0 +1,15 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: foreign-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: foreign-listener
+    port: 31081
+    protocol: HTTP
+    hostname: "foreign.haproxy"
+  allowedListeners:
+    namespaces:
+      from: All
+
