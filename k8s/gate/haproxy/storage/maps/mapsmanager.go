@@ -28,6 +28,7 @@ import (
 	futils "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/fileutils"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // NewMapFileState creates a new instance of MapFileState with the given filename and logger.
@@ -384,6 +385,39 @@ func (m *MapFileState) ApplyRoute(
 // spelled for the intent rather than for the mechanism.
 func (m *MapFileState) RemoveEntriesFrom(ro ResourceOrigin) {
 	m.ApplyRoute(ro, nil)
+}
+
+// RemoveEntriesFromRoute drops every entry written by an origin belonging to a route,
+// whatever listeners it was attached to when it wrote them, and reports how many origins
+// it dropped.
+//
+// This is what a route that has left a map owes, and it is the only way to express it
+// without knowing which listeners the route had. A caller that re-derived them -- from
+// the route's spec, or from the attachments its checks recorded -- would depend on state
+// that may no longer exist by the time the entries have to go: a route created and
+// deleted without an intervening update has never had its attachments filled, so that
+// route would leave its entries behind forever.
+//
+// Origins belonging to a route are the ones in its namespace whose name ends with its
+// name, the name being "<listener key>/<route>" or "<listener key>/<namespace>/<route>".
+// A route name cannot contain a slash, so no other origin can end the same way.
+func (m *MapFileState) RemoveEntriesFromRoute(routeKey types.NamespacedName) int {
+	var owned []ResourceOrigin
+	for ro := range m.EntriesByResource {
+		if ro.Namespace != routeKey.Namespace {
+			continue
+		}
+		if !strings.HasSuffix(ro.Name, "/"+routeKey.Name) {
+			continue
+		}
+		owned = append(owned, ro)
+	}
+
+	// Collected first: RemoveEntriesFrom deletes from the map being iterated above.
+	for _, ro := range owned {
+		m.RemoveEntriesFrom(ro)
+	}
+	return len(owned)
 }
 
 // ApplyDesiredBackends applies the desired backends for an entry and resource origin to the map file state.

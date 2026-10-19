@@ -18,6 +18,9 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func newTestState() *MapFileState {
@@ -660,4 +663,65 @@ func TestMapFileState_BackendDeletions(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The purge a route owes its map entries, asked of the file rather than reconstructed
+// from the listeners the route had. Those entries can outlive any record of them: a route
+// created then deleted never had its attachments filled, and a reconstruction from its
+// spec cannot see the entry a ListenerSet contributed.
+func TestMapFileState_RemoveEntriesFromRoute(t *testing.T) {
+	route := types.NamespacedName{Namespace: "tenant", Name: "route"}
+	otherRoute := types.NamespacedName{Namespace: "tenant", Name: "route-other"}
+	otherNamespace := types.NamespacedName{Namespace: "elsewhere", Name: "route"}
+
+	originOf := func(listener string, key types.NamespacedName) ResourceOrigin {
+		return ResourceOrigin{Namespace: key.Namespace, Name: listener + "/" + key.Name}
+	}
+	// ApplyRoute is the entry point the production code uses, and the one that keeps
+	// EntriesByResource: ApplyDesiredBackends alone does not, so a test built on it
+	// would be testing a purge over a bookkeeping nothing had filled.
+	applied := func(m *MapFileState, host, name string, origin ResourceOrigin) {
+		m.ApplyRoute(origin, map[EntryKey]map[string]*WeightedValue{
+			{Hostname: host}: {name: {ValueName: name, Weight: new(int32(1))}},
+		})
+	}
+
+	t.Run("drops every listener the route wrote, across frontends", func(t *testing.T) {
+		m := newTestState()
+		// Two listeners, so two origins: a route's entries are not confined to one
+		// frontend, and the purge may not assume they are.
+		applied(m, "a.com", "be-a", originOf("gw_listener-a", route))
+		applied(m, "b.com", "be-b", originOf("gw_listener-b", route))
+		applied(m, "kept.com", "be-c", originOf("gw_listener-a", otherRoute))
+
+		removed := m.RemoveEntriesFromRoute(route)
+
+		assert.Equal(t, 2, removed)
+		assert.Empty(t, m.EntriesByResource[originOf("gw_listener-a", route)])
+		assert.Empty(t, m.EntriesByResource[originOf("gw_listener-b", route)])
+		assert.NotEmpty(t, m.EntriesByResource[originOf("gw_listener-a", otherRoute)],
+			"another route's entries are not ours to drop")
+	})
+
+	t.Run("another namespace's entries of the same name are left alone", func(t *testing.T) {
+		m := newTestState()
+		applied(m, "a.com", "be-a", originOf("gw_listener", route))
+		applied(m, "b.com", "be-b", originOf("gw_listener", otherNamespace))
+
+		removed := m.RemoveEntriesFromRoute(route)
+
+		assert.Equal(t, 1, removed)
+		assert.Empty(t, m.EntriesByResource[originOf("gw_listener", route)])
+		assert.NotEmpty(t, m.EntriesByResource[originOf("gw_listener", otherNamespace)])
+	})
+
+	t.Run("a route whose name merely ends the same way is left alone", func(t *testing.T) {
+		m := newTestState()
+		applied(m, "a.com", "be-a", originOf("gw_listener", otherRoute))
+
+		removed := m.RemoveEntriesFromRoute(route)
+
+		assert.Equal(t, 0, removed, "the name is a path segment, not a suffix match")
+		assert.NotEmpty(t, m.EntriesByResource[originOf("gw_listener", otherRoute)])
+	})
 }

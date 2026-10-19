@@ -70,9 +70,7 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 		if route.TreeStatus.OldTreeResource == nil {
 			continue
 		}
-		for _, listener := range b.listenersForRoute(route.TreeStatus.OldTreeResource) {
-			b.clearHTTPRouteListenerMaps(routeKey, listener)
-		}
+		b.clearRouteListenerRouteEntries(routeKey)
 	}
 
 	// Main loop: fill for the current state of each route.
@@ -83,24 +81,27 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForHTTPRoutes() {
 	}
 }
 
-func (b *RouteMgrImpl) clearHTTPRouteListenerMaps(
-	routeKey k8stypes.NamespacedName,
-	listener *tree.Listener,
-) {
-	if listener.VirtualListenerName == "" {
-		return
+// clearRouteListenerRouteEntries drops every listener-route entry a route wrote, in every
+// frontend, without asking which listeners it was attached to.
+//
+// Asking that question is what this replaced, and it cannot be answered reliably at the
+// moment the entries have to go. Deriving the listeners from the route's spec misses the
+// entries a ListenerSet contributed, and reading the attachments its checks recorded
+// misses everything for a route that was created and deleted without an intervening
+// update: those attachments are still the empty map it was built with, so such a route
+// left its entries behind.
+//
+// The storage already knows which entries each origin wrote, and an origin names the
+// route it belongs to, so this asks the files instead of a reconstruction.
+func (b *RouteMgrImpl) clearRouteListenerRouteEntries(routeKey k8stypes.NamespacedName) {
+	for _, mapDir := range b.topManager.params.mapsStorage.GetMaps() {
+		for _, mapFile := range mapDir {
+			if mapFile == nil {
+				continue
+			}
+			mapFile.RemoveEntriesFromRoute(routeKey)
+		}
 	}
-	mapsStorage := b.topManager.params.mapsStorage
-	frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
-	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
-	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
-	listenerKeyName := listener.Key().String()
-	routeOrigin := maps.ResourceOrigin{
-		Namespace: routeKey.Namespace,
-		Name:      listenerKeyName + "/" + routeKey.Name,
-	}
-	listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
-	listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 }
 
 func (b *RouteMgrImpl) applyHTTPRouteListenerMaps(
@@ -285,9 +286,7 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForTLSRoutes() {
 		if route.TreeStatus.OldTreeResource == nil {
 			continue
 		}
-		for _, listener := range b.listenersForTLSRoute(route.TreeStatus.OldTreeResource) {
-			b.clearTLSRouteListenerMaps(routeKey, listener)
-		}
+		b.clearRouteListenerRouteEntries(routeKey)
 	}
 
 	// Main loop: fill for the current state of each route.
@@ -296,26 +295,6 @@ func (b *RouteMgrImpl) fillListenerRouteMapsForTLSRoutes() {
 			b.applyTLSRouteListenerMaps(routeKey, route, listener)
 		}
 	}
-}
-
-func (b *RouteMgrImpl) clearTLSRouteListenerMaps(
-	routeKey k8stypes.NamespacedName,
-	listener *tree.Listener,
-) {
-	if listener.VirtualListenerName == "" {
-		return
-	}
-	mapsStorage := b.topManager.params.mapsStorage
-	frontendName := b.topManager.getFrontendName(listener.VirtualListenerName)
-	listenerRouteExactMap := mapsStorage.GetListenerRouteExactMatchMapFile(frontendName)
-	listenerRouteWildcardMap := mapsStorage.GetListenerRouteWildcardMatchMapFile(frontendName)
-	listenerKeyName := listener.Key().String()
-	routeOrigin := maps.ResourceOrigin{
-		Namespace: routeKey.Namespace,
-		Name:      listenerKeyName + "/" + routeKey.Name,
-	}
-	listenerRouteExactMap.RemoveEntriesFrom(routeOrigin)
-	listenerRouteWildcardMap.RemoveEntriesFrom(routeOrigin)
 }
 
 func (b *RouteMgrImpl) applyTLSRouteListenerMaps(
