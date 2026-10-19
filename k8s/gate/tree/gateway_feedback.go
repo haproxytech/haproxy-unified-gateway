@@ -107,9 +107,18 @@ func (t *GateTree) UpdateListenerProgrammedConditions(logger *slog.Logger, obser
 				return
 			}
 
-			if existing, exists := listener.Conditions.GetCondition(newCond.Type); exists {
-				if observedGen < existing.ObservedGeneration {
-					return // stale: a newer result already set this condition
+			// The staleness guard only means something where the two generations belong to
+			// the same resource. BuildConditions stamps every listener's conditions with the
+			// generation of the Gateway serving it, entries included, while the apply reports
+			// a ListenerSet by its own generation: comparing those two counters is comparing
+			// unrelated numbers, and it refuses to write whenever the parent's generation
+			// happens to be the greater -- which is the ordinary case right after a Gateway
+			// is updated, and it leaves the entry on Pending with nothing logged.
+			if owner.Kind == OwnerKindGateway {
+				if existing, exists := listener.Conditions.GetCondition(newCond.Type); exists {
+					if observedGen < existing.ObservedGeneration {
+						return // stale: a newer result already set this condition
+					}
 				}
 			}
 			listener.Conditions[newCond.Type] = newCond

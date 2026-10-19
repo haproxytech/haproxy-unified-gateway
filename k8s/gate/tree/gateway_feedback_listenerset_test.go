@@ -61,3 +61,59 @@ func TestProgrammedFeedbackRefreshesTheListenerSetRollUp(t *testing.T) {
 	assert.Equal(t, int32(1), f.gw.AttachedListenerSets,
 		"re-taking the roll-up must not count the same ListenerSet twice")
 }
+
+// The same stamping, in the shape the transition puts it in: a ListenerSet that became
+// attachable in this very cycle, because the Gateway it names changed hands in it. The
+// other cases attach a ListenerSet whose parent was already ours, so no test had the two
+// events coincide.
+//
+// This test is written to *find out*, not because it is known to pass: the integration
+// case it mirrors reports the entry staying Pending while the apply reported the
+// ListenerSet as programmed, and the fixture here is the closest a unit can get to that
+// shape.
+func TestProgrammedFeedbackReachesAnEntryAttachedInTheSameCycle(t *testing.T) {
+	f := newVerdictFixture(t, true)
+
+	// The Gateway was just rebuilt -- it is the cycle's change -- and the ListenerSet
+	// attached to it in that same rebuild.
+	// The ListenerSet's generation is *below* the Gateway's, which is the ordinary case
+	// when a parent is updated and the entry is not: the Gateway's own listeners then
+	// carry a stamped generation the ListenerSet's counter cannot beat. The other test in
+	// this file has it the other way round -- 11 against 7 -- and so never saw this.
+	require.Less(t, int64(1), f.gw.K8sResource.Generation)
+
+	f.gw.Listeners = nil
+	f.addListenerSet("tenant", "ls", attachmentAllowed, 1, "http")
+	entry := f.addContributedEntry("tenant", "ls", "http", true, metav1.ConditionUnknown)
+	entry.Valid = true
+
+	// BuildConditions stamps the conditions of every listener it judges with the
+	// generation of the Gateway serving it -- an entry's included, since the listener
+	// knows no other resource. The fixture sets conditions directly, so the stamping is
+	// applied here: without it the entry's condition carries generation 0 and the
+	// staleness guard cannot be seen to misfire.
+	entry.Conditions.SetGeneration(f.gw.K8sResource.Generation)
+
+	f.builder.ComputeTreeUpdates()
+	lsKey := client.ObjectKey{Namespace: "tenant", Name: "ls"}
+	treeLs := f.store.GateTree.ListenerSets[lsKey]
+	require.Len(t, treeLs.Entries, 1)
+
+	f.store.GateTree.UpdateListenerProgrammedConditions(
+		f.store.Logger,
+		ObservedGenerations{{Kind: OwnerKindListenerSet, Key: lsKey}: 1},
+		nil,
+	)
+
+	programmed := conditionOf(t, entry.Conditions, string(gatewayv1.ListenerEntryConditionProgrammed))
+	assert.Equal(t, metav1.ConditionTrue, programmed.Status,
+		"the entry the apply programmed has to be stamped")
+	assert.Equal(t, int64(1), programmed.ObservedGeneration,
+		"and stamped with the generation of the resource the apply reported")
+	assert.Equal(t, metav1.ConditionTrue,
+		conditionOf(t, treeLs.Conditions, string(gatewayv1.ListenerSetConditionProgrammed)).Status,
+		"and the roll-up republished with it")
+	assert.Equal(t, metav1.ConditionTrue,
+		conditionOf(t, treeLs.Entries[0].Conditions, string(gatewayv1.ListenerEntryConditionProgrammed)).Status,
+		"including in the entries the status publishes")
+}
