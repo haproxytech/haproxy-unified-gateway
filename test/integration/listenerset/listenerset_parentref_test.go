@@ -247,7 +247,7 @@ func (s *ListenerSetSuite) Test_ParentRef_8_Same_Namespace() {
 
 	// The same namespace, named: same behaviour, built here for the reason above.
 	named := &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "listenerset-named-namespace"},
+		ObjectMeta: metav1.ObjectMeta{Name: "listenerset-named-namespace", Namespace: ns},
 		Spec: gatewayv1.ListenerSetSpec{
 			ParentRef: gatewayv1.ParentGatewayReference{
 				Name:      "hug-gateway",
