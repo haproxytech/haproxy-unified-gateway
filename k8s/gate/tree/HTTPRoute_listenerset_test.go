@@ -198,3 +198,29 @@ func TestHTTPRouteUnreportedListenerSetStaysSilent(t *testing.T) {
 	assert.False(t, result.Valid)
 	assert.Empty(t, result.Conditions)
 }
+
+// A ListenerSet the Gateway refuses contributes no listener, so a route naming it has
+// nothing to attach to: it gets the same answer a deleted parent gets, NoMatchingParent,
+// rather than the empty entry the walk over "no attachable listener" used to leave
+// behind -- a parent announced and silent, which is neither silence nor a refusal.
+func TestHTTPRouteRefusedListenerSetIsRefusedWithNoMatchingParent(t *testing.T) {
+	f := newRouteAttachFixture(t)
+
+	// The refusal is what the contribution pass would have decided, and a refused
+	// ListenerSet puts nothing in the Gateway's merged list.
+	f.treeLs.Attachment = attachmentNotAllowed
+	f.treeGw.constructListeners(nil)
+
+	// No sectionName on purpose: with one, a missing listener is already refused,
+	// and it is the whole-resource form that used to produce the empty entry.
+	parentRef := f.listenerSetParentRef(nil)
+	r := f.route(parentRef)
+
+	result := r.checkParentRef(parentRef, *f.store)
+
+	assert.True(t, result.Managed, "the parent is ours, so the refusal is ours to report")
+	assert.False(t, result.Valid)
+	assert.Len(t, result.Conditions, 1,
+		"an entry with no conditions at all announces a parent and says nothing about it")
+	assert.True(t, result.Conditions.Equal(rc.ConditionNotAcceptedNoMatchingParent()))
+}

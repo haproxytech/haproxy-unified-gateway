@@ -268,6 +268,19 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 		}
 	}
 
+	// A ListenerSet the Gateway refuses contributes no listener at all, so there is
+	// nothing for this route to attach to. It is the same answer a deleted parent gets
+	// above, and the same one a listener that is not accepted gets below -- and without
+	// it the walk over the attachable listeners would find none, leaving an entry with
+	// no conditions rather than a refusal: a parent announced and silent.
+	if treeLs != nil && treeLs.Attachment == attachmentNotAllowed {
+		return checkParentRefResult{
+			Managed:    true,
+			Valid:      false,
+			Conditions: rc.ConditionNotAcceptedNoMatchingParent(),
+		}
+	}
+
 	// The synthetic ingress gateway only accepts synthetic (Ingress-derived)
 	// routes. parentRef.Name (ObjectName) has no character pattern, so a real
 	// HTTPRoute could name "ing:gateway"; reject it explicitly here. This is

@@ -229,6 +229,19 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 		}
 	}
 
+	// A ListenerSet the Gateway refuses contributes no listener at all, so there is
+	// nothing for this route to attach to. It is the same answer a deleted parent gets
+	// above, and the same one a listener that is not accepted gets below -- and without
+	// it the walk over the attachable listeners would find none, leaving an entry with
+	// no conditions rather than a refusal: a parent announced and silent.
+	if treeLs != nil && treeLs.Attachment == attachmentNotAllowed {
+		return checkParentRefResult{
+			Managed:    true,
+			Valid:      false,
+			Conditions: rc.ConditionNotAcceptedNoMatchingParent(),
+		}
+	}
+
 	// From now on, the parent references an exising Gateway or ListenerSet managed by our controller
 	// SectionName is optional
 	// 1- if set, the only attachable listener is the one references by the sectionName
