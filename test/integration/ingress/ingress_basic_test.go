@@ -63,7 +63,7 @@ func (s *IngressTestSuite) Test_Ingress_NotAccepted_ForeignController() {
 	// Barrier: the eligible Ingress backend is created.
 	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
 	// The foreign-controller Ingress must not have produced a backend.
-	s.ExpectBackendsDoNotExist(s.Test().Ctx, "hug_e2e-tests-ingress_http-echo-foreign_80__")
+	s.ExpectBackendsDoNotExist(s.IntTest().Ctx, "hug_e2e-tests-ingress_http-echo-foreign_80__")
 }
 
 // An Ingress backend that references its Service port by name is resolved to the
@@ -96,7 +96,7 @@ func (s *IngressTestSuite) Test_Ingress_BackendRemovedWhenIngressClassDeleted() 
 	// Delete only the IngressClass: the Ingress becomes ineligible and its
 	// backend must be removed.
 	s.CleanupFixtures(fixturePath, []string{"ingressclass.yaml"})
-	s.ExpectBackendsDoNotExist(s.Test().Ctx, backendName)
+	s.ExpectBackendsDoNotExist(s.IntTest().Ctx, backendName)
 }
 
 // Adding the gate.v3.haproxy.org/cr-backend annotation to an Ingress's target
@@ -162,7 +162,7 @@ func (s *IngressTestSuite) Test_Ingress_BackendAppearsWhenIngressClassAddedLater
 	// Barrier: the eligible Ingress backend exists, so the batch (including the
 	// ineligible target Ingress) has been processed.
 	s.expectBackendExists(barrierBackend)
-	s.ExpectBackendsDoNotExist(s.Test().Ctx, targetBackend)
+	s.ExpectBackendsDoNotExist(s.IntTest().Ctx, targetBackend)
 
 	// Add the target IngressClass: the target Ingress must be re-evaluated and
 	// its backend created.
@@ -300,7 +300,7 @@ func (s *IngressTestSuite) Test_Ingress_MapClearedWhenIngressDeleted() {
 
 	// Delete only the Ingress: its listener route entry must disappear.
 	s.CleanupFixtures(fixturePath, []string{"ingress.yaml"})
-	if !utils.WaitFor(s.Test().Ctx, interval, timeout, func() bool {
+	if !utils.WaitFor(s.IntTest().Ctx, interval, timeout, func() bool {
 		return !s.mapFileContains(exactMap, "example.ingress")
 	}) {
 		s.T().Fatalf("listener route map still contains example.ingress after Ingress deletion")
@@ -350,28 +350,28 @@ func (s *IngressTestSuite) Test_Ingress_TLSMultipleCertsInCrtList() {
 
 	// Both certificates are loaded into the https listener's crt-list, so HAProxy
 	// can offload either host by SNI.
-	ns := s.Test().Namespace
+	ns := s.IntTest().Namespace
 	expectedCrtLists := map[futils.FilePath][]string{
 		{
-			Dir:      path.Join(s.Test().HaproxyCfgDir, "certlists"),
+			Dir:      path.Join(s.IntTest().HaproxyCfgDir, "certlists"),
 			FileName: "/hug_https_8443.list",
 		}: {
-			path.Join(s.Test().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload.pem"),
-			path.Join(s.Test().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload2.pem"),
+			path.Join(s.IntTest().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload.pem"),
+			path.Join(s.IntTest().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload2.pem"),
 		},
 	}
-	s.ExpectCrtLists(s.Test().Ctx, expectedCrtLists)
+	s.ExpectCrtLists(s.IntTest().Ctx, expectedCrtLists)
 
 	// The per-host certificates are usable, identified by their subject CN.
 	expectedCerts := []*models.SslCertificate{
 		{
-			StorageName: path.Join(s.Test().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload.pem"),
+			StorageName: path.Join(s.IntTest().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload.pem"),
 			Subject:     "/CN=offload.haproxy",
 		},
 		{
-			StorageName: path.Join(s.Test().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload2.pem"),
+			StorageName: path.Join(s.IntTest().HaproxyCfgDir, "certs", ns, "of", "hug_"+ns+"_offload2.pem"),
 			Subject:     "/CN=offload2.haproxy",
 		},
 	}
-	s.ExpectCertificates(s.Test().Ctx, expectedCerts)
+	s.ExpectCertificates(s.IntTest().Ctx, expectedCerts)
 }

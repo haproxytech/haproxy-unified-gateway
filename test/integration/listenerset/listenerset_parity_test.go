@@ -51,8 +51,8 @@ func (s *ListenerSetSuite) Test_10_TLSRoute_Parity_From_One_Route() {
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "parity-listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "parity-listenerset", "tls", acceptedEntry())
@@ -78,8 +78,8 @@ func (s *ListenerSetSuite) Test_11_TLSRoute_Parity_From_Two_Routes() {
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "parity-listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "parity-listenerset", "tls", acceptedEntry())
@@ -100,8 +100,8 @@ func (s *ListenerSetSuite) Test_12_HTTPRoute_Parity_From_One_Route() {
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "parity-listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "parity-listenerset", "http", acceptedEntry())
@@ -133,8 +133,8 @@ func (s *ListenerSetSuite) Test_13_HTTPRoute_Parity_From_Two_Routes() {
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "parity-listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "parity-listenerset", "http", acceptedEntry())
@@ -161,8 +161,8 @@ func (s *ListenerSetSuite) Test_14_HTTPSRoute_Parity_From_One_Route() {
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "parity-listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "parity-listenerset", "https", acceptedEntry())
@@ -198,8 +198,8 @@ func (s *ListenerSetSuite) Test_15_HTTPSRoute_Parity_From_Two_Routes() {
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "parity-listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "parity-listenerset", "https", acceptedEntry())

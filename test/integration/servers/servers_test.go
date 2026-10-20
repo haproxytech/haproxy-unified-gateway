@@ -43,11 +43,11 @@ func (s *ServersSuite) Test_Scale_up() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	route := "route-echo-http"
-	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, route, expectedConditions)
+	s.ExpectRouteConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, route, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "http", 1)
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "https", 1)
+	s.ExpectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "hug-gateway", "http", 1)
+	s.ExpectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "hug-gateway", "https", 1)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -61,7 +61,7 @@ func (s *ServersSuite) Test_Scale_up() {
 
 	// Check Servers: runtime
 
-	backend := fmt.Sprintf("hug_%s_http-echo_80__", s.Test().Namespace)
+	backend := fmt.Sprintf("hug_%s_http-echo_80__", s.IntTest().Namespace)
 	expectedServers := []string{
 		"SRV_4827409c6115096b8dde5db0092cea2f54213123",
 	}
@@ -131,7 +131,7 @@ func (s *ServersSuite) Test_NamedTargetPort() {
 
 	// The EndpointSlice port is the resolved targetPort (container port 8888),
 	// not the Service port (80).
-	backend := fmt.Sprintf("hug_%s_http-echo-named_80__", s.Test().Namespace)
+	backend := fmt.Sprintf("hug_%s_http-echo-named_80__", s.IntTest().Namespace)
 	expectedServers := []string{
 		"SRV_4827409c6115096b8dde5db0092cea2f54213123",
 	}

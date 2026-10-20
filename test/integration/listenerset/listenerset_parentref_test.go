@@ -95,8 +95,8 @@ func (s *ListenerSetSuite) Test_ParentRef_1_Does_Not_Exist() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "ls-control", listenerSetServable())
 	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-silent")
@@ -117,8 +117,8 @@ func (s *ListenerSetSuite) Test_ParentRef_2_Parent_Deleted() {
 	// deletion fails on an object that is already gone.
 	defer s.CleanupFixtures(fixturePath, []string{"gatewayclass.yaml", "listenerset.yaml"})
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset", "ls-listener", acceptedEntry())
@@ -138,8 +138,8 @@ func (s *ListenerSetSuite) Test_ParentRef_3_Not_Managed() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "ls-control", listenerSetServable())
 	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-silent")
@@ -160,8 +160,8 @@ func (s *ListenerSetSuite) Test_ParentRef_4_Becomes_Managed() {
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetReportsNothing(ctx, ns, "listenerset")
 
@@ -192,8 +192,8 @@ func (s *ListenerSetSuite) Test_ParentRef_5_Stops_Being_Managed() {
 	s.CreateFixtures(fixturePath, manifests)
 	defer s.CleanupFixtures(fixturePath, manifests)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	// Served by the Gateway while it names our class.
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
@@ -216,8 +216,8 @@ func (s *ListenerSetSuite) Test_ParentRef_6_Wrong_Shape() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "ls-control", listenerSetServable())
 	s.ExpectListenerSetReportsNothing(ctx, ns, "ls-wrong-group")
@@ -236,8 +236,8 @@ func (s *ListenerSetSuite) Test_ParentRef_7_Cross_Namespace() {
 	s.CreateFixtures(fixturePath, inTestNamespace)
 	defer s.CleanupFixtures(fixturePath, inTestNamespace)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	// The two parents live in the second namespace the controller watches, and it
 	// never creates it.
@@ -258,8 +258,8 @@ func (s *ListenerSetSuite) Test_ParentRef_8_Same_Namespace() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	// The absent namespace: attached, since it means the ListenerSet's own.
 	s.ExpectListenerSetConditions(ctx, ns, "ls-empty-namespace", listenerSetServable())
@@ -283,10 +283,10 @@ func (s *ListenerSetSuite) Test_ParentRef_8_Same_Namespace() {
 			}},
 		},
 	}
-	err := utils.CreateRuntimeObject(ctx, s.Test().Client, named, true)
+	err := utils.CreateRuntimeObject(ctx, s.IntTest().Client, named, true)
 	s.Require().NoError(err)
 	defer func() {
-		_ = utils.DeleteRuntimeObject(ctx, s.Test().Client, named, false)
+		_ = utils.DeleteRuntimeObject(ctx, s.IntTest().Client, named, false)
 	}()
 
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset-named-namespace", listenerSetServable())
@@ -301,8 +301,8 @@ func (s *ListenerSetSuite) Test_AllowedListeners_9_Not_Allowed() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetNotAllowed())
 }
@@ -323,8 +323,8 @@ func (s *ListenerSetSuite) Test_AllowedListeners_10_Same() {
 	s.CreateFixturesInNamespace(fixturePath, secretNamespace, inOtherNamespace)
 	defer s.CleanupFixturesInNamespace(fixturePath, secretNamespace, inOtherNamespace)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset-same-namespace", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset-same-namespace", "ls-listener", acceptedEntry())
@@ -350,8 +350,8 @@ func (s *ListenerSetSuite) Test_DisallowedKind_Through_A_ListenerSet() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	// The ListenerSet itself is fine: its listener is served, and it is the route that
 	// has no business there.
@@ -384,8 +384,8 @@ func (s *ListenerSetSuite) Test_IncompatibleKinds_Make_The_ListenerSet_Unservabl
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 	lsetName := "listenerset-incompatible-kinds"
 
 	// The kinds declared are the ones this protocol cannot serve, so none survives:
@@ -414,8 +414,8 @@ func (s *ListenerSetSuite) Test_Route_Naming_A_Refused_ListenerSet() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	// The ListenerSet says why it contributes nothing.
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset-refused", listenerSetNotAllowed())
@@ -446,8 +446,8 @@ func (s *ListenerSetSuite) Test_Route_Naming_An_Absent_ListenerSet() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectRouteParentHasCondition(ctx, ns, "route-two-parents", gatewayParentRef("gateway-listener"), metav1.Condition{
 		Type:   string(gatewayv1.RouteConditionAccepted),
@@ -494,8 +494,8 @@ func (s *ListenerSetSuite) Test_ParentRef_Class_Handed_Over() {
 	// names the other, and each Gateway manifest once.
 	defer s.CleanupFixtures(fixturePath, []string{"gatewayclass-taken.yaml", "gateway.yaml", "listenerset.yaml", "route.yaml", "http-echo.yaml"})
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset", "ls-listener", acceptedEntry())

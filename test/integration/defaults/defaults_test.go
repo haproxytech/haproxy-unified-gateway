@@ -127,7 +127,7 @@ func (s *DefaultsSuite) Test_Defaults_Ignored_Name() {
 	// The connect_timeout must never change to the value specified in the ignored CR.
 	neverTimeout := 5 * time.Second
 	s.Never(func() bool {
-		defaults, err := s.Test().HaproxyClient.DefaultsSectionGet("haproxytech")
+		defaults, err := s.IntTest().HaproxyClient.DefaultsSectionGet("haproxytech")
 		if err != nil || defaults == nil || defaults.ConnectTimeout == nil {
 			return false
 		}

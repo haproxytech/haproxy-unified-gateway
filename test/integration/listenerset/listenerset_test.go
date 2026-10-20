@@ -171,8 +171,8 @@ func (s *ListenerSetSuite) Test_1_Contribution() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset-contributing", listenerSetServable())
 	// The entry is reported whatever its state, so the entry set is asserted too.
@@ -199,8 +199,8 @@ func (s *ListenerSetSuite) Test_2_SiblingConflicts() {
 	s.CreateFixtures(fixturePath, older)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset-a", listenerSetServable())
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset-a", "ls-a-listener", acceptedEntry())
@@ -230,8 +230,8 @@ func (s *ListenerSetSuite) Test_4_Deletion_On_A_Shared_Frontend() {
 	// second deletion fails on an object that is already gone.
 	defer s.CleanupFixtures(fixturePath, []string{"gatewayclass.yaml", "http-echo.yaml", "gateway.yaml"})
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 	lsetName := "listenerset-contributing"
 
 	s.ExpectListenerSetEntryConditions(ctx, ns, lsetName, "ls-listener", acceptedEntry())
@@ -272,8 +272,8 @@ func (s *ListenerSetSuite) Test_5_Reparenting() {
 		"route.yaml", "listenerset-moved.yaml",
 	})
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 	lsetName := "listenerset-moving"
 
 	// Attached to the first Gateway, and served there.
@@ -322,8 +322,8 @@ func (s *ListenerSetSuite) Test_3_ReferenceGrant_From_The_ListenerSet() {
 	// that lives in another one.
 	defer s.CleanupFixtures(fixturePath, inTestNamespace)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 	lsetName := "listenerset-with-grant"
 
 	// The Secret is in the other namespace from the start: what the first step
@@ -358,10 +358,10 @@ func (s *ListenerSetSuite) Test_3_ReferenceGrant_From_The_ListenerSet() {
 			}},
 		},
 	}
-	err := utils.CreateRuntimeObject(ctx, s.Test().Client, grant, true)
+	err := utils.CreateRuntimeObject(ctx, s.IntTest().Client, grant, true)
 	s.Require().NoError(err)
 	defer func() {
-		_ = utils.DeleteRuntimeObject(ctx, s.Test().Client, grant, false)
+		_ = utils.DeleteRuntimeObject(ctx, s.IntTest().Client, grant, false)
 	}()
 
 	s.ExpectListenerSetEntryConditions(ctx, ns, lsetName, "ls-listener", acceptedEntry())

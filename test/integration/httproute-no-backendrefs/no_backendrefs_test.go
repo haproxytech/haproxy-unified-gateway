@@ -71,9 +71,9 @@ func (s *NoBackendRefsSuite) Test_NoBackendRefsRules() {
 
 	// The route programs fully: backendless rules do not degrade its status.
 	expectationsPath := path.Join(fixtureDirPath, "expectations")
-	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, "route-no-backendrefs",
+	s.ExpectRouteConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, "route-no-backendrefs",
 		s.YamlToRouteConditions(path.Join(expectationsPath, "route-conditions.yaml")))
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "http", 1)
+	s.ExpectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "hug-gateway", "http", 1)
 
 	pseudoStatus := http.StatusNotFound
 	if s.gwapiCompat {
@@ -131,8 +131,8 @@ func (s *NoBackendRefsSuite) createEchoEndpoints() {
 			},
 		},
 	}
-	endpoints.Namespace = s.Test().Namespace
-	err := utils.CreateRuntimeObject(s.Test().Ctx, s.Test().Client, endpoints, true)
+	endpoints.Namespace = s.IntTest().Namespace
+	err := utils.CreateRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, endpoints, true)
 	s.Require().NoError(err)
 }
 
@@ -140,8 +140,8 @@ func (s *NoBackendRefsSuite) deleteEchoEndpoints() {
 	endpoints := &discoveryV1.EndpointSlice{
 		Name: echoEndpointSlice,
 	}
-	endpoints.Namespace = s.Test().Namespace
-	err := utils.DeleteRuntimeObject(s.Test().Ctx, s.Test().Client, endpoints, true)
+	endpoints.Namespace = s.IntTest().Namespace
+	err := utils.DeleteRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, endpoints, true)
 	s.Require().NoError(err)
 }
 
@@ -153,7 +153,7 @@ type response struct {
 
 func (s *NoBackendRefsSuite) expectResponse(host, reqPath string, headers map[string]string, expect response) {
 	var got response
-	if !utils.WaitFor(s.Test().Ctx, requestInterval, requestTimeout, func() bool {
+	if !utils.WaitFor(s.IntTest().Ctx, requestInterval, requestTimeout, func() bool {
 		got = s.doRequest(host, reqPath, headers)
 		return got.status == expect.status &&
 			(expect.location == "" || got.location == expect.location) &&
@@ -165,7 +165,7 @@ func (s *NoBackendRefsSuite) expectResponse(host, reqPath string, headers map[st
 }
 
 func (s *NoBackendRefsSuite) doRequest(host, reqPath string, headers map[string]string) response {
-	target := fmt.Sprintf("http://127.0.0.1:%d%s", s.Test().PortMap[gatewayHTTPPort], reqPath)
+	target := fmt.Sprintf("http://127.0.0.1:%d%s", s.IntTest().PortMap[gatewayHTTPPort], reqPath)
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	s.Require().NoError(err)
 	req.Host = host

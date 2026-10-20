@@ -70,7 +70,7 @@ const portPlaceholder = "<port>"
 // differences are canonicalised.
 func (b *BaseSuite) ExpectFrontendsIdenticalModuloNaming(templateA, templateB string, differences ...NamingDifference) {
 	var diff string
-	if !utils.WaitFor(b.Test().Ctx, interval, timeout, func() bool {
+	if !utils.WaitFor(b.IntTest().Ctx, interval, timeout, func() bool {
 		textA, ok := b.frontendText(templateA)
 		if !ok {
 			return false
@@ -107,7 +107,7 @@ func (b *BaseSuite) ExpectFrontendsIdenticalModuloNaming(templateA, templateB st
 func (b *BaseSuite) ExpectMapsIdenticalModuloNaming(templateA, templateB string, differences ...NamingDifference) {
 	required := []string{"listener_exact_match.map", "listener_route_exact_match.map"}
 	var diff string
-	if !utils.WaitFor(b.Test().Ctx, interval, timeout, func() bool {
+	if !utils.WaitFor(b.IntTest().Ctx, interval, timeout, func() bool {
 		for _, mapName := range required {
 			contentA, okA := b.mapText(templateA, mapName)
 			contentB, okB := b.mapText(templateB, mapName)
@@ -154,7 +154,7 @@ func (b *BaseSuite) ExpectMapsIdenticalModuloNaming(templateA, templateB string,
 // pass by being equally empty.
 func (b *BaseSuite) ExpectCrtListsIdenticalModuloNaming(templateA, templateB string, differences ...NamingDifference) {
 	var diff string
-	if !utils.WaitFor(b.Test().Ctx, interval, timeout, func() bool {
+	if !utils.WaitFor(b.IntTest().Ctx, interval, timeout, func() bool {
 		linesA, errA := b.crtListLines(templateA)
 		linesB, errB := b.crtListLines(templateB)
 		if errA != nil || errB != nil || len(linesA) == 0 || len(linesB) == 0 {
@@ -177,10 +177,10 @@ func (b *BaseSuite) ExpectCrtListsIdenticalModuloNaming(templateA, templateB str
 // so that a caller can tell "serves nothing" from "not written yet".
 func (b *BaseSuite) crtListLines(templateFrontend string) ([]string, error) {
 	expected := futils.FilePath{
-		Dir:      path.Join(b.Test().HaproxyCfgDir, "certlists"),
+		Dir:      path.Join(b.IntTest().HaproxyCfgDir, "certlists"),
 		FileName: "/" + templateFrontend + ".list",
 	}
-	actualFullPath := utils.SubstitutePortsInString(expected.FullPath(), b.Test().PortMap)
+	actualFullPath := utils.SubstitutePortsInString(expected.FullPath(), b.IntTest().PortMap)
 	return futils.FilePath{
 		Dir:      filepath.Dir(actualFullPath),
 		FileName: "/" + filepath.Base(actualFullPath),

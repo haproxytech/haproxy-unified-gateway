@@ -46,7 +46,7 @@ func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_Lis
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-attaches-to-empty-hostname"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -68,7 +68,7 @@ func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_Lis
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-attaches-to-wildcard-example-com"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -90,7 +90,7 @@ func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_Lis
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-attaches-to-wildcard-foo-example-com"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -112,7 +112,7 @@ func (s *HTTPRouteIsolationWithHostnameIntersectionTestSuite) Test_HTTPRoute_Lis
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-attaches-to-abc-foo-example-com"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
