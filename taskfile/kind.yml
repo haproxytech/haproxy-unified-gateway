@@ -80,24 +80,68 @@ tasks:
   kind-cloud-provider-start:
     desc: "start cloud-provider-kind in background (assigns IPs to LoadBalancer services)"
     deps:
-      - task: check-go-tool
+      - task: check-go-tools
         vars:
-          TOOL: CLOUD_PROVIDER_KIND
+          TOOLS: [KIND, CLOUD_PROVIDER_KIND]
     vars:
       pidfile: "/tmp/cloud-provider-kind-{{.CLUSTER_NAME}}.pid"
       logfile: "/tmp/cloud-provider-kind-{{.CLUSTER_NAME}}.log"
+      kubeconfig: "/tmp/kind-{{.CLUSTER_NAME}}.kubeconfig"
     cmds:
-      - nohup $(check-go-tool {{.CLOUD_PROVIDER_KIND}}) --gateway-channel=disabled > {{.logfile}} 2>&1 & echo $! > {{.pidfile}}
-      - echo "cloud-provider-kind started (pid=$(cat {{.pidfile}}), log={{.logfile}})"
+      # The provider reads the ambient kubeconfig, so starting it without pinning one can
+      # serve ANOTHER cluster while looking perfectly healthy: it runs, its log is normal,
+      # and the Services of the cluster named here stay LoadBalancer ingress pending for
+      # ever. CLUSTER_NAME already names this cluster for the pidfile and the log; the
+      # process has to be given the same answer.
+      - |
+        KUBECONFIG={{.kubeconfig}} $(check-go-tool {{.KIND}}) export kubeconfig --name {{.CLUSTER_NAME}}
+      # A second provider is not a second address: it competes for the same host ports.
+      # Asked by name, not from the pidfile: a pidfile left by a dead attempt would refuse a
+      # start that is legitimate, and $! is not the provider's pid (see below).
+      - |
+        running=$(pgrep -f 'cloud-provider-kind.*--gateway-channel=disabled' | head -1 || true)
+        if [ -n "$running" ]; then
+          echo "cloud-provider-kind already running (pid=$running); run kind-cloud-provider-stop first"
+          exit 1
+        fi
+      # Appended, not truncated: the previous attempt's log is the evidence of why this one
+      # may not work, and overwriting it is what made this fail silently before.
+      - |
+        KUBECONFIG={{.kubeconfig}} nohup $(check-go-tool {{.CLOUD_PROVIDER_KIND}}) --gateway-channel=disabled >> {{.logfile}} 2>&1 &
+      # Started is not running, so it is waited for. The pid is asked for by name: $! is the
+      # subshell the shell forked for this background job, and with a command substitution in
+      # that job's command line the subshell goes away while the provider runs -- which made an
+      # earlier version of this check report a healthy provider as dead.
+      - |
+        sleep 3
+        provider_pid=$(pgrep -f 'cloud-provider-kind.*--gateway-channel=disabled' | head -1 || true)
+        if [ -z "$provider_pid" ]; then
+          echo "cloud-provider-kind is not running; last lines of {{.logfile}}:"
+          tail -n 20 {{.logfile}}
+          rm -f {{.pidfile}}
+          exit 1
+        fi
+        echo $provider_pid > {{.pidfile}}
+        echo "cloud-provider-kind running for cluster {{.CLUSTER_NAME}} (pid=$provider_pid, kubeconfig={{.kubeconfig}}, log={{.logfile}})"
+        echo "  check it is addressing Services: docker ps --filter name=kindccm; kubectl get svc -A | rg -i loadbalancer"
 
   kind-cloud-provider-stop:
-    desc: "stop cloud-provider-kind background process"
+    desc: "stop cloud-provider-kind background process, and its orphaned Envoy proxies"
     vars:
       pidfile: "/tmp/cloud-provider-kind-{{.CLUSTER_NAME}}.pid"
     cmds:
       - |
         pkill -f cloud-provider-kind 2>/dev/null || true
         rm -f {{.pidfile}}
+      # The proxies are containers with a restart policy: they outlive the process that
+      # created them, and they hold the host ports a new provider needs. An orphan left
+      # behind is why a restarted provider cannot publish an address at all.
+      - |
+        orphans=$(docker ps -aq --filter name=kindccm- 2>/dev/null || true)
+        if [ -n "$orphans" ]; then
+          docker rm -f $orphans >/dev/null
+          echo "removed $(echo $orphans | wc -w) orphaned cloud-provider-kind proxy container(s)"
+        fi
         echo "cloud-provider-kind stopped"
 
   kind-delete:
