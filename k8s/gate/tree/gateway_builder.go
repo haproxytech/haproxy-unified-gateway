@@ -223,7 +223,7 @@ func (b *GatewayBuilderImpl) CleanTreeUpdates() {
 }
 
 // markRoutesOfRebuiltGateways re-marks for processing every route that serves a Gateway
-// rebuilt this cycle.
+// rebuilt or deleted this cycle.
 //
 // constructMergedListeners recreates the whole listening surface of an upserted Gateway
 // -- its own listeners and the entries its ListenerSets contribute -- with fresh
@@ -243,7 +243,7 @@ func (b *GatewayBuilderImpl) CleanTreeUpdates() {
 func (b *GatewayBuilderImpl) markRoutesOfRebuiltGateways() {
 	rebuilt := make(map[client.ObjectKey]struct{})
 	for gwKey, treeGw := range b.ControllerStore.GateTree.Gateways {
-		if treeGw == nil || treeGw.TreeStatus.Status != store.StatusUpserted {
+		if treeGw == nil || (treeGw.TreeStatus.Status != store.StatusUpserted && treeGw.TreeStatus.Status != store.StatusDeleted) {
 			continue
 		}
 		rebuilt[gwKey] = struct{}{}
@@ -287,8 +287,8 @@ func (b *GatewayBuilderImpl) markRoutesOfRebuiltGateways() {
 }
 
 // routeServesAnyRebuiltGateway reports whether one of a route's parentRefs designates a
-// rebuilt Gateway -- directly, or through a ListenerSet it names. A ListenerSet that is
-// not (or not yet) allowed to attach still resolves to its parent Gateway: whether it may
+// rebuilt or deleted Gateway -- directly, or through a ListenerSet it names. A
+// ListenerSet not (or not yet) allowed to attach still resolves to its parent Gateway: whether it may
 // attach is the ListenerSet's own verdict, not a reason to leave a route that named it
 // behind.
 func (b *GatewayBuilderImpl) routeServesAnyRebuiltGateway(
@@ -306,12 +306,21 @@ func (b *GatewayBuilderImpl) routeServesAnyRebuiltGateway(
 		case utilsk8s.ParentRefKindListenerSet:
 			lsKey := GetParentRefNamespacedNameFromResource(parentRef, getNamespaceOrDefault(parentRef.Namespace, routeNamespace))
 			treeLs := b.ControllerStore.GateTree.ListenerSets[lsKey]
-			if treeLs == nil || treeLs.K8sResource == nil {
+			if treeLs == nil {
 				continue
 			}
-			if gwKey, namesGateway := parentGatewayKey(treeLs.K8sResource); namesGateway {
-				if _, ok := rebuilt[gwKey]; ok {
-					return true
+			// A deleted ListenerSet has no current resource, and a reparented one
+			// may now name an absent Gateway. Both still had routes on the old
+			// parent, so resolve both versions while the snapshot is available.
+			resources := []*gatewayv1.ListenerSet{treeLs.K8sResource}
+			if previous := treeLs.TreeStatus.OldTreeResource; previous != nil {
+				resources = append(resources, previous.K8sResource)
+			}
+			for _, resource := range resources {
+				if gwKey, namesGateway := parentGatewayKey(resource); namesGateway {
+					if _, ok := rebuilt[gwKey]; ok {
+						return true
+					}
 				}
 			}
 		}
