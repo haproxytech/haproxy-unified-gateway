@@ -35,15 +35,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_BackendCRD_basic() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-backend-cr-basic"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo_80_ef84fba452b3f62faf235c47b46c1e54"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -65,15 +65,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_BackendCRD_extended() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-backend-cr-basic"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo_80_870306e1a7d334a1eceb23475e6075aa"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")

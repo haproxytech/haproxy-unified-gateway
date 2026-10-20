@@ -54,10 +54,10 @@ func (s *GatewayTestSuite) Test_Gateway_InvalidRef() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Check Maps
-	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
+	mapFileRelativePath := "hug_" + s.IntTest().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
@@ -78,10 +78,10 @@ func (s *GatewayTestSuite) Test_Gateway_InvalidHTTPS() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Check Maps
-	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
+	mapFileRelativePath := "hug_" + s.IntTest().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
@@ -102,10 +102,10 @@ func (s *GatewayTestSuite) Test_Gateway_validRef() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Check Maps
-	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
+	mapFileRelativePath := "hug_" + s.IntTest().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
@@ -127,7 +127,7 @@ func (s *GatewayTestSuite) Test_Gateway_conflict_at_least_1_listener_ok() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Expected Conditions: Gateway2
 	expectedCondPath = path.Join(expectationsPath, "conditions-gateway2.yaml")
@@ -136,12 +136,12 @@ func (s *GatewayTestSuite) Test_Gateway_conflict_at_least_1_listener_ok() {
 	expectedListenerStatuses = s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName = "gateway2"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// haproxy.cfg Frontends
 	frontendsExpectationsPath := path.Join(expectationsPath, "frontends")
 	expectedFrontends := []string{"hug_http_8080", "hug_http_8081", "hug_http_9090"}
-	s.ExpectFrontends(s.Test().Ctx, frontendsExpectationsPath, expectedFrontends)
+	s.ExpectFrontends(s.IntTest().Ctx, frontendsExpectationsPath, expectedFrontends)
 
 	// Check Maps
 	mapFileRelativePath := "hug_http_8080"
@@ -173,7 +173,7 @@ func (s *GatewayTestSuite) Test_Gateway_conflict_empty_hostname_no_conflict() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 }
 
 func (s *GatewayTestSuite) Test_Gateway_conflict_0_listener_ok() {
@@ -193,7 +193,7 @@ func (s *GatewayTestSuite) Test_Gateway_conflict_0_listener_ok() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Expected Conditions: Gateway2
 	expectedCondPath = path.Join(expectationsPath, "conditions-gateway2.yaml")
@@ -202,10 +202,10 @@ func (s *GatewayTestSuite) Test_Gateway_conflict_0_listener_ok() {
 	expectedListenerStatuses = s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName = "gateway2"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// haproxy.cfg Frontends
 	frontendsExpectationsPath := path.Join(expectationsPath, "frontends")
 	expectedFrontends := []string{}
-	s.ExpectFrontends(s.Test().Ctx, frontendsExpectationsPath, expectedFrontends)
+	s.ExpectFrontends(s.IntTest().Ctx, frontendsExpectationsPath, expectedFrontends)
 }

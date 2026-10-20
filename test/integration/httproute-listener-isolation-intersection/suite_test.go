@@ -47,8 +47,8 @@ func (s *HTTPRouteIsolationSuite) expectConditionsUpdated(ctx context.Context, n
 	route := &gatewayv1.HTTPRoute{}
 	var gotConditions rc.RouteConditions
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
-		if err := s.Test().Client.Get(
-			s.Test().Ctx,
+		if err := s.IntTest().Client.Get(
+			s.IntTest().Ctx,
 			types.NamespacedName{Name: name, Namespace: namespace}, route,
 		); err != nil {
 			return false

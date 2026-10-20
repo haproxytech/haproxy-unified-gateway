@@ -51,14 +51,14 @@ func (s *GlobalSuite) SetupSuite() {
 
 	// Create the "test" namespace required for HugConf.
 	// The controller is configured to watch HugConf at namespace "test", name "hugconf".
-	err := utils.CreateRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
+	err := utils.CreateRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, &v1.Namespace{
 		Name: hugConfNamespace,
 	}, true)
 	s.Require().NoError(err)
 }
 
 func (s *GlobalSuite) TearDownSuite() {
-	_ = utils.DeleteRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
+	_ = utils.DeleteRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, &v1.Namespace{
 		Name: hugConfNamespace,
 	}, false)
 	s.BaseSuite.TearDownSuite()
@@ -67,7 +67,7 @@ func (s *GlobalSuite) TearDownSuite() {
 // expectMaxconn waits until HAProxy's active global maxconn matches the expected value.
 func (s *GlobalSuite) expectMaxconn(expected int64) {
 	s.Eventually(func() bool {
-		global, err := s.Test().HaproxyClient.GlobalGet()
+		global, err := s.IntTest().HaproxyClient.GlobalGet()
 		if err != nil {
 			return false
 		}
@@ -81,7 +81,7 @@ func (s *GlobalSuite) expectMaxconn(expected int64) {
 // expectLogTargetCount waits until HAProxy's active global has exactly n log targets.
 func (s *GlobalSuite) expectLogTargetCount(n int) {
 	s.Eventually(func() bool {
-		global, err := s.Test().HaproxyClient.GlobalGet()
+		global, err := s.IntTest().HaproxyClient.GlobalGet()
 		if err != nil {
 			return false
 		}

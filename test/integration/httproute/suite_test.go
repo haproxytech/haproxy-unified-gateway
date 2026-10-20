@@ -41,8 +41,8 @@ func (s *HTTPRouteSuite) expectConditionsUpdated(ctx context.Context, namespace,
 	route := &gatewayv1.HTTPRoute{}
 	var gotConditions rc.RouteConditions
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
-		if err := s.Test().Client.Get(
-			s.Test().Ctx,
+		if err := s.IntTest().Client.Get(
+			s.IntTest().Ctx,
 			types.NamespacedName{Name: name, Namespace: namespace}, route,
 		); err != nil {
 			return false
@@ -61,8 +61,8 @@ func (s *HTTPRouteSuite) expectConditionsUpdated(ctx context.Context, namespace,
 func (s *HTTPRouteSuite) expectAttachedRoute(ctx context.Context, namespace, gwName, listenerName string, expectNbAttachedRoutes int32) {
 	gw := &gatewayv1.Gateway{}
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
-		if err := s.Test().Client.Get(
-			s.Test().Ctx,
+		if err := s.IntTest().Client.Get(
+			s.IntTest().Ctx,
 			types.NamespacedName{Name: gwName, Namespace: namespace}, gw,
 		); err != nil {
 			return false

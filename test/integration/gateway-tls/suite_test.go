@@ -55,8 +55,8 @@ func (s *GatewayTLSSuite) expectGwConditionsUpdated(ctx context.Context, namespa
 	var gotConditions conditions.Conditions
 
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
-		if err := s.Test().Client.Get(
-			s.Test().Ctx,
+		if err := s.IntTest().Client.Get(
+			s.IntTest().Ctx,
 			types.NamespacedName{Name: name, Namespace: namespace}, gw,
 		); err != nil {
 			return false

@@ -56,7 +56,7 @@ func (s *GatewayClassTestSuite) Test_GatewayClass_MissingNamespace() {
 	expectedConditions := s.YamlToConditions(expectedCondPath)
 
 	gwcName := "haproxy"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwcName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwcName, expectedConditions)
 }
 
 func (s *GatewayClassTestSuite) Test_GatewayClass_InvalidRef() {
@@ -73,7 +73,7 @@ func (s *GatewayClassTestSuite) Test_GatewayClass_InvalidRef() {
 	expectedConditions := s.YamlToConditions(expectedCondPath)
 
 	gwcName := "haproxy"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwcName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwcName, expectedConditions)
 }
 
 func (s *GatewayClassTestSuite) Test_GatewayClass_ValidRef() {
@@ -90,7 +90,7 @@ func (s *GatewayClassTestSuite) Test_GatewayClass_ValidRef() {
 	expectedConditions := s.YamlToConditions(expectedCondPath)
 
 	gwcName := "haproxy"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwcName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwcName, expectedConditions)
 }
 
 func (s *GatewayClassTestSuite) Test_GatewayClass_Dynamic_InstalledVersions() {
@@ -108,24 +108,24 @@ func (s *GatewayClassTestSuite) Test_GatewayClass_Dynamic_InstalledVersions() {
 	expectedCondPath := path.Join(expectationsPath, "conditions-ko.yaml")
 	expectedConditions := s.YamlToConditions(expectedCondPath)
 	gwcName := "haproxy"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwcName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwcName, expectedConditions)
 
 	// Expected Conditions
 	// supported version
 	s.resetGatewayClassCRToSupportedVersion(currentVersion)
 	expectedCondPath = path.Join(expectationsPath, "conditions-ok.yaml")
 	expectedConditions = s.YamlToConditions(expectedCondPath)
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwcName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwcName, expectedConditions)
 }
 
 func (s *GatewayClassTestSuite) setGatewayClassCRToUnsupportedVersion(newVersion string) string {
 	var gatewayClassCRD apiext.CustomResourceDefinition
-	err := s.Test().Client.Get(s.Test().Ctx, client.ObjectKey{Name: "gatewayclasses.gateway.networking.k8s.io"}, &gatewayClassCRD)
+	err := s.IntTest().Client.Get(s.IntTest().Ctx, client.ObjectKey{Name: "gatewayclasses.gateway.networking.k8s.io"}, &gatewayClassCRD)
 	s.Require().NoError(err)
 	currentVersion := gatewayClassCRD.Annotations[constants.BundleVersionAnnotation]
 
 	gatewayClassCRD.Annotations[constants.BundleVersionAnnotation] = newVersion
-	err = s.Test().Client.Update(s.Test().Ctx, &gatewayClassCRD)
+	err = s.IntTest().Client.Update(s.IntTest().Ctx, &gatewayClassCRD)
 	s.Require().NoError(err)
 
 	return currentVersion
@@ -133,11 +133,11 @@ func (s *GatewayClassTestSuite) setGatewayClassCRToUnsupportedVersion(newVersion
 
 func (s *GatewayClassTestSuite) resetGatewayClassCRToSupportedVersion(version string) {
 	var gatewayClassCRD apiext.CustomResourceDefinition
-	err := s.Test().Client.Get(s.Test().Ctx, client.ObjectKey{Name: "gatewayclasses.gateway.networking.k8s.io"}, &gatewayClassCRD)
+	err := s.IntTest().Client.Get(s.IntTest().Ctx, client.ObjectKey{Name: "gatewayclasses.gateway.networking.k8s.io"}, &gatewayClassCRD)
 	s.Require().NoError(err)
 
 	gatewayClassCRD.Annotations[constants.BundleVersionAnnotation] = version
-	err = s.Test().Client.Update(s.Test().Ctx, &gatewayClassCRD)
+	err = s.IntTest().Client.Update(s.IntTest().Ctx, &gatewayClassCRD)
 	s.Require().NoError(err)
 }
 
@@ -155,7 +155,7 @@ func (s *GatewayClassTestSuite) Test_GatewayClass_Dynamic_Gate() {
 	expectedConditions := s.YamlToConditions(expectedCondPath)
 
 	gwcName := "haproxy"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwcName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwcName, expectedConditions)
 
 	// Remove gate
 	gate := s.removeGate("huggate")
@@ -165,7 +165,7 @@ func (s *GatewayClassTestSuite) Test_GatewayClass_Dynamic_Gate() {
 	expectedCondPath = path.Join(expectationsPath, "conditions-ko.yaml")
 	expectedConditions = s.YamlToConditions(expectedCondPath)
 
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwcName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwcName, expectedConditions)
 
 	// Re-add Gate
 	s.createGate(gate)
@@ -173,15 +173,15 @@ func (s *GatewayClassTestSuite) Test_GatewayClass_Dynamic_Gate() {
 	expectedCondPath = path.Join(expectationsPath, "conditions-ok.yaml")
 	expectedConditions = s.YamlToConditions(expectedCondPath)
 
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwcName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwcName, expectedConditions)
 }
 
 func (s *GatewayClassTestSuite) removeGate(name string) *v3.HugGate {
 	var gate v3.HugGate
-	err := s.Test().Client.Get(s.Test().Ctx, client.ObjectKey{Name: name, Namespace: s.Test().Namespace}, &gate)
+	err := s.IntTest().Client.Get(s.IntTest().Ctx, client.ObjectKey{Name: name, Namespace: s.IntTest().Namespace}, &gate)
 	s.Require().NoError(err)
 
-	err = s.Test().Client.Delete(s.Test().Ctx, &gate)
+	err = s.IntTest().Client.Delete(s.IntTest().Ctx, &gate)
 	s.Require().NoError(err)
 
 	return &gate
@@ -189,6 +189,6 @@ func (s *GatewayClassTestSuite) removeGate(name string) *v3.HugGate {
 
 func (s *GatewayClassTestSuite) createGate(gate *v3.HugGate) {
 	gate.ResourceVersion = ""
-	err := s.Test().Client.Create(s.Test().Ctx, gate)
+	err := s.IntTest().Client.Create(s.IntTest().Ctx, gate)
 	s.Require().NoError(err)
 }
