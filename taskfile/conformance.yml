@@ -551,6 +551,10 @@ tasks:
       # deadline, and the timeout is then reported as if every unfinished test had failed --
       # "0 passed, N failed, 0 skipped" for a run that was merely cut short.
       CONFORMANCE_TEST_TIMEOUT: '{{default "60m" .CONFORMANCE_TEST_TIMEOUT}}'
+      # After creating the base Gateways, require a published IP on every one
+      # before any traffic scenario. One deadline for the whole set; the error
+      # includes their Services so a dead local LoadBalancer provider is visible.
+      CONFORMANCE_GATEWAY_ADDRESS_TIMEOUT: '{{default "60s" .CONFORMANCE_GATEWAY_ADDRESS_TIMEOUT}}'
     cmds:
       - |
         # Every run keeps its own directory. A campaign takes minutes and its report is the only
@@ -568,6 +572,7 @@ tasks:
         echo "Conformance run directory: $RUN_DIR"
 
         if CONFORMANCE_REPORT_OUTPUT="$REPORT" \
+          CONFORMANCE_GATEWAY_ADDRESS_TIMEOUT="{{.CONFORMANCE_GATEWAY_ADDRESS_TIMEOUT}}" \
           $(check-go-tool {{.GOTESTSUM}}) \
             --format-icons=hivis \
             --format={{.FORMAT}} \

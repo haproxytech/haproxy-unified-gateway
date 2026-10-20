@@ -89,6 +89,16 @@ func controllerImageFromEnv() string {
 }
 
 func TestConformance(t *testing.T) {
+	// conformance-run enables this check; the in-cluster CI runner keeps its
+	// existing setup unless it explicitly opts into the same deadline.
+	var gatewayAddressTimeout time.Duration
+	if value := os.Getenv("CONFORMANCE_GATEWAY_ADDRESS_TIMEOUT"); value != "" {
+		parsed, err := time.ParseDuration(value)
+		require.NoError(t, err, "invalid CONFORMANCE_GATEWAY_ADDRESS_TIMEOUT")
+		require.Positive(t, parsed, "CONFORMANCE_GATEWAY_ADDRESS_TIMEOUT must be positive")
+		gatewayAddressTimeout = parsed
+	}
+
 	fmt.Fprintln(os.Stderr, "conformance: test starting")
 	log.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
@@ -214,14 +224,15 @@ func TestConformance(t *testing.T) {
 	// immediately visible to the reconciler.
 	ctx, cancel := context.WithCancel(context.Background())
 
-	deployerDone, restoreDone, err := deployer.Start(ctx, cfg, deployer.Config{
+	deployerConfig := deployer.Config{
 		DeployerNs:       "haproxy-unified-gateway",
 		ControllerImage:  controllerImageFromEnv(),
 		HugConfCRD:       "haproxy-unified-gateway/hugconf",
 		GatewayClassName: gwClassName,
 		WatchNamespaces:  []string{"gateway-conformance-infra", "haproxy-unified-gateway"},
 		ServiceType:      corev1.ServiceType(hugSvcType),
-	})
+	}
+	deployerDone, restoreDone, err := deployer.Start(ctx, cfg, deployerConfig)
 	require.NoError(t, err, "starting gateway deployer")
 	fmt.Fprintln(os.Stderr, "conformance: deployer started, waiting for scale-down signal")
 	require.NoError(t, <-deployerDone, "scaling down default controller")
@@ -265,5 +276,20 @@ func TestConformance(t *testing.T) {
 	})
 
 	cSuite.Setup(t, tests.ConformanceTests)
+	if gatewayAddressTimeout > 0 {
+		// Identify address provisioning failures separately from traffic scenarios
+		// in the JUnit/HTML report.
+		ready := t.Run("GatewayAddressPreflight", func(t *testing.T) {
+			t.Logf("conformance: checking base Gateway IP addresses (timeout %s)", gatewayAddressTimeout)
+			addressCtx, cancelAddressCheck := context.WithTimeout(ctx, gatewayAddressTimeout)
+			err := deployer.WaitForGatewayAddresses(addressCtx, c, deployerConfig, "gateway-conformance-infra")
+			cancelAddressCheck()
+			require.NoError(t, err, "base Gateway addresses are not ready; refusing to start conformance scenarios")
+			t.Log("conformance: base Gateway IP addresses are ready")
+		})
+		if !ready {
+			return
+		}
+	}
 	_ = cSuite.Run(t, tests.ConformanceTests)
 }
