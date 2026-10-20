@@ -23,7 +23,6 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -58,16 +57,16 @@ func newRouteMapsFixture(t *testing.T) *routeMapsFixture {
 	}
 	ref := gatewayv1.BackendObjectReference{Name: "echo", Port: new(gatewayv1.PortNumber(8080))}
 	httpRoute := tree.NewRoute(&gatewayv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name},
-		Spec:       gatewayv1.HTTPRouteSpec{Hostnames: []gatewayv1.Hostname{"example.com"}},
+		Namespace: key.Namespace, Name: key.Name,
+		Spec: gatewayv1.HTTPRouteSpec{Hostnames: []gatewayv1.Hostname{"example.com"}},
 	}, "controller")
 	httpRoute.Valid = true
 	httpRoute.Listeners.Set(parentRef, []*tree.Listener{listener("http_8080", gatewayv1.HTTPProtocolType)})
 	httpRoute.Rules = []*tree.HTTPRouteRule{backendRefsRule(nil, blockedPrefixMatches(),
-		[]gatewayv1.HTTPBackendRef{{BackendRef: gatewayv1.BackendRef{BackendObjectReference: ref}}}, true)}
+		[]gatewayv1.HTTPBackendRef{{BackendObjectReference: ref}}, true)}
 	tlsRoute := tree.NewTLSRoute(&gatewayv1alpha2.TLSRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name},
-		Spec:       gatewayv1alpha2.TLSRouteSpec{Hostnames: []gatewayv1.Hostname{"example.com"}},
+		Namespace: key.Namespace, Name: key.Name,
+		Spec: gatewayv1alpha2.TLSRouteSpec{Hostnames: []gatewayv1.Hostname{"example.com"}},
 	}, "controller")
 	tlsRoute.Valid = true
 	tlsRoute.Listeners.Set(parentRef, []*tree.Listener{listener("tls_8443", gatewayv1.TLSProtocolType)})

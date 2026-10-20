@@ -670,10 +670,8 @@ func TestBuildConditionsReadsTheDeclaringResourceStatus(t *testing.T) {
 	// inherit.
 	gatewayPublishedProgrammed := func() *Gateway {
 		return &Gateway{K8sResource: &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: gwKey.Namespace, Name: gwKey.Name,
-				Generation: gatewayGeneration, CreationTimestamp: created,
-			},
+			Namespace: gwKey.Namespace, Name: gwKey.Name,
+			Generation: gatewayGeneration, CreationTimestamp: created,
 			Status: gatewayv1.GatewayStatus{Listeners: []gatewayv1.ListenerStatus{{
 				Name:       "http",
 				Conditions: []metav1.Condition{published(string(gatewayv1.ListenerConditionProgrammed), metav1.ConditionTrue, gatewayGeneration)},
@@ -683,10 +681,8 @@ func TestBuildConditionsReadsTheDeclaringResourceStatus(t *testing.T) {
 
 	listenerSet := func(programmed *metav1.Condition) *ListenerSet {
 		treeLs := &ListenerSet{K8sResource: &gatewayv1.ListenerSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: lsKey.Namespace, Name: lsKey.Name,
-				Generation: listenerSetGeneration, CreationTimestamp: created,
-			},
+			Namespace: lsKey.Namespace, Name: lsKey.Name,
+			Generation: listenerSetGeneration, CreationTimestamp: created,
 		}}
 		if programmed != nil {
 			treeLs.K8sResource.Status.Listeners = []gatewayv1.ListenerEntryStatus{{

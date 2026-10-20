@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,17 +30,13 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-func modePtr(m gatewayv1.TLSModeType) *gatewayv1.TLSModeType {
-	return &m
-}
-
 // tlsListener is a TLS listener on the test Gateway, in the given TLS mode.
 func tlsListener(name string, mode gatewayv1.TLSModeType) gatewayv1.Listener {
 	return gatewayv1.Listener{
 		Name:     gatewayv1.SectionName(name),
 		Port:     443,
 		Protocol: gatewayv1.TLSProtocolType,
-		TLS:      &gatewayv1.ListenerTLSConfig{Mode: modePtr(mode)},
+		TLS:      &gatewayv1.ListenerTLSConfig{Mode: new(mode)},
 	}
 }
 
@@ -50,8 +45,8 @@ func newTLSRouteFixture(t *testing.T, listeners ...gatewayv1.Listener) (*Control
 
 	gwKey := client.ObjectKey{Namespace: "infra", Name: "gw"}
 	gw := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name},
-		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "hug", Listeners: listeners},
+		Namespace: gwKey.Namespace, Name: gwKey.Name,
+		Spec: gatewayv1.GatewaySpec{GatewayClassName: "hug", Listeners: listeners},
 	}
 
 	treeGw := &Gateway{
@@ -105,7 +100,7 @@ func tlsRouteOn(gwKey client.ObjectKey, sectionName *gatewayv1.SectionName) (*TL
 	}
 
 	r := NewTLSRoute(&gatewayv1alpha2.TLSRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: "route"},
+		Namespace: gwKey.Namespace, Name: "route",
 		Spec: gatewayv1alpha2.TLSRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: []gatewayv1.ParentReference{parentRef},
@@ -208,7 +203,7 @@ func TestTLSRouteRefusedListenerSetIsRefusedWithNoMatchingParent(t *testing.T) {
 		Name:      "ls",
 	}
 	r := NewTLSRoute(&gatewayv1alpha2.TLSRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "tlsroute"},
+		Namespace: "tenant", Name: "tlsroute",
 		Spec: gatewayv1alpha2.TLSRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: []gatewayv1.ParentReference{parentRef},

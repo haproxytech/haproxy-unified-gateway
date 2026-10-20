@@ -21,7 +21,6 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -72,7 +71,7 @@ func newRouteAttachFixture(t *testing.T) *routeAttachFixture {
 
 func (*routeAttachFixture) route(parentRef gatewayv1.ParentReference) *HTTPRoute {
 	return NewRoute(&gatewayv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "route"},
+		Namespace: "tenant", Name: "route",
 		Spec: gatewayv1.HTTPRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{parentRef}},
 		},

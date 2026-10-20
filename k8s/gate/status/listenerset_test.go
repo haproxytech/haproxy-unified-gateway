@@ -239,7 +239,7 @@ func TestListenerSetStatusPatcher_PublishesTheTreeVerdict(t *testing.T) {
 	treeLs.Conditions.SetGeneration(7)
 
 	sp := newListenerSetStatusPatcher(treeLs, testExtractGVK, slog.Default())
-	ls := &gatewayv1.ListenerSet{ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "ls"}}
+	ls := &gatewayv1.ListenerSet{Namespace: "tenant", Name: "ls"}
 
 	require.NoError(t, sp.SetStatus(ls))
 
@@ -272,7 +272,7 @@ func newStatusTestControllerStore(t *testing.T) *tree.ControllerStore {
 	gwKey := types.NamespacedName{Namespace: statusTestGatewayNamespace, Name: statusTestGatewayName}
 	from := gatewayv1.NamespacesFromAll
 	gw := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name},
+		Namespace: gwKey.Namespace, Name: gwKey.Name,
 		Spec: gatewayv1.GatewaySpec{
 			GatewayClassName: "hug",
 			AllowedListeners: &gatewayv1.AllowedListeners{
@@ -305,7 +305,7 @@ func attachedStatusTestListenerSet(t *testing.T, parentName string) *tree.Listen
 	controllerStore := newStatusTestControllerStore(t)
 	lsKey := types.NamespacedName{Namespace: "tenant", Name: statusTestListenerSetName}
 	k8sLs := &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: lsKey.Namespace, Name: lsKey.Name},
+		Namespace: lsKey.Namespace, Name: lsKey.Name,
 		Spec: gatewayv1.ListenerSetSpec{
 			ParentRef: gatewayv1.ParentGatewayReference{
 				Name:      gatewayv1.ObjectName(parentName),

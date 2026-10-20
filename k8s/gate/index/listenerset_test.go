@@ -19,13 +19,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func listenerSetWithCertificateRefs(namespace string, refs ...gatewayv1.SecretObjectReference) *gatewayv1.ListenerSet {
 	return &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: "ls"},
+		Namespace: namespace, Name: "ls",
 		Spec: gatewayv1.ListenerSetSpec{Listeners: []gatewayv1.ListenerEntry{
 			// No TLS: nothing to index.
 			{Name: "http", Port: 8080, Protocol: gatewayv1.HTTPProtocolType},

@@ -115,15 +115,15 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 			// see ListenerSetContributionBuilder.
 			tree.NewListenerSetContributionBuilder(controllerStore),
 			gatewayBuilder,
-			// After gatewayBuilder, the pass that judged every listener and built the
-			// parent's conditions: a ListenerSet's verdicts are a roll-up of that
-			// output, so they cannot be read before it.
-			tree.NewListenerSetVerdictBuilder(controllerStore),
 			virtualListenerBuilder,
 			certificateBuilder,
 			serviceBuilder,
 			httpRouteBuilder,
 			tlsRouteBuilder,
+			// Roll up conditions after the Gateway checks and counts after both
+			// route builders. Route-only changes need fresh attachedRoutes even
+			// when no frontend is applied and no programming feedback follows.
+			tree.NewListenerSetVerdictBuilder(controllerStore),
 			defaultsCRBuilder,
 		},
 	}

@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
@@ -38,7 +37,7 @@ func TestReferenceGrantCoversMatchesIsAccessGranted(t *testing.T) {
 		{
 			name: "named To, matching From",
 			rg: &gatewayv1beta1.ReferenceGrant{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+				Namespace: "certs", Name: "g",
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
@@ -50,7 +49,7 @@ func TestReferenceGrantCoversMatchesIsAccessGranted(t *testing.T) {
 		{
 			name: "wildcard To, matching From",
 			rg: &gatewayv1beta1.ReferenceGrant{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+				Namespace: "certs", Name: "g",
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: nil}},
@@ -62,7 +61,7 @@ func TestReferenceGrantCoversMatchesIsAccessGranted(t *testing.T) {
 		{
 			name: "named To, another name",
 			rg: &gatewayv1beta1.ReferenceGrant{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+				Namespace: "certs", Name: "g",
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
@@ -74,7 +73,7 @@ func TestReferenceGrantCoversMatchesIsAccessGranted(t *testing.T) {
 		{
 			name: "From of another kind",
 			rg: &gatewayv1beta1.ReferenceGrant{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+				Namespace: "certs", Name: "g",
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
@@ -86,7 +85,7 @@ func TestReferenceGrantCoversMatchesIsAccessGranted(t *testing.T) {
 		{
 			name: "To of another kind",
 			rg: &gatewayv1beta1.ReferenceGrant{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "g"},
+				Namespace: "certs", Name: "g",
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},
@@ -98,7 +97,7 @@ func TestReferenceGrantCoversMatchesIsAccessGranted(t *testing.T) {
 		{
 			name: "same namespace needs no grant",
 			rg: &gatewayv1beta1.ReferenceGrant{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "g"},
+				Namespace: "tenant", Name: "g",
 				Spec: gatewayv1beta1.ReferenceGrantSpec{
 					From: []gatewayv1beta1.ReferenceGrantFrom{{Group: gatewayv1.GroupName, Kind: "ListenerSet", Namespace: "tenant"}},
 					To:   []gatewayv1beta1.ReferenceGrantTo{{Group: "", Kind: "Secret", Name: &shared}},

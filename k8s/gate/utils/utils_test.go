@@ -88,11 +88,9 @@ func TestSortByCreationTimestamp_Gateways_SameTimestamp(t *testing.T) {
 // Helper to create a Gateway in a given namespace, all with the same timestamp.
 func newGatewayInNamespace(namespace, name string, now metav1.Time) *gatewayv1.Gateway {
 	return &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:         namespace,
-			Name:              name,
-			CreationTimestamp: now,
-		},
+		Namespace:         namespace,
+		Name:              name,
+		CreationTimestamp: now,
 	}
 }
 

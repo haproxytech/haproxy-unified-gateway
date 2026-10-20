@@ -58,8 +58,8 @@ func newContributionFixtureWithPolicy(t *testing.T, allowed *gatewayv1.AllowedLi
 	gwKey := client.ObjectKey{Namespace: "infra", Name: "gw"}
 
 	gw := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name},
-		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "hug", AllowedListeners: allowed},
+		Namespace: gwKey.Namespace, Name: gwKey.Name,
+		Spec: gatewayv1.GatewaySpec{GatewayClassName: "hug", AllowedListeners: allowed},
 	}
 
 	controllerStore := &ControllerStore{
@@ -105,8 +105,8 @@ func newContributionFixtureWithPolicy(t *testing.T, allowed *gatewayv1.AllowedLi
 func (f *contributionFixture) addGateway(namespace, name string) client.ObjectKey {
 	key := client.ObjectKey{Namespace: namespace, Name: name}
 	f.store.ClusterStore.Gateways[key] = &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
-		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "hug", AllowedListeners: f.allowed},
+		Namespace: namespace, Name: name,
+		Spec: gatewayv1.GatewaySpec{GatewayClassName: "hug", AllowedListeners: f.allowed},
 	}
 	return key
 }
@@ -134,11 +134,9 @@ func (f *contributionFixture) addListenerSet(
 	}
 
 	k8sLs := &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:         namespace,
-			Name:              name,
-			CreationTimestamp: metav1.NewTime(created),
-		},
+		Namespace:         namespace,
+		Name:              name,
+		CreationTimestamp: metav1.NewTime(created),
 		Spec: gatewayv1.ListenerSetSpec{
 			ParentRef: gatewayv1.ParentGatewayReference{
 				Name:      gatewayv1.ObjectName(f.gwKey.Name),
@@ -314,7 +312,7 @@ func TestContributedHomonymousEntriesStayDistinct(t *testing.T) {
 func TestGatewayConstructListenersMergesOwnThenContributed(t *testing.T) {
 	gw := &Gateway{
 		K8sResource: &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "infra", Name: "gw"},
+			Namespace: "infra", Name: "gw",
 			Spec: gatewayv1.GatewaySpec{Listeners: []gatewayv1.Listener{
 				{Name: "own-first", Port: 80, Protocol: gatewayv1.HTTPProtocolType},
 				{Name: "own-second", Port: 81, Protocol: gatewayv1.HTTPProtocolType},
@@ -324,7 +322,7 @@ func TestGatewayConstructListenersMergesOwnThenContributed(t *testing.T) {
 	contributed := listenersFromEntries(
 		client.ObjectKey{Namespace: "infra", Name: "gw"},
 		&gatewayv1.ListenerSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "ls"},
+			Namespace: "tenant", Name: "ls",
 			Spec: gatewayv1.ListenerSetSpec{Listeners: []gatewayv1.ListenerEntry{
 				{Name: "contributed", Port: 82, Protocol: gatewayv1.HTTPProtocolType},
 			}},
@@ -462,7 +460,7 @@ func TestReprocessGatewaysWhoseContributorsChanged(t *testing.T) {
 		})
 		nsKey := types.NamespacedName{Name: "tenant"}
 		f.store.ClusterStore.Namespaces[nsKey] = &v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "tenant", Labels: map[string]string{"tenant": "allowed"}},
+			Name: "tenant", Labels: map[string]string{"tenant": "allowed"},
 		}
 		f.addListenerSet("tenant", "ls", created, "http")
 
@@ -491,7 +489,7 @@ func TestReprocessGatewaysWhoseContributorsChanged(t *testing.T) {
 			},
 		})
 		nsKey := types.NamespacedName{Name: "tenant"}
-		f.store.ClusterStore.Namespaces[nsKey] = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tenant"}}
+		f.store.ClusterStore.Namespaces[nsKey] = &v1.Namespace{Name: "tenant"}
 		f.addListenerSet("tenant", "ls", created, "http")
 
 		f.builder.contributeListeners()
@@ -520,4 +518,5 @@ func TestReprocessGatewaysWhoseContributorsChanged(t *testing.T) {
 	})
 }
 
-func ptrTo[T any](v T) *T { return &v }
+//go:fix inline
+func ptrTo[T any](v T) *T { return new(v) }

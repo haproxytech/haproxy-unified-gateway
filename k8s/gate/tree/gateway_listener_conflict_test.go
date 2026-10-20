@@ -543,12 +543,10 @@ func TestGroupListenersByPort(t *testing.T) {
 
 	mkGateway := func(name string, creationTime time.Time, listeners ...gatewayv1.Listener) *Gateway {
 		treeGw := &Gateway{K8sResource: &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              name,
-				Namespace:         "default",
-				CreationTimestamp: metav1.NewTime(creationTime),
-			},
-			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
+			Name:              name,
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(creationTime),
+			Spec:              gatewayv1.GatewaySpec{Listeners: listeners},
 		}}
 		treeGw.constructOwnListeners()
 		return treeGw
@@ -620,12 +618,10 @@ func TestDetectProtocolConflicts(t *testing.T) {
 
 	mkGateway := func(name string, listeners ...gatewayv1.Listener) *Gateway {
 		treeGw := &Gateway{K8sResource: &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              name,
-				Namespace:         "default",
-				CreationTimestamp: metav1.NewTime(t1),
-			},
-			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
+			Name:              name,
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(t1),
+			Spec:              gatewayv1.GatewaySpec{Listeners: listeners},
 		}}
 		treeGw.constructOwnListeners()
 		return treeGw
@@ -718,7 +714,7 @@ func TestBothConflictKindsAccumulateOnOneListener(t *testing.T) {
 		}
 	}
 	gw := &Gateway{K8sResource: &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Name: "gw1", Namespace: "default"},
+		Name: "gw1", Namespace: "default",
 		Spec: gatewayv1.GatewaySpec{Listeners: []gatewayv1.Listener{
 			mkListener("http", gatewayv1.HTTPProtocolType, nil),
 			mkListener("https-first", gatewayv1.HTTPSProtocolType, &hostname),
@@ -779,12 +775,10 @@ func TestListenerSetEntriesAreComparedInTheirServingGatewayScope(t *testing.T) {
 
 	mkGateway := func(key client.ObjectKey, created time.Time, listeners ...gatewayv1.Listener) *Gateway {
 		treeGw := &Gateway{K8sResource: &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              key.Name,
-				Namespace:         key.Namespace,
-				CreationTimestamp: metav1.NewTime(created),
-			},
-			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
+			Name:              key.Name,
+			Namespace:         key.Namespace,
+			CreationTimestamp: metav1.NewTime(created),
+			Spec:              gatewayv1.GatewaySpec{Listeners: listeners},
 		}}
 		treeGw.constructOwnListeners()
 		return treeGw

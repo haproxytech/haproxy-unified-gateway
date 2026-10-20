@@ -1,6 +1,8 @@
 package tree
 
 import (
+	"slices"
+
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
 	"k8s.io/apimachinery/pkg/types"
@@ -193,10 +195,8 @@ func ReferenceGrantCovers(referenceGrant *gatewayv1beta1.ReferenceGrant, from Gr
 		if !grantToMatches(grantTo, to) {
 			continue
 		}
-		for _, grantFrom := range referenceGrantFroms(referenceGrant) {
-			if grantFrom == from {
-				return true
-			}
+		if slices.Contains(referenceGrantFroms(referenceGrant), from) {
+			return true
 		}
 	}
 	return false

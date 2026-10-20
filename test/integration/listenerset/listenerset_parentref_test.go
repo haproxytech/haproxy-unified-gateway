@@ -267,11 +267,11 @@ func (s *ListenerSetSuite) Test_ParentRef_8_Same_Namespace() {
 
 	// The same namespace, named: same behaviour, built here for the reason above.
 	named := &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "listenerset-named-namespace", Namespace: ns},
+		Name: "listenerset-named-namespace", Namespace: ns,
 		Spec: gatewayv1.ListenerSetSpec{
 			ParentRef: gatewayv1.ParentGatewayReference{
 				Name:      "hug-gateway",
-				Namespace: ptrTo(gatewayv1.Namespace(ns)),
+				Namespace: new(gatewayv1.Namespace(ns)),
 			},
 			Listeners: []gatewayv1.ListenerEntry{{
 				Name:     "ls-listener",
@@ -279,7 +279,7 @@ func (s *ListenerSetSuite) Test_ParentRef_8_Same_Namespace() {
 				Protocol: gatewayv1.HTTPProtocolType,
 				// A hostname of its own: the empty one would mean any hostname on
 				// that port, which conflicts with the Gateway's own listener.
-				Hostname: ptrTo[gatewayv1.Hostname]("ls-named.haproxy"),
+				Hostname: new(gatewayv1.Hostname("ls-named.haproxy")),
 			}},
 		},
 	}
@@ -332,7 +332,8 @@ func (s *ListenerSetSuite) Test_AllowedListeners_10_Same() {
 	s.ExpectListenerSetConditions(ctx, ns, "listenerset-other-namespace", listenerSetNotAllowed())
 }
 
-func ptrTo[T any](v T) *T { return &v }
+//go:fix inline
+func ptrTo[T any](v T) *T { return new(v) }
 
 // Test_DisallowedKind_Through_A_ListenerSet is an HTTPRoute naming a ListenerSet whose
 // listener can only serve TLSRoutes: the refusal has to come from the contributed
@@ -461,7 +462,7 @@ func (s *ListenerSetSuite) Test_Route_Naming_An_Absent_ListenerSet() {
 func gatewayParentRef(sectionName string) gatewayv1.ParentReference {
 	return gatewayv1.ParentReference{
 		Name:        "hug-gateway",
-		SectionName: ptrTo(gatewayv1.SectionName(sectionName)),
+		SectionName: new(gatewayv1.SectionName(sectionName)),
 	}
 }
 
@@ -471,7 +472,7 @@ func listenerSetParentRef(name, sectionName string) gatewayv1.ParentReference {
 		Group:       ptrTo(gatewayv1.Group(gatewayv1.GroupName)),
 		Kind:        ptrTo(gatewayv1.Kind("ListenerSet")),
 		Name:        gatewayv1.ObjectName(name),
-		SectionName: ptrTo(gatewayv1.SectionName(sectionName)),
+		SectionName: new(gatewayv1.SectionName(sectionName)),
 	}
 }
 

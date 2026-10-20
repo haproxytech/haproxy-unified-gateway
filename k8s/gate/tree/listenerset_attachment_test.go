@@ -27,8 +27,8 @@ import (
 
 func mkListenerSet(namespace, name string, parentRef gatewayv1.ParentGatewayReference) *gatewayv1.ListenerSet {
 	return &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
-		Spec:       gatewayv1.ListenerSetSpec{ParentRef: parentRef},
+		Namespace: namespace, Name: name,
+		Spec: gatewayv1.ListenerSetSpec{ParentRef: parentRef},
 	}
 }
 
@@ -159,8 +159,8 @@ func TestAttachmentOfListenerSet(t *testing.T) {
 
 	mkGateway := func(class string, from *gatewayv1.FromNamespaces) *gatewayv1.Gateway {
 		gw := &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name},
-			Spec:       gatewayv1.GatewaySpec{GatewayClassName: gatewayv1.ObjectName(class)},
+			Namespace: gwKey.Namespace, Name: gwKey.Name,
+			Spec: gatewayv1.GatewaySpec{GatewayClassName: gatewayv1.ObjectName(class)},
 		}
 		if from != nil {
 			gw.Spec.AllowedListeners = &gatewayv1.AllowedListeners{

@@ -47,13 +47,19 @@ func TestListenerSetBuildersSurroundTheGatewayBuilder(t *testing.T) {
 	contribution := indexOf(&tree.ListenerSetContributionBuilder{})
 	gateway := indexOf(&tree.GatewayBuilderImpl{})
 	verdict := indexOf(&tree.ListenerSetVerdictBuilder{})
+	httpRoute := indexOf(&tree.HTTPRouteBuilderImpl{})
+	tlsRoute := indexOf(&tree.TLSRouteBuilderImpl{})
 
 	require.NotEqual(t, -1, contribution, "the contribution pass must be registered")
 	require.NotEqual(t, -1, gateway, "the Gateway builder must be registered")
 	require.NotEqual(t, -1, verdict, "the verdict pass must be registered")
+	require.NotEqual(t, -1, httpRoute)
+	require.NotEqual(t, -1, tlsRoute)
 
 	assert.Less(t, contribution, gateway,
 		"the Gateway builder is what reads GateTree.ListenerSets and assembles the merged list, so the contributions have to be published before it runs")
 	assert.Less(t, gateway, verdict,
 		"the verdicts roll up the conditions the Gateway builder computed, so they cannot be read before it runs")
+	assert.Less(t, httpRoute, verdict, "attachedRoutes must include this cycle's HTTPRoute changes")
+	assert.Less(t, tlsRoute, verdict, "attachedRoutes must include this cycle's TLSRoute changes")
 }

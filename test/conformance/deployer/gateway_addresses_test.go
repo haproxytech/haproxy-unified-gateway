@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -32,17 +31,17 @@ import (
 
 func addressCheckGateway(name string, addresses ...gatewayv1.GatewayStatusAddress) *gatewayv1.Gateway {
 	return &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "infra", Name: name},
-		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "hug"},
-		Status:     gatewayv1.GatewayStatus{Addresses: addresses},
+		Namespace: "infra", Name: name,
+		Spec:   gatewayv1.GatewaySpec{GatewayClassName: "hug"},
+		Status: gatewayv1.GatewayStatus{Addresses: addresses},
 	}
 }
 
 func addressCheckService(gatewayName string, serviceType corev1.ServiceType, ingress ...corev1.LoadBalancerIngress) *corev1.Service {
 	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "controllers", Name: resourceName("infra", gatewayName)},
-		Spec:       corev1.ServiceSpec{Type: serviceType, ClusterIP: "10.96.0.1", ClusterIPs: []string{"10.96.0.1"}},
-		Status:     corev1.ServiceStatus{LoadBalancer: corev1.LoadBalancerStatus{Ingress: ingress}},
+		Namespace: "controllers", Name: resourceName("infra", gatewayName),
+		Spec:   corev1.ServiceSpec{Type: serviceType, ClusterIP: "10.96.0.1", ClusterIPs: []string{"10.96.0.1"}},
+		Status: corev1.ServiceStatus{LoadBalancer: corev1.LoadBalancerStatus{Ingress: ingress}},
 	}
 }
 

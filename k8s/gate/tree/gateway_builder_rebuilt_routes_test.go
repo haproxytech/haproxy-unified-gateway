@@ -19,7 +19,6 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,7 +52,7 @@ func newRebuiltGatewayFixture(t *testing.T) *rebuiltGatewayFixture {
 	route := func(name string, parentRefs ...gatewayv1.ParentReference) (*HTTPRoute, client.ObjectKey) {
 		key := client.ObjectKey{Namespace: "tenant", Name: name}
 		return NewRoute(&gatewayv1.HTTPRoute{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: name},
+			Namespace: "tenant", Name: name,
 			Spec: gatewayv1.HTTPRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: parentRefs},
 			},
@@ -69,7 +68,7 @@ func newRebuiltGatewayFixture(t *testing.T) *rebuiltGatewayFixture {
 
 	tlsViaListenerSetKey := client.ObjectKey{Namespace: "tenant", Name: "tls-route-via-listenerset"}
 	tlsViaListenerSet := NewTLSRoute(&gatewayv1alpha2.TLSRoute{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "tenant", Name: "tls-route-via-listenerset"},
+		Namespace: "tenant", Name: "tls-route-via-listenerset",
 		Spec: gatewayv1alpha2.TLSRouteSpec{
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{
 				Group: &lsGroup, Kind: &lsKind, Namespace: &lsNs, Name: gatewayv1.ObjectName(lsKey.Name),
@@ -78,7 +77,7 @@ func newRebuiltGatewayFixture(t *testing.T) *rebuiltGatewayFixture {
 	}, "controller")
 
 	listenerSet := &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: lsKey.Namespace, Name: lsKey.Name},
+		Namespace: lsKey.Namespace, Name: lsKey.Name,
 		Spec: gatewayv1.ListenerSetSpec{
 			ParentRef: gatewayv1.ParentGatewayReference{
 				Name:      gatewayv1.ObjectName(gwKey.Name),
@@ -93,7 +92,7 @@ func newRebuiltGatewayFixture(t *testing.T) *rebuiltGatewayFixture {
 			Gateways: map[types.NamespacedName]*Gateway{
 				gwKey: {
 					K8sResource: &gatewayv1.Gateway{
-						ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name},
+						Namespace: gwKey.Namespace, Name: gwKey.Name,
 					},
 					TreeStatus: TreeUpdate[Gateway]{Status: store.StatusUpserted},
 				},

@@ -31,8 +31,8 @@ import (
 func mkConstructionGateway(name string, listeners ...gatewayv1.Listener) *Gateway {
 	return &Gateway{
 		K8sResource: &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-			Spec:       gatewayv1.GatewaySpec{Listeners: listeners},
+			Name: name, Namespace: "default",
+			Spec: gatewayv1.GatewaySpec{Listeners: listeners},
 		},
 		TreeStatus: TreeUpdate[Gateway]{Status: store.StatusUpserted},
 	}
@@ -143,7 +143,7 @@ func TestReUpsertedGatewayKeepsItsListeners(t *testing.T) {
 	mkGateway := func(name string, created metav1.Time, protocol gatewayv1.ProtocolType, status store.Status) *Gateway {
 		treeGw := &Gateway{
 			K8sResource: &gatewayv1.Gateway{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, CreationTimestamp: created},
+				Name: name, Namespace: ns, CreationTimestamp: created,
 				Spec: gatewayv1.GatewaySpec{
 					GatewayClassName: "not-in-tree",
 					Listeners:        []gatewayv1.Listener{{Name: "l1", Port: 80, Protocol: protocol}},

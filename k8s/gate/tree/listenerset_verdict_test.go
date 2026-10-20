@@ -49,8 +49,8 @@ func newVerdictFixture(t *testing.T, gatewayAccepted bool) *verdictFixture {
 	gwKey := client.ObjectKey{Namespace: "infra", Name: "gw"}
 	gw := &Gateway{
 		K8sResource: &gatewayv1.Gateway{
-			ObjectMeta: metav1.ObjectMeta{Namespace: gwKey.Namespace, Name: gwKey.Name, Generation: 7},
-			Spec:       gatewayv1.GatewaySpec{GatewayClassName: "hug"},
+			Namespace: gwKey.Namespace, Name: gwKey.Name, Generation: 7,
+			Spec: gatewayv1.GatewaySpec{GatewayClassName: "hug"},
 		},
 		TreeStatus: TreeUpdate[Gateway]{Status: store.StatusUpserted},
 		Conditions: make(generic.Conditions),
@@ -91,7 +91,7 @@ func (f *verdictFixture) addListenerSet(namespace, name string, attachment liste
 	}
 
 	k8sLs := &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name, Generation: generation},
+		Namespace: namespace, Name: name, Generation: generation,
 		Spec: gatewayv1.ListenerSetSpec{
 			ParentRef: gatewayv1.ParentGatewayReference{
 				Name:      gatewayv1.ObjectName(f.gwKey.Name),

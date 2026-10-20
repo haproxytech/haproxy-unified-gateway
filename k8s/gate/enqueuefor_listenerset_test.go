@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/workqueue"
@@ -40,7 +39,7 @@ import (
 func listenerSetWithCertRef(namespace, name, secretNamespace, secretName string) *gatewayv1.ListenerSet {
 	secretNs := gatewayv1.Namespace(secretNamespace)
 	return &gatewayv1.ListenerSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+		Namespace: namespace, Name: name,
 		Spec: gatewayv1.ListenerSetSpec{Listeners: []gatewayv1.ListenerEntry{{
 			Name: "https", Port: 8443, Protocol: gatewayv1.HTTPSProtocolType,
 			TLS: &gatewayv1.ListenerTLSConfig{CertificateRefs: []gatewayv1.SecretObjectReference{{
@@ -52,8 +51,8 @@ func listenerSetWithCertRef(namespace, name, secretNamespace, secretName string)
 
 func listenerSetGrant(namespace, name string, from []gatewayv1beta1.ReferenceGrantFrom, to []gatewayv1beta1.ReferenceGrantTo) *gatewayv1beta1.ReferenceGrant {
 	return &gatewayv1beta1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
-		Spec:       gatewayv1beta1.ReferenceGrantSpec{From: from, To: to},
+		Namespace: namespace, Name: name,
+		Spec: gatewayv1beta1.ReferenceGrantSpec{From: from, To: to},
 	}
 }
 
@@ -89,14 +88,14 @@ func TestEnqueueListenerSetsForSecret(t *testing.T) {
 	mapFunc := enqueueListenerSetsForSecret(utils.NewDedicatedNamespaces(nil))(fakeClient, nil)
 
 	requests := mapFunc(context.Background(), &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "shared"},
+		Namespace: "certs", Name: "shared",
 	})
 	require.Len(t, requests, 1)
 	assert.Equal(t, types.NamespacedName{Namespace: "tenant", Name: "ls"}, requests[0].NamespacedName,
 		"only the ListenerSet naming the changed Secret is enqueued")
 
 	assert.Empty(t, mapFunc(context.Background(), &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "certs", Name: "nothing-references-me"},
+		Namespace: "certs", Name: "nothing-references-me",
 	}))
 }
 

@@ -353,8 +353,8 @@ func TestAttachedListenerSetsEqual(t *testing.T) {
 		{name: "absent published, some computed", computed: 3, want: false},
 		{name: "zero published, none computed", published: new(int32), want: true},
 		{name: "zero published, some computed", published: new(int32), computed: 1, want: false},
-		{name: "same count", published: pointerTo(int32(2)), computed: 2, want: true},
-		{name: "count went down", published: pointerTo(int32(2)), computed: 1, want: false},
+		{name: "same count", published: new(int32(2)), computed: 2, want: true},
+		{name: "count went down", published: new(int32(2)), computed: 1, want: false},
 	}
 
 	for _, tt := range tests {
@@ -364,13 +364,14 @@ func TestAttachedListenerSetsEqual(t *testing.T) {
 	}
 }
 
-func pointerTo[T any](v T) *T { return &v }
+//go:fix inline
+func pointerTo[T any](v T) *T { return new(v) }
 
 // The count is read from the tree and published as a pointer on the API status. The two
 // halves are checked together: a patcher that read the field but wrote nothing, or wrote
 // a constant, would pass only one of them.
 func TestGatewayStatusPatcher_PublishesTheAttachedListenerSetCount(t *testing.T) {
-	gw := tree.NewGateway(&gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: "infra", Name: "gw"}})
+	gw := tree.NewGateway(&gatewayv1.Gateway{Namespace: "infra", Name: "gw"})
 	gw.AttachedListenerSets = 2
 
 	sp := newGatewayStatusPatcher(gw, nil, testExtractGVK, slog.Default())

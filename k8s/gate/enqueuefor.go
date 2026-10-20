@@ -730,10 +730,10 @@ func enqueueListenerSetsForReferenceGrant(dns utils.DedicatedNamespaces) func(ct
 					continue
 				}
 				if listenerSetCoveredByReferenceGrant(listenerSet, referenceGrant) {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+					requests = append(requests, reconcile.Request{
 						Namespace: listenerSet.Namespace,
 						Name:      listenerSet.Name,
-					}})
+					})
 				}
 			}
 			return requests
@@ -795,10 +795,10 @@ func listenerSetRequests(dns utils.DedicatedNamespaces, listenerSets []gatewayv1
 		if !dns.Check(types.NamespacedName{Namespace: listenerSet.Namespace, Name: listenerSet.Name}) {
 			continue
 		}
-		requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{
+		requests = append(requests, reconcile.Request{
 			Namespace: listenerSet.Namespace,
 			Name:      listenerSet.Name,
-		}})
+		})
 	}
 	return requests
 }

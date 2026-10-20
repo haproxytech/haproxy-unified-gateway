@@ -40,12 +40,10 @@ func TestListenerSetDeepCopyPreservesEverythingButTreeStatus(t *testing.T) {
 
 	ls := &ListenerSet{
 		K8sResource: &gatewayv1.ListenerSet{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace:         "tenant",
-				Name:              "ls",
-				Generation:        4,
-				CreationTimestamp: metav1.NewTime(time.Date(2024, 3, 1, 10, 0, 0, 0, time.UTC)),
-			},
+			Namespace:         "tenant",
+			Name:              "ls",
+			Generation:        4,
+			CreationTimestamp: metav1.NewTime(time.Date(2024, 3, 1, 10, 0, 0, 0, time.UTC)),
 			Spec: gatewayv1.ListenerSetSpec{
 				ParentRef: gatewayv1.ParentGatewayReference{Name: "gw"},
 				Listeners: []gatewayv1.ListenerEntry{{
@@ -76,7 +74,7 @@ func TestListenerSetDeepCopyPreservesEverythingButTreeStatus(t *testing.T) {
 		}},
 		TreeStatus: TreeUpdate[ListenerSet]{
 			Status:          store.StatusUpserted,
-			OldTreeResource: &ListenerSet{K8sResource: &gatewayv1.ListenerSet{ObjectMeta: metav1.ObjectMeta{Name: "previous"}}},
+			OldTreeResource: &ListenerSet{K8sResource: &gatewayv1.ListenerSet{Name: "previous"}},
 		},
 	}
 

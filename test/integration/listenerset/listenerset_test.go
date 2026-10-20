@@ -328,7 +328,7 @@ func (s *ListenerSetSuite) Test_3_ReferenceGrant_From_The_ListenerSet() {
 	// resource the reference comes from. Built here rather than kept as a manifest
 	// because it has to name the test's own namespace, which is derived per run.
 	grant := &gatewayv1.ReferenceGrant{
-		ObjectMeta: metav1.ObjectMeta{Name: "allow-listener-set-cert", Namespace: secretNamespace},
+		Name: "allow-listener-set-cert", Namespace: secretNamespace,
 		Spec: gatewayv1.ReferenceGrantSpec{
 			From: []gatewayv1.ReferenceGrantFrom{{
 				Group:     gatewayv1.Group(gatewayv1.GroupName),

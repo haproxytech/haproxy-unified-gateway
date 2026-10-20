@@ -27,8 +27,9 @@ import (
 var _ Builder = &ListenerSetVerdictBuilder{}
 
 // ListenerSetVerdictBuilder is the counterpart of ListenerSetContributionBuilder:
-// it runs after the Gateway builder and reports on each ListenerSet what could only
-// be known once the merged list existed, was compared, and each listener judged.
+// it runs after the Gateway and route builders and reports on each ListenerSet what
+// could only be known once the merged list existed, each listener was judged, and
+// the routes had updated their attachments.
 //
 // The two passes are separate builders rather than one registered twice because
 // their positions are on either side of the Gateway builder: the contribution must
