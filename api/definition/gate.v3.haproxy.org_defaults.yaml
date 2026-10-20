@@ -1379,6 +1379,54 @@ spec:
                     Pattern: ^[^\s]+$
                   pattern: ^[^\s]+$
                   type: string
+                forwarded:
+                  description: forwarded
+                  properties:
+                    by:
+                      description: Adds the by parameter using the local address.
+                      type: boolean
+                    by_expr:
+                      description: Adds the by parameter using the specified log-format expression.
+                      type: string
+                    by_port:
+                      description: Adds the by parameter port using the local port.
+                      type: boolean
+                    by_port_expr:
+                      description: Adds the by parameter port using the specified log-format expression.
+                      type: string
+                    enabled:
+                      description: |-
+                        Enables or disables insertion of the HTTP Forwarded header field.
+                        Required: true
+                        Enum: ["enabled","disabled"]
+                      enum:
+                        - enabled
+                        - disabled
+                      type: string
+                    for:
+                      description: Adds the for parameter using the client address.
+                      type: boolean
+                    for_expr:
+                      description: Adds the for parameter using the specified log-format expression.
+                      type: string
+                    for_port:
+                      description: Adds the for parameter port using the client port.
+                      type: boolean
+                    for_port_expr:
+                      description: Adds the for parameter port using the specified log-format expression.
+                      type: string
+                    host:
+                      description: Adds the host parameter using the request authority.
+                      type: boolean
+                    host_expr:
+                      description: Adds the host parameter using the specified log-format expression.
+                      type: string
+                    proto:
+                      description: Adds the proto parameter using the incoming request protocol.
+                      type: boolean
+                  required:
+                    - enabled
+                  type: object
                 forwardfor:
                   description: forwardfor
                   properties:
@@ -1496,14 +1544,6 @@ spec:
                 http-drop-response-trailers:
                   description: |-
                     http drop response trailers
-                    Enum: ["enabled","disabled"]
-                  enum:
-                    - enabled
-                    - disabled
-                  type: string
-                http-use-htx:
-                  description: |-
-                    http use htx
                     Enum: ["enabled","disabled"]
                   enum:
                     - enabled

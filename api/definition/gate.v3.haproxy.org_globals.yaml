@@ -766,6 +766,9 @@ spec:
                       description: Maximum amount of RAM in megabytes per process usable by the zlib
                       format: int64
                       type: integer
+                    no_memory_trimming:
+                      description: Disables memory trimming (malloc_trim) on memory shortage or reload
+                      type: boolean
                     noepoll:
                       description: Disable the use of the "epoll" event polling system on Linux
                       type: boolean
@@ -899,7 +902,7 @@ spec:
                         description: crt ignore err
                         type: string
                       crt_list:
-                        description: crt list
+                        description: All of the certificate list files delimited by ':' as mentioned as a crt-list on the bind line.
                         type: string
                       curves:
                         description: curves
@@ -1108,6 +1111,12 @@ spec:
                           - none
                           - number
                           - string
+                        type: string
+                      shards:
+                        description: |-
+                          shards
+                          Pattern: ^(by-thread|by-group|[0-9]+)$
+                        pattern: ^(by-thread|by-group|[0-9]+)$
                         type: string
                       sigalgs:
                         description: sigalgs
@@ -1395,6 +1404,9 @@ spec:
                     issuers_chain_path:
                       description: issuers chain path
                       type: string
+                    load_extra_del_ext:
+                      description: Remove the certificate file extension before appending the extra file extension (foobar.crt loads foobar.key instead of foobar.crt.key)
+                      type: boolean
                     load_extra_files:
                       description: load extra files
                       type: string
