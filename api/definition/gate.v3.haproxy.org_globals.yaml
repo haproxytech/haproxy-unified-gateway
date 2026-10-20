@@ -69,6 +69,32 @@ spec:
                 cluster_secret:
                   description: cluster secret
                   type: string
+                cpu_affinity:
+                  description: cpu affinity
+                  properties:
+                    affinity:
+                      description: |-
+                        affinity
+                        Required: true
+                        Enum: ["per-core","per-group","auto","per-thread","per-ccx"]
+                      enum:
+                        - per-core
+                        - per-group
+                        - auto
+                        - per-thread
+                        - per-ccx
+                      type: string
+                    argument:
+                      description: |-
+                        Optional argument used together with the per-group affinity.
+                        Enum: ["auto","loose"]
+                      enum:
+                        - auto
+                        - loose
+                      type: string
+                  required:
+                    - affinity
+                  type: object
                 cpu_maps:
                   description: CPU maps
                   items:
@@ -645,6 +671,15 @@ spec:
                         type: object
                       type: array
                   type: object
+                max_threads_per_group:
+                  description: |-
+                    Defines the maximum number of threads in a thread group. The minimum value is
+                    1 and the maximum value is 64 on 64-bit systems (32 on 32-bit systems).
+
+                    Minimum: 1
+                  format: int64
+                  minimum: 1
+                  type: integer
                 merge_strategy:
                   enum:
                     - override
@@ -766,6 +801,9 @@ spec:
                       description: Maximum amount of RAM in megabytes per process usable by the zlib
                       format: int64
                       type: integer
+                    no_memory_trimming:
+                      description: Disables memory trimming (malloc_trim) on memory shortage or reload
+                      type: boolean
                     noepoll:
                       description: Disable the use of the "epoll" event polling system on Linux
                       type: boolean
@@ -899,7 +937,7 @@ spec:
                         description: crt ignore err
                         type: string
                       crt_list:
-                        description: crt list
+                        description: All of the certificate list files delimited by ':' as mentioned as a crt-list on the bind line.
                         type: string
                       curves:
                         description: curves
@@ -1109,6 +1147,12 @@ spec:
                           - number
                           - string
                         type: string
+                      shards:
+                        description: |-
+                          shards
+                          Pattern: ^(by-thread|by-group|[0-9]+)$
+                        pattern: ^(by-thread|by-group|[0-9]+)$
+                        type: string
                       sigalgs:
                         description: sigalgs
                         type: string
@@ -1166,6 +1210,16 @@ spec:
                           Pattern: ^[^\s]+$
                         pattern: ^[^\s]+$
                         type: string
+                      tcp_ss:
+                        description: |-
+                          Sets the TCP Save SYN option for all incoming connections instantiated from this listening socket
+                          Enum: [1,2,3]
+                        enum:
+                          - 1
+                          - 2
+                          - 3
+                        format: int64
+                        type: integer
                       tcp_user_timeout:
                         description: tcp user timeout
                         format: int64
@@ -1395,6 +1449,9 @@ spec:
                     issuers_chain_path:
                       description: issuers chain path
                       type: string
+                    load_extra_del_ext:
+                      description: Remove the certificate file extension before appending the extra file extension (foobar.crt loads foobar.key instead of foobar.crt.key)
+                      type: boolean
                     load_extra_files:
                       description: load extra files
                       type: string
@@ -1447,6 +1504,16 @@ spec:
                       description: skip self issued ca
                       type: boolean
                   type: object
+                stats_calculate_max_counters:
+                  description: |-
+                    Activates or deactivates the calculation of stats max counters.
+                    Defaults to enabled in HAProxy.
+
+                    Enum: ["enabled","disabled"]
+                  enum:
+                    - enabled
+                    - disabled
+                  type: string
                 stats_file:
                   description: stats file
                   type: string
@@ -1500,6 +1567,10 @@ spec:
                       type: integer
                     bufsize:
                       description: bufsize
+                      format: int64
+                      type: integer
+                    bufsize_large:
+                      description: Size in bytes of large buffers. By default, support for large buffers is not enabled.
                       format: int64
                       type: integer
                     bufsize_small:
@@ -1585,6 +1656,9 @@ spec:
                       description: maxmem
                       format: int64
                       type: integer
+                    openlibs:
+                      description: 'Selects which Lua standard libraries are loaded. Accepts "all", "none", or a comma-separated list of: table, io, os, string, math, utf8, package, debug.'
+                      type: string
                     service_timeout:
                       description: |-
                         service timeout
@@ -1618,10 +1692,17 @@ spec:
                         - enabled
                         - disabled
                       type: string
+                    cli_max_payload_size:
+                      description: Maximum size in bytes allowed for the payload passed to a command on the CLI
+                      format: int64
+                      type: integer
                     comp_maxlevel:
                       description: comp maxlevel
                       format: int64
                       type: integer
+                    defaults_purge:
+                      description: defaults purge
+                      type: boolean
                     disable_fast_forward:
                       description: disable fast forward
                       type: boolean
@@ -1662,6 +1743,20 @@ spec:
                       maximum: 100
                       minimum: 0
                       type: integer
+                    h1_be_glitches_threshold:
+                      description: |-
+                        h1 be glitches threshold
+                        Minimum: 0
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    h1_fe_glitches_threshold:
+                      description: |-
+                        h1 fe glitches threshold
+                        Minimum: 0
+                      format: int64
+                      minimum: 0
+                      type: integer
                     h1_zero_copy_fwd_recv:
                       description: |-
                         enable or disable the zero-copy receives of data for the HTTP/1 multiplexer
@@ -1690,6 +1785,10 @@ spec:
                       description: Maximum number of concurrent streams per outgoing connection
                       format: int64
                       type: integer
+                    h2_be_max_frames_at_once:
+                      description: Maximum number of HTTP/2 incoming frames processed at once on a backend connection
+                      format: int64
+                      type: integer
                     h2_be_rxbuf:
                       description: HTTP/2 receive buffer size for outgoing connections
                       format: int64
@@ -1704,6 +1803,14 @@ spec:
                       type: integer
                     h2_fe_max_concurrent_streams:
                       description: Maximum number of concurrent streams per incoming connection
+                      format: int64
+                      type: integer
+                    h2_fe_max_frames_at_once:
+                      description: Maximum number of HTTP/2 incoming frames processed at once on a frontend connection
+                      format: int64
+                      type: integer
+                    h2_fe_max_rst_at_once:
+                      description: Maximum number of HTTP/2 incoming RST_STREAM frames processed at once on a frontend connection
                       format: int64
                       type: integer
                     h2_fe_max_total_streams:
@@ -1725,6 +1832,15 @@ spec:
                       description: h2 initial window size
                       format: int64
                       type: integer
+                    h2_log_errors:
+                      description: |-
+                        Level of HTTP/2 demultiplexer errors that will generate a log
+                        Enum: ["none","connection","stream"]
+                      enum:
+                        - none
+                        - connection
+                        - stream
+                      type: string
                     h2_max_concurrent_streams:
                       description: h2 max concurrent streams
                       format: int64
@@ -1902,10 +2018,6 @@ spec:
                 tune_quic_options:
                   description: tune quic options
                   properties:
-                    frontend_conn_tx_buffers_limit:
-                      description: frontend conn tx buffers limit
-                      format: int64
-                      type: integer
                     frontend_max_idle_timeout:
                       description: |-
                         frontend max idle timeout
@@ -1919,6 +2031,10 @@ spec:
                       type: integer
                     frontend_max_tx_memory:
                       description: frontend max tx memory
+                      format: int64
+                      type: integer
+                    frontend_stream_max_total:
+                      description: Maximum number of requests handled by a single QUIC frontend connection before graceful shutdown
                       format: int64
                       type: integer
                     max_frame_loss:
@@ -1966,6 +2082,14 @@ spec:
                       description: capture buffer size
                       format: int64
                       type: integer
+                    certificate_compression:
+                      description: |-
+                        certificate compression
+                        Enum: ["auto","disabled"]
+                      enum:
+                        - auto
+                        - disabled
+                      type: string
                     ctx_cache_size:
                       description: ctx cache size
                       format: int64
