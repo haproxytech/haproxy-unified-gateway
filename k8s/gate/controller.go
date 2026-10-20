@@ -52,6 +52,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	k8spredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -422,12 +423,23 @@ func listenerSetControllerCfgs(ctx context.Context, cfg config.Configuration, mg
 						predicate.NewNamespacePredicate(cfg.Namespaces),
 						// A grant whose shape cannot permit a certificateRef is dropped here,
 						// before the map func: no List, no enqueue, no rebuild.
-						k8spredicate.NewPredicateFuncs(referenceGrantCouldCoverListenerSet),
+						listenerSetReferenceGrantPredicate(),
 					),
 				},
 			}),
 		},
 	}}
+}
+
+// A revocation can make the new grant irrelevant while its old consumers still
+// need rechecking. The map handler visits both versions once this predicate lets
+// the update through.
+func listenerSetReferenceGrantPredicate() k8spredicate.Predicate {
+	p := k8spredicate.NewPredicateFuncs(referenceGrantCouldCoverListenerSet)
+	p.UpdateFunc = func(e event.UpdateEvent) bool {
+		return referenceGrantCouldCoverListenerSet(e.ObjectOld) || referenceGrantCouldCoverListenerSet(e.ObjectNew)
+	}
+	return p
 }
 
 // crdInstalled reports whether the cluster serves the given Kind. The resolution

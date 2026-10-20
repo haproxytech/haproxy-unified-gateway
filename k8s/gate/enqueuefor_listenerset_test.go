@@ -27,8 +27,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
@@ -70,7 +74,7 @@ func TestEnqueueListenerSetsForSecret(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, gatewayv1.AddToScheme(scheme))
+	require.NoError(t, gatewayv1.Install(scheme))
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -103,7 +107,7 @@ func TestEnqueueListenerSetsForReferenceGrant(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	scheme := runtime.NewScheme()
-	require.NoError(t, gatewayv1.AddToScheme(scheme))
+	require.NoError(t, gatewayv1.Install(scheme))
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -129,6 +133,50 @@ func TestEnqueueListenerSetsForReferenceGrant(t *testing.T) {
 	other := gatewayv1.ObjectName("other")
 	irrelevant := listenerSetGrant("certs", "grant", []gatewayv1beta1.ReferenceGrantFrom{listenerSetFrom("tenant")}, []gatewayv1beta1.ReferenceGrantTo{secretTo(&other)})
 	assert.Empty(t, mapFunc(context.Background(), irrelevant))
+}
+
+func TestListenerSetReferenceGrantPredicateUpdates(t *testing.T) {
+	grant := listenerSetGrant("certs", "grant", []gatewayv1beta1.ReferenceGrantFrom{listenerSetFrom("tenant")},
+		[]gatewayv1beta1.ReferenceGrantTo{secretTo(nil)})
+	wrongFrom := grant.DeepCopy()
+	wrongFrom.Spec.From[0].Kind = "Gateway"
+	wrongTo := grant.DeepCopy()
+	wrongTo.Spec.To[0].Kind = "Service"
+	p := listenerSetReferenceGrantPredicate()
+	for _, unrelated := range []*gatewayv1beta1.ReferenceGrant{wrongFrom, wrongTo} {
+		assert.True(t, p.Update(event.UpdateEvent{ObjectOld: grant, ObjectNew: unrelated}), "revocation must reach old consumers")
+		assert.True(t, p.Update(event.UpdateEvent{ObjectOld: unrelated, ObjectNew: grant}), "new authorization must reach new consumers")
+		assert.False(t, p.Create(event.CreateEvent{Object: unrelated}))
+		assert.False(t, p.Delete(event.DeleteEvent{Object: unrelated}))
+	}
+	assert.False(t, p.Update(event.UpdateEvent{ObjectOld: wrongFrom, ObjectNew: wrongTo}))
+	assert.True(t, p.Create(event.CreateEvent{Object: grant}))
+	assert.True(t, p.Delete(event.DeleteEvent{Object: grant}))
+}
+
+func TestListenerSetGrantRevocationEnqueuesOldConsumers(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	scheme := runtime.NewScheme()
+	require.NoError(t, gatewayv1.Install(scheme))
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(listenerSetWithCertRef("tenant", "ls", "certs", "shared")).
+		WithIndex(&gatewayv1.ListenerSet{}, index.ListenerSetCertificateRefNamespaceIndexField,
+			index.ListenerSetCertificateRefNamespaceIndexFunc(logger)).Build()
+	oldGrant := listenerSetGrant("certs", "grant", []gatewayv1beta1.ReferenceGrantFrom{listenerSetFrom("tenant")},
+		[]gatewayv1beta1.ReferenceGrantTo{secretTo(nil)})
+	newGrant := oldGrant.DeepCopy()
+	newGrant.Spec.From[0].Kind = "Gateway"
+	e := event.UpdateEvent{ObjectOld: oldGrant, ObjectNew: newGrant}
+	require.True(t, listenerSetReferenceGrantPredicate().Update(e))
+	q := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+	defer q.ShutDown()
+	h := handler.EnqueueRequestsFromMapFunc(enqueueListenerSetsForReferenceGrant(utils.NewDedicatedNamespaces(nil))(fakeClient, nil))
+	h.Update(context.Background(), e, q)
+	require.Equal(t, 1, q.Len(), "the old grant alone selects this ListenerSet")
+	request, shutdown := q.Get()
+	require.False(t, shutdown)
+	defer q.Done(request)
+	assert.Equal(t, client.ObjectKey{Namespace: "tenant", Name: "ls"}, request.NamespacedName)
 }
 
 func TestReferenceGrantCouldCoverListenerSet(t *testing.T) {
