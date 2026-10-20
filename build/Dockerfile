@@ -23,7 +23,7 @@ RUN cd /src && go mod download
 WORKDIR /src
 COPY / /src
 # stage gopherd into the fs overlay tree
-COPY --from=haproxytech/gopherd:1.3.2 /usr/local/sbin/gopherd /src/fs/usr/local/sbin/gopherd
+COPY --from=haproxytech/gopherd:latest /usr/local/sbin/gopherd /src/fs/usr/local/sbin/gopherd
 
 RUN CGO_ENABLED=0 go build -buildvcs=true \
         -trimpath \
