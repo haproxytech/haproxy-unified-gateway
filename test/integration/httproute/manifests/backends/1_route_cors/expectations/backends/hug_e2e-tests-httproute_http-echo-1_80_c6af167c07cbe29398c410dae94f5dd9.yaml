@@ -31,9 +31,16 @@ http_request_rule_list:
     name: Access-Control-Allow-Methods
   - fmt: '"Content-Type, Authorization"'
     name: Access-Control-Allow-Headers
+  - fmt: X-Request-Id
+    name: Access-Control-Expose-Headers
   - fmt: '3600'
     name: Access-Control-Max-Age
   return_status_code: 204
+  type: return
+- cond: if
+  cond_test: '{ method OPTIONS } { hdr_cnt(Origin) gt 0 } !{ req.hdr(Origin) -m reg
+    ^(http://example\.haproxy)$ }'
+  return_status_code: 403
   type: return
 http_response_rule_list:
 - cond: if

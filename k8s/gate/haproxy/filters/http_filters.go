@@ -82,6 +82,9 @@ type corsOriginConfig struct {
 	// condTest is the HAProxy ACL test for "origin matches".  Empty means
 	// unconditional (used when headerValue is "*" and credentials are not required).
 	condTest string
+	// rejectUnmatched is true when origins are enumerated, so a preflight from
+	// any other origin must be refused instead of reaching the backend.
+	rejectUnmatched bool
 }
 
 // buildCORSOriginConfig derives the origin matching strategy from the filter spec.
@@ -107,8 +110,9 @@ func buildCORSOriginConfig(origins []gatewayv1.CORSOrigin, allowCredentials bool
 		patterns = append(patterns, originToPattern(string(o)))
 	}
 	return corsOriginConfig{
-		headerValue: "%[req.hdr(Origin)]",
-		condTest:    fmt.Sprintf("{ req.hdr(Origin) -m reg ^(%s)$ }", strings.Join(patterns, "|")),
+		headerValue:     "%[req.hdr(Origin)]",
+		condTest:        fmt.Sprintf("{ req.hdr(Origin) -m reg ^(%s)$ }", strings.Join(patterns, "|")),
+		rejectUnmatched: true,
 	}
 }
 
@@ -167,6 +171,16 @@ func corsRules(f *gatewayv1.HTTPCORSFilter) (models.HTTPRequestRules, models.HTT
 		CondTest:         preflightCondTest,
 	})
 
+	if originCfg.rejectUnmatched {
+		forbidden := int64(403)
+		reqRules = append(reqRules, &models.HTTPRequestRule{
+			Type:             "return",
+			ReturnStatusCode: &forbidden,
+			Cond:             "if",
+			CondTest:         "{ method OPTIONS } { hdr_cnt(Origin) gt 0 } !" + originCfg.condTest,
+		})
+	}
+
 	responseRules := corsResponseRules(f, originCfg, allowCredentials, responseOriginValue)
 	return reqRules, responseRules
 }
@@ -178,6 +192,25 @@ func quoteFmt(s string) string {
 		return `"` + s + `"`
 	}
 	return s
+}
+
+// joinHeaderValues renders a comma-separated header list for a header value.
+func joinHeaderValues[T ~string](items []T) string {
+	values := make([]string, len(items))
+	for i, item := range items {
+		values[i] = string(item)
+	}
+	return quoteFmt(strings.Join(values, ", "))
+}
+
+// isWildcardSet reports whether the list is the single wildcard entry.
+func isWildcardSet[T ~string](items []T) bool {
+	for _, item := range items {
+		if item == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 // corsPreflightHeaders builds the ReturnHeader slice for the preflight http-request
@@ -193,18 +226,24 @@ func corsPreflightHeaders(f *gatewayv1.HTTPCORSFilter, originCfg corsOriginConfi
 		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Allow-Credentials"), Fmt: strPtr("true")})
 	}
 	if len(f.AllowMethods) > 0 {
-		methods := make([]string, len(f.AllowMethods))
-		for i, m := range f.AllowMethods {
-			methods[i] = string(m)
+		methods := joinHeaderValues(f.AllowMethods)
+		// A credentialed wildcard must answer with the requested method.
+		// shortcut: a preflight without the request header gets an empty value, not an omitted header.
+		if allowCredentials && isWildcardSet(f.AllowMethods) {
+			methods = "%[req.hdr(access-control-request-method)]"
 		}
-		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Allow-Methods"), Fmt: strPtr(quoteFmt(strings.Join(methods, ", ")))})
+		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Allow-Methods"), Fmt: strPtr(methods)})
 	}
 	if len(f.AllowHeaders) > 0 {
-		headers := make([]string, len(f.AllowHeaders))
-		for i, h := range f.AllowHeaders {
-			headers[i] = string(h)
+		headers := joinHeaderValues(f.AllowHeaders)
+		// A credentialed wildcard must answer with the requested headers.
+		if allowCredentials && isWildcardSet(f.AllowHeaders) {
+			headers = "%[req.fhdr(access-control-request-headers)]"
 		}
-		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Allow-Headers"), Fmt: strPtr(quoteFmt(strings.Join(headers, ", ")))})
+		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Allow-Headers"), Fmt: strPtr(headers)})
+	}
+	if len(f.ExposeHeaders) > 0 {
+		hdrs = append(hdrs, &models.ReturnHeader{Name: strPtr("Access-Control-Expose-Headers"), Fmt: strPtr(joinHeaderValues(f.ExposeHeaders))})
 	}
 	maxAge := int32(5)
 	if f.MaxAge != 0 {
@@ -244,11 +283,7 @@ func corsResponseRules(f *gatewayv1.HTTPCORSFilter, originCfg corsOriginConfig, 
 		rules = append(rules, addRule("Access-Control-Allow-Credentials", "true"))
 	}
 	if len(f.ExposeHeaders) > 0 {
-		headers := make([]string, len(f.ExposeHeaders))
-		for i, h := range f.ExposeHeaders {
-			headers[i] = string(h)
-		}
-		rules = append(rules, addRule("Access-Control-Expose-Headers", quoteFmt(strings.Join(headers, ", "))))
+		rules = append(rules, addRule("Access-Control-Expose-Headers", joinHeaderValues(f.ExposeHeaders)))
 	}
 	return rules
 }

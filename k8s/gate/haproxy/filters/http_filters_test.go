@@ -16,6 +16,7 @@ package filters
 import (
 	"testing"
 
+	"github.com/haproxytech/client-native/v6/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -103,6 +104,93 @@ func TestBuildCORSOriginConfig(t *testing.T) {
 // ---------------------------------------------------------------------------
 // quoteFmt
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// corsPreflightHeaders
+// ---------------------------------------------------------------------------
+
+func TestCORSPreflightHeaders(t *testing.T) {
+	boolPtr := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name       string
+		filter     *gatewayv1.HTTPCORSFilter
+		want       map[string]string
+		wantReject bool
+	}{
+		{
+			name: "expose headers are returned on preflight",
+			filter: &gatewayv1.HTTPCORSFilter{
+				AllowOrigins:     []gatewayv1.CORSOrigin{"https://www.foo.com"},
+				AllowMethods:     []gatewayv1.HTTPMethodWithWildcard{"GET"},
+				AllowHeaders:     []gatewayv1.HTTPHeaderName{"x-header-1"},
+				ExposeHeaders:    []gatewayv1.HTTPHeaderName{"x-header-3", "x-header-4"},
+				AllowCredentials: boolPtr(true),
+			},
+			want: map[string]string{
+				"Access-Control-Allow-Methods":  "GET",
+				"Access-Control-Allow-Headers":  "x-header-1",
+				"Access-Control-Expose-Headers": `"x-header-3, x-header-4"`,
+			},
+			wantReject: true,
+		},
+		{
+			name: "credentialed wildcards echo the request",
+			filter: &gatewayv1.HTTPCORSFilter{
+				AllowOrigins:     []gatewayv1.CORSOrigin{"*"},
+				AllowMethods:     []gatewayv1.HTTPMethodWithWildcard{"*"},
+				AllowHeaders:     []gatewayv1.HTTPHeaderName{"*"},
+				AllowCredentials: boolPtr(true),
+			},
+			want: map[string]string{
+				"Access-Control-Allow-Methods": "%[req.hdr(access-control-request-method)]",
+				"Access-Control-Allow-Headers": "%[req.fhdr(access-control-request-headers)]",
+			},
+		},
+		{
+			name: "wildcards without credentials stay literal",
+			filter: &gatewayv1.HTTPCORSFilter{
+				AllowOrigins: []gatewayv1.CORSOrigin{"*"},
+				AllowMethods: []gatewayv1.HTTPMethodWithWildcard{"*"},
+				AllowHeaders: []gatewayv1.HTTPHeaderName{"*"},
+			},
+			want: map[string]string{
+				"Access-Control-Allow-Methods": "*",
+				"Access-Control-Allow-Headers": "*",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reqRules, _ := corsRules(tc.filter)
+			var preflight *models.HTTPRequestRule
+			var rejected bool
+			for _, rule := range reqRules {
+				if rule.Type != "return" {
+					continue
+				}
+				if rule.ReturnStatusCode != nil && *rule.ReturnStatusCode == 403 {
+					rejected = true
+					continue
+				}
+				if preflight == nil {
+					preflight = rule
+				}
+			}
+			require.NotNil(t, preflight)
+			assert.Equal(t, tc.wantReject, rejected)
+
+			got := make(map[string]string, len(preflight.ReturnHeaders))
+			for _, h := range preflight.ReturnHeaders {
+				got[*h.Name] = *h.Fmt
+			}
+			for name, value := range tc.want {
+				assert.Equal(t, value, got[name], name)
+			}
+		})
+	}
+}
 
 func TestQuoteFmt(t *testing.T) {
 	assert.Equal(t, "GET", quoteFmt("GET"))
