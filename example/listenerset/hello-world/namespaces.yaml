@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: listenerset-infra
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: listenerset-app
+  labels:
+    listenerset-example: allowed

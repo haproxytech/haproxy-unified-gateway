@@ -1,0 +1,22 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: app-listeners
+  namespace: listenerset-app
+spec:
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: hug-gateway
+    namespace: listenerset-infra
+  listeners:
+  - name: http
+    port: 31080
+    protocol: HTTP
+    hostname: listenerset.haproxy.local
+    allowedRoutes:
+      namespaces:
+        from: Same
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

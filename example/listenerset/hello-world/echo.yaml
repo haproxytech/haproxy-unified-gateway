@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world-listenerset
+  namespace: listenerset-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-world-listenerset
+  template:
+    metadata:
+      labels:
+        app: hello-world-listenerset
+    spec:
+      containers:
+      - name: hello-world-listenerset
+        image: haproxytech/http-echo:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8888
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-world-listenerset
+  namespace: listenerset-app
+spec:
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: http
+  selector:
+    app: hello-world-listenerset
