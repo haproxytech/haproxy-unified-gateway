@@ -17,8 +17,6 @@
       HTTPRouteInvalidCrossNamespaceBackendRef,\
       HTTPRouteInvalidNonExistentBackendRef,\
       HTTPRouteMatching,\
-      HTTPRouteRedirectHostAndStatus,\
-      HTTPRouteRedirectPortAndScheme,\
       HTTPRouteServiceTypes,\
       HTTPRouteInvalidReferenceGrant,\
       HTTPRoutePartiallyInvalidViaInvalidReferenceGrant,\

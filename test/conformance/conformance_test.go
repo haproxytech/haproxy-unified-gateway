@@ -119,6 +119,13 @@ func TestConformance(t *testing.T) {
 		// same conditional-candidate machinery as header matching.
 		features.SupportHTTPRouteMethodMatching,
 		features.SupportHTTPRouteQueryParamMatching,
+		// Extended: filters translated into http-request rules.
+		features.SupportHTTPRouteResponseHeaderModification,
+		features.SupportHTTPRoutePathRewrite,
+		features.SupportHTTPRouteHostRewrite,
+		features.SupportHTTPRoutePathRedirect,
+		features.SupportHTTPRoutePortRedirect,
+		features.SupportHTTPRouteSchemeRedirect,
 	}
 
 	conformanceProfiles := []suite.ConformanceProfileName{
