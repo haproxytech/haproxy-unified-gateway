@@ -126,10 +126,14 @@ func TestConformance(t *testing.T) {
 		features.SupportHTTPRoutePathRedirect,
 		features.SupportHTTPRoutePortRedirect,
 		features.SupportHTTPRouteSchemeRedirect,
+		// Extended: per-backendRef header modification.
+		features.SupportHTTPRouteBackendRequestHeaderModification,
 		// Extended: CORS policy and parentRef listener-port selection.
 		features.SupportHTTPRouteCORS,
 		features.SupportHTTPRouteParentRefPort,
 		features.SupportHTTPRouteDestinationPortMatching,
+		// Extended: named rules route exactly like unnamed ones.
+		features.SupportHTTPRouteNamedRouteRule,
 	}
 
 	conformanceProfiles := []suite.ConformanceProfileName{
