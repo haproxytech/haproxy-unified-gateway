@@ -124,7 +124,7 @@ Set at **pipeline-run time** (Run pipeline → Variables):
 | Variable | Required | Purpose |
 |---|---|---|
 | `HUG_IMPLEMENTATION_VERSION` | yes | The version to publish, e.g. `v1.0.7`. Must match `^v[0-9]+\.[0-9]+`. |
-| `HUG_CONFORMANCE_SKIP_TESTS` | no | Replaces the repo's skip list for this run only. A different name from the job-level list on purpose, so GitLab precedence cannot shadow it. |
+| `HUG_CONFORMANCE_SKIP_TESTS` | no | Skips the named tests for this run only; the default run is unskipped. A different name from the job-level variable on purpose, so GitLab precedence cannot shadow it. |
 | `HUG_GITHUB_DRY_RUN` | no | If set (e.g. `1`), everything runs up to the commit and stops before pushing. Use it to rehearse. |
 | `GWAPI_FORK_REPO` | no | Overrides the push target (default `git@github.com:haproxyci/gateway-api.git`). Point it at a scratch fork to rehearse. |
 

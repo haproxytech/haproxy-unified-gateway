@@ -224,13 +224,10 @@ tasks:
       HUG_IMPLEMENTATION_VERSION: '{{.HUG_IMPLEMENTATION_VERSION}}'
       HUG_CONTROLLER_IMAGE_TAG: '{{default (trimPrefix "v" .HUG_IMPLEMENTATION_VERSION) .HUG_CONTROLLER_IMAGE_TAG}}'
       CONFORMANCE_REPORT_OUTPUT: '{{default "conformance-report.yaml" .CONFORMANCE_REPORT_OUTPUT}}'
-      # Skip list for the published run. Resolved here so the override never
+      # Skip list for the published run. Resolved here so an override never
       # depends on GitLab's variable precedence: HUG_CONFORMANCE_SKIP_TESTS, set
-      # at pipeline-run time, wins; otherwise the repo's own
-      # CONFORMANCE_SKIP_TESTS (defined once in .gitlab/conformance-tests.yml) is
-      # used. The two names are distinct on purpose, so nothing shadows the
-      # override. With neither set the whole suite runs, which on an older tag
-      # means failures and nothing publishable.
+      # at pipeline-run time, wins; otherwise the whole suite runs, which on an
+      # older tag means failures and nothing publishable.
       CONFORMANCE_SKIP_TESTS: '{{default .CONFORMANCE_SKIP_TESTS .HUG_CONFORMANCE_SKIP_TESTS}}'
       PUBLISH_DIR: '{{default "publish" .PUBLISH_DIR}}'
     # Each call passes vars explicitly. A task's own `vars:` and `env:` reach that

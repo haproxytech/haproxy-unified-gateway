@@ -1,26 +1,7 @@
-# Skip list shared by every conformance job that runs against the cluster, so
-# the publish job reports the same suite the CI jobs run.
-#
-# HTTPRouteMatching is skipped for its path-element prefix assertions (request
-# /v2example must not match prefix /v2): prefix routing matches by characters
-# today, a documented divergence pending its own fix. Its header-matching
-# assertions are covered by the four enabled match suites.
-#
-# Skipping is permitted upstream. This is the repo's list, under the canonical
-# name. A pipeline run overrides it with HUG_CONFORMANCE_SKIP_TESTS, which is a
-# different name on purpose: the two never collide, so the override cannot be
-# shadowed by a job-level variable whatever GitLab's precedence rules are.
-.hug-conformance-skip-tests:
-  variables:
-    CONFORMANCE_SKIP_TESTS: &hug_conf_skip "\
-      HTTPRouteInvalidBackendRefUnknownKind,\
-      HTTPRouteInvalidCrossNamespaceBackendRef,\
-      HTTPRouteInvalidNonExistentBackendRef,\
-      HTTPRouteMatching,\
-      HTTPRouteServiceTypes,\
-      HTTPRouteInvalidReferenceGrant,\
-      HTTPRoutePartiallyInvalidViaInvalidReferenceGrant,\
-      HTTPRouteReferenceGrant"
+# The conformance jobs run the suite unskipped, so a report published for a
+# release covers every test that run executes. A one-off run can narrow it with
+# HUG_CONFORMANCE_SKIP_TESTS, a different name from the job-level variable on
+# purpose, so GitLab precedence cannot shadow the override.
 
 conformance-GW-API-1_6_3:
   allow_failure: true
@@ -178,10 +159,9 @@ conformance-publish:
     DOCKER_INSECURE_NO_IPTABLES_RAW: "1"
     GWAPI_VERSION: "1.6.3"
     CLUSTER_NAME: "conformance-publish"
-    # The repo's skip list, aliased from the anchor above. To deviate for one
-    # run, set HUG_CONFORMANCE_SKIP_TESTS at pipeline-run time: a different
-    # name, so nothing declared here can shadow it.
-    CONFORMANCE_SKIP_TESTS: *hug_conf_skip
+    # The suite runs unskipped. To narrow one run, set
+    # HUG_CONFORMANCE_SKIP_TESTS at pipeline-run time: a different name, so
+    # nothing declared here can shadow it.
     CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-${GWAPI_VERSION}.yaml"
     CONFORMANCE_JUNIT_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.xml"
     CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.html"
