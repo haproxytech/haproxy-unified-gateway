@@ -249,7 +249,7 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 	attachableListeners := make([]*Listener, 0)
 	if parentRef.SectionName != nil {
 		listener, ok := treeGw.Listeners[string(*parentRef.SectionName)]
-		if !ok {
+		if !ok || !listener.MatchesParentRefPort(parentRef.Port) {
 			return checkParentRefResult{
 				Managed:    true,
 				Valid:      false,
@@ -259,7 +259,17 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 		attachableListeners = append(attachableListeners, listener)
 	} else {
 		for _, listener := range treeGw.Listeners {
+			if !listener.MatchesParentRefPort(parentRef.Port) {
+				continue
+			}
 			attachableListeners = append(attachableListeners, listener)
+		}
+		if parentRef.Port != nil && len(attachableListeners) == 0 {
+			return checkParentRefResult{
+				Managed:    true,
+				Valid:      false,
+				Conditions: rc.ConditionNotAcceptedNoMatchingParent(),
+			}
 		}
 	}
 

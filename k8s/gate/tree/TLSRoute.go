@@ -204,7 +204,7 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 	if parentRef.SectionName != nil {
 		// Check if the Gateway has this listener
 		listener, ok := treeGw.Listeners[string(*parentRef.SectionName)]
-		if !ok {
+		if !ok || !listener.MatchesParentRefPort(parentRef.Port) {
 			return checkParentRefResult{
 				Managed:    true,
 				Valid:      false,
@@ -223,7 +223,17 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 		attachableListeners = append(attachableListeners, listener)
 	} else {
 		for _, listener := range treeGw.Listeners {
+			if !listener.MatchesParentRefPort(parentRef.Port) {
+				continue
+			}
 			attachableListeners = append(attachableListeners, listener)
+		}
+		if parentRef.Port != nil && len(attachableListeners) == 0 {
+			return checkParentRefResult{
+				Managed:    true,
+				Valid:      false,
+				Conditions: rc.ConditionNotAcceptedNoMatchingParent(),
+			}
 		}
 	}
 

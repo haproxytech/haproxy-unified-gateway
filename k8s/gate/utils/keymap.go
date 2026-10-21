@@ -20,6 +20,7 @@ package utils
 
 import (
 	"fmt"
+	"strconv"
 	"strings" // KeyMap is a generic map with a custom key generator function if ey is complex type
 
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -85,17 +86,24 @@ func ParentRefToKey(parentRef gatewayv1.ParentReference) string {
 	parts = append(parts, StrPtrToString(parentRef.Namespace))
 	parts = append(parts, string(parentRef.Name))
 	parts = append(parts, StrPtrToString(parentRef.SectionName))
-	// Port is not supported yet
+	parts = append(parts, portToString(parentRef.Port))
 
 	return strings.Join(parts, ":")
+}
+
+func portToString(port *gatewayv1.PortNumber) string {
+	if port == nil {
+		return "_"
+	}
+	return strconv.Itoa(int(*port))
 }
 
 // KeyToParentRef converts a string key back to a gatewayv1.ParentReference.
 // It is the inverse of ParentRefToKey.
 func KeyToParentRef(key string) (gatewayv1.ParentReference, error) {
 	parts := strings.Split(key, ":")
-	if len(parts) != 5 {
-		return gatewayv1.ParentReference{}, fmt.Errorf("invalid parent reference key: expected 5 parts, got %d", len(parts))
+	if len(parts) != 6 {
+		return gatewayv1.ParentReference{}, fmt.Errorf("invalid parent reference key: expected 6 parts, got %d", len(parts))
 	}
 
 	group := StringToPtr[gatewayv1.Group](parts[0])
@@ -103,6 +111,10 @@ func KeyToParentRef(key string) (gatewayv1.ParentReference, error) {
 	namespace := StringToPtr[gatewayv1.Namespace](parts[2])
 	name := gatewayv1.ObjectName(parts[3])
 	sectionName := StringToPtr[gatewayv1.SectionName](parts[4])
+	port, err := stringToPort(parts[5])
+	if err != nil {
+		return gatewayv1.ParentReference{}, err
+	}
 
 	return gatewayv1.ParentReference{
 		Group:       group,
@@ -110,8 +122,20 @@ func KeyToParentRef(key string) (gatewayv1.ParentReference, error) {
 		Namespace:   namespace,
 		Name:        name,
 		SectionName: sectionName,
-		// Port is not supported yet
+		Port:        port,
 	}, nil
+}
+
+func stringToPort(s string) (*gatewayv1.PortNumber, error) {
+	if s == "_" {
+		return nil, nil
+	}
+	p, err := strconv.Atoi(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid parent reference port %q: %w", s, err)
+	}
+	port := gatewayv1.PortNumber(p)
+	return &port, nil
 }
 
 // stringer is a constraint that allows any pointer to a type with an underlying string type.

@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -113,5 +115,27 @@ func TestGetHostnamesForRouteWithListener(t *testing.T) {
 		if result := GetHostnamesForRouteWithListener(test.listenerHostname, test.routeHostnames); !slices.Equal(result, test.expected) {
 			t.Errorf("test #%d, Expected %s, got %s", i, test.expected, result)
 		}
+	}
+}
+
+func TestParentRefKeyRoundTrip(t *testing.T) {
+	sectionName := gatewayv1.SectionName("http")
+	port := gatewayv1.PortNumber(8080)
+	refs := []gatewayv1.ParentReference{
+		{Name: "gw"},
+		{Name: "gw", SectionName: &sectionName},
+		{Name: "gw", Port: &port},
+		{Name: "gw", SectionName: &sectionName, Port: &port},
+	}
+
+	keys := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		key := ParentRefToKey(ref)
+		assert.NotContains(t, keys, key, "parent refs must not share a key")
+		keys[key] = struct{}{}
+
+		got, err := KeyToParentRef(key)
+		require.NoError(t, err)
+		assert.Equal(t, ref, got)
 	}
 }

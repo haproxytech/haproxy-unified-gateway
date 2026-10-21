@@ -76,6 +76,11 @@ func (l *Listener) DeepCopy() *Listener {
 	return &copied
 }
 
+// MatchesParentRefPort reports whether a parentRef port, when set, selects this listener.
+func (l *Listener) MatchesParentRefPort(port *gatewayv1.PortNumber) bool {
+	return port == nil || l.K8sResource.Port == *port
+}
+
 type RouteGroupKind struct {
 	// Group is the group of the RouteGroupKind.
 	Group gatewayv1.Group `json:"group,omitempty"`
