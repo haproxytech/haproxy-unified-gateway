@@ -161,7 +161,7 @@ func TestRequestRedirectRules(t *testing.T) {
 			},
 			wantLen:   1,
 			wantType:  "location",
-			wantValue: "%[ssl_fc,iif(https,http)]://new.example.com%[path]",
+			wantValue: "%[ssl_fc,iif(https,http)]://new.example.com:%[dst_port]%[path]",
 		},
 		{
 			name: "port-only redirect keeps the request scheme and host",

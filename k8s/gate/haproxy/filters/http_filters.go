@@ -374,6 +374,9 @@ func requestRedirectRules(f *gatewayv1.HTTPRequestRedirectFilter, matchPrefix st
 	}
 	if f.Port != nil {
 		_, _ = authority.WriteString(fmt.Sprintf(":%d", *f.Port))
+	} else if hasAuthority && f.Scheme == nil {
+		// An omitted port keeps the request port; a scheme change resets it.
+		_, _ = authority.WriteString(":%[dst_port]")
 	}
 	pfx := authority.String()
 

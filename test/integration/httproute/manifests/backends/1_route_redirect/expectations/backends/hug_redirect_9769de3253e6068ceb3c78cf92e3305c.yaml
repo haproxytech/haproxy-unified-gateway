@@ -10,5 +10,5 @@ name: hug_redirect_9769de3253e6068ceb3c78cf92e3305c
 http_request_rule_list:
 - redir_code: 301
   redir_type: location
-  redir_value: '%[ssl_fc,iif(https,http)]://example.org%[path]'
+  redir_value: '%[ssl_fc,iif(https,http)]://example.org:%[dst_port]%[path]'
   type: redirect
