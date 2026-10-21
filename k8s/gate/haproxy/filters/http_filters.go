@@ -15,6 +15,7 @@ package filters
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -205,12 +206,7 @@ func joinHeaderValues[T ~string](items []T) string {
 
 // isWildcardSet reports whether the list is the single wildcard entry.
 func isWildcardSet[T ~string](items []T) bool {
-	for _, item := range items {
-		if item == "*" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(items, "*")
 }
 
 // corsPreflightHeaders builds the ReturnHeader slice for the preflight http-request

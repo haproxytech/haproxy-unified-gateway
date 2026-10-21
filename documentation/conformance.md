@@ -124,6 +124,9 @@ The conformance report is the artifact implementations submit to the upstream
 - `SupportHTTPRoutePathRedirect` (Extended, in `GATEWAY-HTTP`)
 - `SupportHTTPRoutePortRedirect` (Extended, in `GATEWAY-HTTP`)
 - `SupportHTTPRouteSchemeRedirect` (Extended, in `GATEWAY-HTTP`)
+- `SupportHTTPRouteCORS` (Extended, in `GATEWAY-HTTP`)
+- `SupportHTTPRouteParentRefPort` (Extended, in `GATEWAY-HTTP`)
+- `SupportHTTPRouteDestinationPortMatching` (Extended, in `GATEWAY-HTTP`)
 - `SupportTLSRoute` (from the `GATEWAY-TLS` profile)
 
 Extended features can be added to `test/conformance/conformance_test.go`
