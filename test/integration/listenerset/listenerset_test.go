@@ -41,6 +41,10 @@
 // (Accepted=False/<reason>, Programmed=False/<reason>, Conflicted=True/<reason>),
 // plus ResolvedRefs=True, since losing a port is not a reference problem. Where the API leaves a set open -- the conditions of an entry whose
 // reference is not permitted -- the case pins one condition instead of the set.
+//
+// Three further cases cover the TLS configuration of a contributed entry rather than its
+// conditions: the certificate HAProxy loads, and the crt-list of a port both origins
+// share. They live in listenerset_tls_test.go, which says what each of them asserts.
 package listenerset
 
 //revive:enable:line-length-limit

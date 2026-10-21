@@ -1,0 +1,27 @@
+## One HTTPS entry on the same port as the Gateway's own listener, with a
+## certificate of its own: the two origins share the frontend, so they share its crt-list.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: listenerset-grant-wrong-origin
+spec:
+  parentRef:
+    name: hug-gateway
+  listeners:
+  - name: ls-wrong-origin-listener
+    port: 8443
+    protocol: HTTPS
+    hostname: "ls-wrong-origin.haproxy"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - group: ""
+        kind: Secret
+        name: ls-grant-cert
+        namespace: other
+    allowedRoutes:
+      namespaces:
+        from: Same
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

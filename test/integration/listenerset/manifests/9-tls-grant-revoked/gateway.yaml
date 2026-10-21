@@ -1,0 +1,24 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: hug-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: gateway-tls-listener
+    port: 9090
+    protocol: HTTPS
+    hostname: "gateway-tls.haproxy"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - group: ""
+        kind: Secret
+        name: offload
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  allowedListeners:
+    namespaces:
+      from: All
