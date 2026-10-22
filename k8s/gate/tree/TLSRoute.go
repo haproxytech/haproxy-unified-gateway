@@ -165,7 +165,7 @@ func (r *TLSRoute) checkParentRefs(controllerStore ControllerStore) {
 	r.CheckParentRefs = checkParentsRefs
 }
 
-//revive:disable:function-length
+//revive:disable:function-length,cognitive-complexity
 func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controllerStore ControllerStore) checkParentRefResult {
 	parentRefKind := utilsk8s.ResolveParentRefKind(parentRef, controllerStore.ExtractGVK)
 	if parentRefKind.Unsupported() {
@@ -284,7 +284,7 @@ func (r *TLSRoute) checkParentRef(parentRef gatewayv1.ParentReference, controlle
 				}
 			}
 		}
-				for _, listener := range listeners {
+		for _, listener := range listeners {
 			if !listener.MatchesParentRefPort(parentRef.Port) {
 				continue
 			}

@@ -95,6 +95,10 @@ func TestTLSGatewayStatusWithDelayedGatewayClass(t *testing.T) {
 			key := client.ObjectKeyFromObject(gateway)
 			classKey := client.ObjectKeyFromObject(class)
 			cs := &ControllerStore{
+				// The class is ours only if its controllerName names this controller, which the
+				// class builder re-derives on every update: a fixture that left this empty would
+				// hand the class to another controller and the Gateway would never be recovered.
+				ControllerName: "example.com/controller",
 				ClusterStore: &store.ClusterStore{
 					Gateways:       map[client.ObjectKey]*gatewayv1.Gateway{key: gateway},
 					GatewayClasses: make(map[client.ObjectKey]*gatewayv1.GatewayClass),

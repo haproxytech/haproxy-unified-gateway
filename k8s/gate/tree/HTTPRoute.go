@@ -332,7 +332,7 @@ func (r *HTTPRoute) checkParentRef(parentRef gatewayv1.ParentReference, controll
 				}
 			}
 		}
-				for _, listener := range listeners {
+		for _, listener := range listeners {
 			if !listener.MatchesParentRefPort(parentRef.Port) {
 				continue
 			}

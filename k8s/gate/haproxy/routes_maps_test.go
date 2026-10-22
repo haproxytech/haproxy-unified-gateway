@@ -152,7 +152,9 @@ func TestRouteMapsSurviveUpdates(t *testing.T) {
 					continue
 				}
 				if kind == "HTTPRoute" {
-					assert.Equal(t, "/updated", entryKey.Path)
+					// Prefix keys are element-terminated: the lookup input gains a trailing
+					// "/", so the key the map holds ends with it too.
+					assert.Equal(t, "/updated/", entryKey.Path)
 				} else {
 					for _, value := range entry.DesiredValue {
 						assert.Contains(t, value.ValueName, "echo-updated")
