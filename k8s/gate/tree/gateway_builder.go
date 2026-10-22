@@ -64,6 +64,24 @@ func NewGatewayBuilder(params GatewayBuilderParams) Builder {
 func (b *GatewayBuilderImpl) ComputeTreeUpdates() {
 	b.resetListenerConflicts()
 
+	// Class events must recover Gateways whose first batch preceded their class.
+	for classKey := range b.ClusterStore.Updates.GatewayClasses {
+		for gatewayKey, gateway := range b.ClusterStore.Gateways {
+			if string(gateway.Spec.GatewayClassName) != classKey.Name {
+				continue
+			}
+			if _, present := b.ClusterStore.Updates.Gateways[gatewayKey]; present {
+				continue
+			}
+			b.ClusterStore.Updates.Gateways[gatewayKey] = store.Update[*gatewayv1.Gateway]{
+				OldObject: gateway,
+				NewObject: gateway,
+				Status:    store.StatusUpserted,
+				Indirect:  true,
+			}
+		}
+	}
+
 	// After this step, the clusterStore.Updates contains all impacted Gateways
 	// Including the one impacted by:
 	// - GatewayClass updates
