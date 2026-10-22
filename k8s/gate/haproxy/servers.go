@@ -417,6 +417,10 @@ func (b *HaproxyConfMgrImpl) endpointSliceUpdatedByService() map[client.ObjectKe
 		case store.StatusDeleted:
 			k8sEps = eps.OldObject
 		}
+		// A batch can delete an endpoint slice it never stored, leaving no version.
+		if k8sEps == nil {
+			continue
+		}
 		svcName := getServiceNameFromEndpointSlice(k8sEps)
 		svcNs := k8sEps.GetNamespace()
 		updatedSvcKey := client.ObjectKey{Namespace: svcNs, Name: svcName}
