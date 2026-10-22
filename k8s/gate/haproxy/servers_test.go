@@ -24,6 +24,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	corev1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -149,5 +150,29 @@ func TestGetServersForBackendNamedTargetPort(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestEndpointSliceUpdatesSkipDeletionWithoutOldObject(t *testing.T) {
+	mgr := newTestServersMgr("default", "svc", nil)
+	mgr.controllerStore.ClusterStore.Updates = store.NewClusterUpdates()
+	updates := mgr.controllerStore.ClusterStore.Updates.EndpointSlices
+
+	updates[types.NamespacedName{Namespace: "default", Name: "gone"}] = store.Update[*discoveryV1.EndpointSlice]{Status: store.StatusDeleted}
+
+	live := &discoveryV1.EndpointSlice{
+		Namespace: "default",
+		Name:      "live",
+		Labels:    map[string]string{"kubernetes.io/service-name": "svc"},
+	}
+	updates[types.NamespacedName{Namespace: "default", Name: "live"}] = store.Update[*discoveryV1.EndpointSlice]{Status: store.StatusUpserted, NewObject: live}
+
+	result := mgr.endpointSliceUpdatedByService()
+
+	if len(result) != 1 {
+		t.Fatalf("expected only the live service, got %v", result)
+	}
+	if _, ok := result[client.ObjectKey{Namespace: "default", Name: "svc"}]; !ok {
+		t.Fatalf("expected live endpoint slice to map to its service, got %v", result)
 	}
 }
