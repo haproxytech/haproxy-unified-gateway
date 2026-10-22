@@ -421,7 +421,7 @@ func (l *Listener) checkProtocol(managedKinds managedRouteGroupKindsByProtocol) 
 		)
 		l.CheckProtocol = CheckResult{
 			Valid:      false,
-			Conditions: l.conditionsFor(conditions.VerdictUnsupportedValue, valErr.Error()),
+			Conditions: l.conditionsFor(l.unsupportedTLSModeVerdict(), valErr.Error()),
 		}
 		return
 	}
@@ -803,6 +803,24 @@ func (l *Listener) conflictVerdict(conflicts conflictKinds) conditions.ListenerC
 		return conditions.VerdictHostnameConflict
 	}
 	return ""
+}
+
+// unsupportedTLSModeVerdict is the verdict a listener asking for a TLS mode this
+// controller does not serve reports.
+//
+// The Gateway vocabulary spells that apart from a protocol it does not serve at all:
+// UnsupportedValue says the protocol is supported and the value is not. The entry
+// vocabulary has no such reason -- an entry has UnsupportedProtocol alone -- and declares
+// the absence, so an entry concludes that one instead. Like the conflict verdict, the
+// choice is made here, on the listener, because this is where the vocabulary is known,
+// and a verdict a vocabulary cannot spell would be rendered as Unreportable: the listener
+// would be refused with Invalid on an internal gap rather than with the reason its reader
+// can act on.
+func (l *Listener) unsupportedTLSModeVerdict() conditions.ListenerConditionVerdict {
+	if l.FromListenerSet() {
+		return conditions.VerdictUnsupportedProtocol
+	}
+	return conditions.VerdictUnsupportedValue
 }
 
 // conditionsFor renders a verdict in the vocabulary of whatever declared this
