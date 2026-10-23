@@ -1,0 +1,23 @@
+## One TLSRoute naming both listeners: the Gateway's own and the contributed entry. A
+## single object feeding both sides is what makes the comparison about the two code paths
+## and not about two routes that happen to be written alike.
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: parity-route
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: parity-gateway
+    sectionName: tls
+  - group: gateway.networking.k8s.io
+    kind: ListenerSet
+    name: parity-listenerset
+    sectionName: tls
+  hostnames:
+  - "parity.haproxy"
+  rules:
+  - backendRefs:
+    - name: http-echo
+      port: 443

@@ -1,0 +1,21 @@
+## The contributed entry of the pair, carrying the same listener name as the Gateway's
+## own: a name is unique per declaring resource, and matching them is what makes the two
+## generated configurations comparable down to the map keys.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: parity-listenerset
+spec:
+  parentRef:
+    name: parity-gateway
+  listeners:
+  - name: http
+    port: 8081
+    protocol: HTTP
+    hostname: "parity.haproxy"
+    allowedRoutes:
+      namespaces:
+        from: Same
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

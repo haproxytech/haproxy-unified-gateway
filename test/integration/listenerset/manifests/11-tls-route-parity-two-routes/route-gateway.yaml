@@ -1,0 +1,20 @@
+## The Gateway's own side of the pair: its own route object. The two routes are the same
+## request -- same hostname, same backend -- written twice, which is what the second half
+## of the parity property covers: attribution and data plane must not diverge because the
+## routes are distinct objects.
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: parity-route-gateway
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: parity-gateway
+    sectionName: tls
+  hostnames:
+  - "parity.haproxy"
+  rules:
+  - backendRefs:
+    - name: http-echo
+      port: 443

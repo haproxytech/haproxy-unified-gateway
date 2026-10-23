@@ -1,0 +1,28 @@
+## The contributed entry of the pair: same listener name as the Gateway's own, which the
+## API allows since a name is unique per declaring resource, and a certificateRef of its
+## own. Two Secrets cannot share a name in one namespace, so the two sides differ by the
+## Secret they name -- which is naming, and the case declares it as such.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: parity-listenerset
+spec:
+  parentRef:
+    name: parity-gateway
+  listeners:
+  - name: https
+    port: 8081
+    protocol: HTTPS
+    hostname: "parity.haproxy"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - group: ""
+        kind: Secret
+        name: parity-listenerset-cert
+    allowedRoutes:
+      namespaces:
+        from: Same
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute

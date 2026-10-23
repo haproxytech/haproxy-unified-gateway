@@ -1,0 +1,21 @@
+## The contributed entry of the pair. It carries the same listener name as the Gateway's
+## own, which the API allows: a name is unique per declaring resource, and this is what
+## makes the two generated configurations comparable down to the map keys.
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: parity-listenerset
+spec:
+  parentRef:
+    name: parity-gateway
+  listeners:
+  - name: tls
+    port: 8081
+    protocol: TLS
+    hostname: "parity.haproxy"
+    tls:
+      mode: Passthrough
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: TLSRoute

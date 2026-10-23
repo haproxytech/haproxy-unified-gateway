@@ -1,0 +1,21 @@
+## The contributed side of the pair.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: parity-route-listener-set
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: ListenerSet
+    name: parity-listenerset
+    sectionName: http
+  hostnames:
+  - "parity.haproxy"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /parity
+    backendRefs:
+    - name: http-echo
+      port: 80

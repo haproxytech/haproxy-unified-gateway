@@ -1,0 +1,21 @@
+## The Gateway's own HTTP listener, the reference the contributed entry is compared
+## against: same listener name, same hostname, same protocol, same route kinds -- only
+## the port and the resource declaring it differ.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: parity-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: http
+    port: 8088
+    protocol: HTTP
+    hostname: "parity.haproxy"
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  allowedListeners:
+    namespaces:
+      from: All

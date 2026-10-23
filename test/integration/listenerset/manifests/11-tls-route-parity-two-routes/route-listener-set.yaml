@@ -1,0 +1,17 @@
+## The contributed side of the pair.
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: parity-route-listener-set
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: ListenerSet
+    name: parity-listenerset
+    sectionName: tls
+  hostnames:
+  - "parity.haproxy"
+  rules:
+  - backendRefs:
+    - name: http-echo
+      port: 443

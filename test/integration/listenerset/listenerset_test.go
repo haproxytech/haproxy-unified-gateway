@@ -33,6 +33,9 @@
 // | **3** ReferenceGrant naming the ListenerSet         | not asserted            | refused, then Accepted/Programmed=True | refused: ResolvedRefs=False/RefNotPermitted, present -- permitted: accepted, exact | -                        |
 // | **4** deletion on a shared frontend                 | attachedListenerSets=0  | gone                              | gone, and the entry is gone from the surviving frontend's map     | -                        |
 // | **5** re-parenting to another Gateway               | A: 1 then 0, B: 0 then 1 | Accepted/Programmed=True          | accepted, exact throughout, attachedRoutes=1, the map line names B | follows the ListenerSet  |
+// | **10/12** parity, one route naming both listeners   | attachedRoutes=1        | Accepted/Programmed=True          | accepted, exact, attachedRoutes=1                                  | attaches to both, Accepted=True on each (present) |
+// | **11/13** parity, one route per side                | attachedRoutes=1        | Accepted/Programmed=True          | accepted, exact, attachedRoutes=1                                  | attaches to its own (present; the TLS pair asserts the count instead) |
+// | **14/15** parity, HTTPS terminating per origin      | attachedRoutes=1        | Accepted/Programmed=True          | accepted, exact, attachedRoutes=1                                  | attaches to both / to its own, Accepted=True (present) |
 //
 // The conditions each case asserts come from the conformance suite, whose ListenerSet
 // cases pass. An accepted entry carries exactly ResolvedRefs=True, Accepted=True and
@@ -45,6 +48,16 @@
 // Three further cases cover the TLS configuration of a contributed entry rather than its
 // conditions: the certificate HAProxy loads, and the crt-list of a port both origins
 // share. They live in listenerset_tls_test.go, which says what each of them asserts.
+//
+// Six last cases cover neither conditions nor certificates alone but the *parity* of the
+// two origins: a Gateway listener and a contributed entry declaring the same listener --
+// same name, same hostname, same protocol, same mode, same route kinds -- on a port of
+// their own, one route naming both and then one route per side, for TLS passthrough, for
+// HTTP, and for HTTPS where each side terminates with a certificate of its own. What they
+// compare is the generated configuration as the data plane holds it: the frontends, their
+// maps, and the crt-list of the terminating pair, modulo the naming that legitimately
+// differs. They live in listenerset_parity_test.go, which says why the comparison is made
+// on live objects rather than against a written expectation.
 package listenerset
 
 //revive:enable:line-length-limit

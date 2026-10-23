@@ -1,0 +1,23 @@
+## The Gateway's own TLS listener, and the reference the contributed entry is compared
+## against: same listener name, same hostname, same protocol and mode, same route kinds --
+## only the port and the resource declaring it differ.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: parity-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: tls
+    port: 8088
+    protocol: TLS
+    hostname: "parity.haproxy"
+    tls:
+      mode: Passthrough
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: TLSRoute
+  allowedListeners:
+    namespaces:
+      from: All

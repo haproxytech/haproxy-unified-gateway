@@ -1,0 +1,28 @@
+## The Gateway's own HTTPS listener -- TLS terminated here -- and the reference the
+## contributed entry is compared against: same listener name, same hostname, same protocol
+## and mode, same route kinds. Only the port and the resource declaring it differ, and each
+## side carries a certificate of its own, since a port termination belongs to.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: parity-gateway
+spec:
+  gatewayClassName: haproxy
+  listeners:
+  - name: https
+    port: 8088
+    protocol: HTTPS
+    hostname: "parity.haproxy"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - group: ""
+        kind: Secret
+        name: parity-gateway-cert
+    allowedRoutes:
+      kinds:
+      - group: gateway.networking.k8s.io
+        kind: HTTPRoute
+  allowedListeners:
+    namespaces:
+      from: All
