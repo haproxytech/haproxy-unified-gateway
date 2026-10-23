@@ -155,7 +155,7 @@ func (b *TLSRouteBuilderImpl) SetAsManaged(tlsRoute *TLSRoute) {
 	// Is it already in Managed
 	key := client.ObjectKeyFromObject(tlsRoute.K8sResource)
 	b.ControllerStore.GateTree.TLSRoutes[key] = tlsRoute
-	delete(b.ControllerStore.UnmanagedGateTree.Gateways, key)
+	delete(b.ControllerStore.UnmanagedGateTree.TLSRoutes, key)
 }
 
 func (b *TLSRouteBuilderImpl) SetAsUnmanaged(tlsRoute *TLSRoute) {
@@ -164,7 +164,7 @@ func (b *TLSRouteBuilderImpl) SetAsUnmanaged(tlsRoute *TLSRoute) {
 	// Is it already in Managed
 	key := client.ObjectKeyFromObject(tlsRoute.K8sResource)
 	b.ControllerStore.UnmanagedGateTree.TLSRoutes[key] = tlsRoute
-	delete(b.ControllerStore.GateTree.Gateways, key)
+	delete(b.ControllerStore.GateTree.TLSRoutes, key)
 }
 
 func (b *TLSRouteBuilderImpl) buildRules(tlsRoute *TLSRoute) {

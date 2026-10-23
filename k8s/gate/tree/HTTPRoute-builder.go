@@ -161,7 +161,7 @@ func (b *HTTPRouteBuilderImpl) SetAsManaged(route *HTTPRoute) {
 	// Is it already in Managed
 	key := client.ObjectKeyFromObject(route.K8sResource)
 	b.ControllerStore.GateTree.HTTPRoutes[key] = route
-	delete(b.ControllerStore.UnmanagedGateTree.Gateways, key)
+	delete(b.ControllerStore.UnmanagedGateTree.HTTPRoutes, key)
 }
 
 func (b *HTTPRouteBuilderImpl) SetAsUnmanaged(route *HTTPRoute) {
@@ -170,7 +170,7 @@ func (b *HTTPRouteBuilderImpl) SetAsUnmanaged(route *HTTPRoute) {
 	// Is it already in Managed
 	key := client.ObjectKeyFromObject(route.K8sResource)
 	b.ControllerStore.UnmanagedGateTree.HTTPRoutes[key] = route
-	delete(b.ControllerStore.GateTree.Gateways, key)
+	delete(b.ControllerStore.GateTree.HTTPRoutes, key)
 }
 
 func (b *HTTPRouteBuilderImpl) buildRules(httpRoute *HTTPRoute) {
