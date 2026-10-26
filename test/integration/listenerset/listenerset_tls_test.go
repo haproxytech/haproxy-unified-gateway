@@ -45,7 +45,7 @@ const (
 // certificatePath is where the controller writes the PEM of a referenced Secret:
 // <certs>/<secret namespace>/<secret name's first two characters>/<link id>_<namespace>_<name>.pem.
 func (s *ListenerSetSuite) certificatePath(secretNamespace, secretName string) string {
-	return path.Join(s.Test().HaproxyCfgDir, "certs", secretNamespace, secretName[:2],
+	return path.Join(s.IntTest().HaproxyCfgDir, "certs", secretNamespace, secretName[:2],
 		"hug_"+secretNamespace+"_"+secretName+".pem")
 }
 
@@ -54,10 +54,10 @@ func (s *ListenerSetSuite) certificatePath(secretNamespace, secretName string) s
 // port it actually bound.
 func (s *ListenerSetSuite) crtListOf(frontend string) ([]string, error) {
 	expected := futils.FilePath{
-		Dir:      path.Join(s.Test().HaproxyCfgDir, "certlists"),
+		Dir:      path.Join(s.IntTest().HaproxyCfgDir, "certlists"),
 		FileName: "/hug_" + frontend + ".list",
 	}
-	actualFullPath := utils.SubstitutePortsInString(expected.FullPath(), s.Test().PortMap)
+	actualFullPath := utils.SubstitutePortsInString(expected.FullPath(), s.IntTest().PortMap)
 	actual := futils.FilePath{
 		Dir:      filepath.Dir(actualFullPath),
 		FileName: "/" + filepath.Base(actualFullPath),
@@ -73,7 +73,7 @@ func (s *ListenerSetSuite) ExpectCrtList(frontend string, expectedCerts []string
 	slices.Sort(want)
 
 	var got []string
-	matches := utils.WaitFor(s.Test().Ctx, tlsWaitInterval, tlsWaitTimeout, func() bool {
+	matches := utils.WaitFor(s.IntTest().Ctx, tlsWaitInterval, tlsWaitTimeout, func() bool {
 		read, err := s.crtListOf(frontend)
 		if err != nil {
 			return false
@@ -91,8 +91,8 @@ func (s *ListenerSetSuite) ExpectCrtList(frontend string, expectedCerts []string
 func (s *ListenerSetSuite) ExpectCertificateLoaded(certPath, expectedSubject string) {
 	s.T().Helper()
 	var subject string
-	loaded := utils.WaitFor(s.Test().Ctx, tlsWaitInterval, tlsWaitTimeout, func() bool {
-		cert, err := s.Test().RuntimeClient.ShowCertificate(certPath)
+	loaded := utils.WaitFor(s.IntTest().Ctx, tlsWaitInterval, tlsWaitTimeout, func() bool {
+		cert, err := s.IntTest().RuntimeClient.ShowCertificate(certPath)
 		if err != nil || cert == nil {
 			return false
 		}
@@ -112,7 +112,7 @@ func (s *ListenerSetSuite) listenerSetCertificateGrant(name, fromKind, toSecretN
 			From: []gatewayv1.ReferenceGrantFrom{{
 				Group:     gatewayv1.Group(gatewayv1.GroupName),
 				Kind:      gatewayv1.Kind(fromKind),
-				Namespace: gatewayv1.Namespace(s.Test().Namespace),
+				Namespace: gatewayv1.Namespace(s.IntTest().Namespace),
 			}},
 			To: []gatewayv1.ReferenceGrantTo{{
 				Group: "", Kind: "Secret", Name: new(gatewayv1.ObjectName(toSecretName)),
@@ -134,8 +134,8 @@ func (s *ListenerSetSuite) Test_6_TLS_Two_Origins() {
 	s.CreateFixtures(fixturePath, nil)
 	defer s.CleanupFixtures(fixturePath, nil)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 	frontend := "https_31445"
 
 	s.ExpectListenerSetEntryConditions(ctx, ns, "listenerset-tls", "ls-tls-listener", acceptedEntry())
@@ -173,8 +173,8 @@ func (s *ListenerSetSuite) Test_7_TLS_ReferenceGrant_From_The_ListenerSet() {
 	// Secret that lives in another one.
 	defer s.CleanupFixtures(fixturePath, inTestNamespace)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 	frontend := "https_31444"
 	lsetName := "listenerset-grant"
 	entryName := "ls-grant-listener"
@@ -196,9 +196,9 @@ func (s *ListenerSetSuite) Test_7_TLS_ReferenceGrant_From_The_ListenerSet() {
 	s.ExpectCrtList(frontend, []string{gatewayCert})
 
 	grant := s.listenerSetCertificateGrant("allow-listener-set-cert", "ListenerSet", "ls-grant-cert")
-	s.Require().NoError(utils.CreateRuntimeObject(ctx, s.Test().Client, grant, true))
+	s.Require().NoError(utils.CreateRuntimeObject(ctx, s.IntTest().Client, grant, true))
 	defer func() {
-		_ = utils.DeleteRuntimeObject(ctx, s.Test().Client, grant, false)
+		_ = utils.DeleteRuntimeObject(ctx, s.IntTest().Client, grant, false)
 	}()
 
 	s.ExpectListenerSetEntryConditions(ctx, ns, lsetName, entryName, acceptedEntry())
@@ -221,8 +221,8 @@ func (s *ListenerSetSuite) Test_8_TLS_Grant_Naming_The_Gateway_Does_Not_Cover() 
 	s.CreateFixtures(fixturePath, inTestNamespace)
 	defer s.CleanupFixtures(fixturePath, inTestNamespace)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 	frontend := "https_8443"
 	lsetName := "listenerset-grant-wrong-origin"
 	entryName := "ls-wrong-origin-listener"
@@ -233,9 +233,9 @@ func (s *ListenerSetSuite) Test_8_TLS_Grant_Naming_The_Gateway_Does_Not_Cover() 
 	defer s.CleanupFixturesInNamespace(fixturePath, secretNamespace, []string{"ls-grant-cert.yaml"})
 
 	wrongOrigin := s.listenerSetCertificateGrant("allow-gateway-cert", "Gateway", "ls-grant-cert")
-	s.Require().NoError(utils.CreateRuntimeObject(ctx, s.Test().Client, wrongOrigin, true))
+	s.Require().NoError(utils.CreateRuntimeObject(ctx, s.IntTest().Client, wrongOrigin, true))
 	defer func() {
-		_ = utils.DeleteRuntimeObject(ctx, s.Test().Client, wrongOrigin, false)
+		_ = utils.DeleteRuntimeObject(ctx, s.IntTest().Client, wrongOrigin, false)
 	}()
 
 	s.ExpectListenerSetEntryHasCondition(ctx, ns, lsetName, entryName, metav1.Condition{
@@ -246,9 +246,9 @@ func (s *ListenerSetSuite) Test_8_TLS_Grant_Naming_The_Gateway_Does_Not_Cover() 
 	s.ExpectCrtList(frontend, []string{gatewayCert})
 
 	rightOrigin := s.listenerSetCertificateGrant("allow-listener-set-cert", "ListenerSet", "ls-grant-cert")
-	s.Require().NoError(utils.CreateRuntimeObject(ctx, s.Test().Client, rightOrigin, true))
+	s.Require().NoError(utils.CreateRuntimeObject(ctx, s.IntTest().Client, rightOrigin, true))
 	defer func() {
-		_ = utils.DeleteRuntimeObject(ctx, s.Test().Client, rightOrigin, false)
+		_ = utils.DeleteRuntimeObject(ctx, s.IntTest().Client, rightOrigin, false)
 	}()
 
 	s.ExpectListenerSetEntryConditions(ctx, ns, lsetName, entryName, acceptedEntry())
@@ -271,8 +271,8 @@ func (s *ListenerSetSuite) Test_9_TLS_Grant_Revoked() {
 	s.CreateFixtures(fixturePath, inTestNamespace)
 	defer s.CleanupFixtures(fixturePath, inTestNamespace)
 
-	ctx := s.Test().Ctx
-	ns := s.Test().Namespace
+	ctx := s.IntTest().Ctx
+	ns := s.IntTest().Namespace
 	frontend := "https_9090"
 	lsetName := "listenerset-grant-revoked"
 	entryName := "ls-revoked-listener"
@@ -285,7 +285,7 @@ func (s *ListenerSetSuite) Test_9_TLS_Grant_Revoked() {
 	// Permitted from the start: the entry is programmed, and the one crt-list of the shared
 	// port holds both certificates.
 	grant := s.listenerSetCertificateGrant("allow-listener-set-cert", "ListenerSet", "ls-grant-cert")
-	s.Require().NoError(utils.CreateRuntimeObject(ctx, s.Test().Client, grant, true))
+	s.Require().NoError(utils.CreateRuntimeObject(ctx, s.IntTest().Client, grant, true))
 
 	s.ExpectListenerSetEntryConditions(ctx, ns, lsetName, entryName, acceptedEntry())
 	s.ExpectListenerSetConditions(ctx, ns, lsetName, listenerSetServable())
@@ -296,7 +296,7 @@ func (s *ListenerSetSuite) Test_9_TLS_Grant_Revoked() {
 	// certificate it brought leaves the crt-list while the Gateway's own stays. A failure
 	// before this point leaves the grant behind; the suite's own teardown deletes the
 	// namespace it lives in.
-	s.Require().NoError(utils.DeleteRuntimeObject(ctx, s.Test().Client, grant, false))
+	s.Require().NoError(utils.DeleteRuntimeObject(ctx, s.IntTest().Client, grant, false))
 
 	s.ExpectListenerSetEntryHasCondition(ctx, ns, lsetName, entryName, metav1.Condition{
 		Type:   string(gatewayv1.ListenerEntryConditionResolvedRefs),

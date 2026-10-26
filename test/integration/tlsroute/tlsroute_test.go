@@ -31,10 +31,10 @@ func (s *TLSRouteSslPassthroughTestSuite) Test_TLSRoute_SSL_Passthrough() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	tlsRouteName := "tlsroute"
-	s.expectConditionsRouteUpdated(s.Test().Ctx, s.Test().Namespace, tlsRouteName, expectedConditions)
+	s.expectConditionsRouteUpdated(s.IntTest().Ctx, s.IntTest().Namespace, tlsRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "tls-gateway", "tls", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "tls-gateway", "tls", 1)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")

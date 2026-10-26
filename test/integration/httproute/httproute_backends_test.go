@@ -39,15 +39,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo-1_80__", "hug_e2e-tests-httproute_http-echo-2_80__", "hug_e2e-tests-httproute_http-echo-3_80__"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -69,10 +69,10 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
@@ -81,7 +81,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter() {
 		"hug_e2e-tests-httproute_http-echo-2_80_e771b6a447417b25dc95464a26a6cc87",
 		"hug_e2e-tests-httproute_http-echo-3_80__",
 	}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -102,15 +102,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_response_header_filt
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{
 		"hug_e2e-tests-httproute_http-echo-1_80_94509efedc7f21eaa984f3a51d5d6edc",
 	}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectListenerRouteMapContents(expectedMapsPath)
@@ -130,15 +130,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_url_rewrite() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{
 		"hug_e2e-tests-httproute_http-echo-1_80_dabac5b6954afe29685ddd2d2e164b96",
 	}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectListenerRouteMapContents(expectedMapsPath)
@@ -158,16 +158,16 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_redirect() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{
 		"hug_redirect_0a19443037896884091efc4f20923e4d",
 		"hug_redirect_9769de3253e6068ceb3c78cf92e3305c",
 	}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectListenerRouteMapContents(expectedMapsPath)
@@ -187,15 +187,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_cors() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{
 		"hug_e2e-tests-httproute_http-echo-1_80_c6af167c07cbe29398c410dae94f5dd9",
 	}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectListenerRouteMapContents(expectedMapsPath)
@@ -215,7 +215,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_cors() {
 // 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 // 	httpRouteName := "route-echo-1"
-// 	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+// 	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 // }
 
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_cross_level() {
@@ -230,7 +230,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_cross_leve
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 }
 
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_partial() {
@@ -245,7 +245,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_partial() 
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 }
 
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_all_rules_invalid() {
@@ -260,7 +260,7 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_all_rules_
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 }
 
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_dynamic_delete_1_backend() {
@@ -278,15 +278,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_dynamic_delete_1_bac
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo-1_80__", "hug_e2e-tests-httproute_http-echo-2_80__", "hug_e2e-tests-httproute_http-echo-3_80__"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -302,8 +302,8 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_dynamic_delete_1_bac
 	s.CreateFixtures(fixturePath, manifests)
 	backendsExpectationsPath = path.Join(backendsExpectationsPath, "v2")
 	expectedBackends = []string{"hug_e2e-tests-httproute_http-echo-1_80__", "hug_e2e-tests-httproute_http-echo-3_80__"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
-	s.ExpectBackendsDoNotExist(s.Test().Ctx, "hug_e2e-tests-httproute_http-echo-2_80__")
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackendsDoNotExist(s.IntTest().Ctx, "hug_e2e-tests-httproute_http-echo-2_80__")
 
 	// Check Maps
 	expectedMapsPath = path.Join(expectedMapsPath, "v2")
@@ -326,15 +326,15 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_1_backend_dynamic_de
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo-1"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo-1_80__"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -344,16 +344,16 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_1_backend_dynamic_de
 	// Now remove the Service http-echo-1
 	// Backend hug_e2e-tests-httproute_http-echo-1_80__ should be deleted
 	s.deleteService("http-echo-1")
-	s.ExpectBackendsDoNotExist(s.Test().Ctx, "hug_e2e-tests-httproute_http-echo-1_80__")
+	s.ExpectBackendsDoNotExist(s.IntTest().Ctx, "hug_e2e-tests-httproute_http-echo-1_80__")
 	s.CreateFixtures(fixturePath, []string{"http-echo-1.yaml"}) // Recreate the service in order to please the defer  s.CleanupFixtures(fixturePath, manifests)
 }
 
 func (s *HTTPRouteTestSuite) deleteService(name string) *v1.Service {
 	var service v1.Service
-	err := s.Test().Client.Get(s.Test().Ctx, client.ObjectKey{Name: name, Namespace: s.Test().Namespace}, &service)
+	err := s.IntTest().Client.Get(s.IntTest().Ctx, client.ObjectKey{Name: name, Namespace: s.IntTest().Namespace}, &service)
 	s.Require().NoError(err)
 
-	err = s.Test().Client.Delete(s.Test().Ctx, &service)
+	err = s.IntTest().Client.Delete(s.IntTest().Ctx, &service)
 	s.Require().NoError(err)
 
 	return &service

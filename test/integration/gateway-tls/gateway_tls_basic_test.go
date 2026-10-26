@@ -51,14 +51,14 @@ func (s *GatewayTLSTestSuite) Test_Gateway_TLS_missingSecret() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectGwConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectGwConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Check Maps
-	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
+	mapFileRelativePath := "hug_" + s.IntTest().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
-	mapFileRelativePath = "hug_" + s.Test().Namespace + "_gateway_https"
+	mapFileRelativePath = "hug_" + s.IntTest().Namespace + "_gateway_https"
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -78,14 +78,14 @@ func (s *GatewayTLSTestSuite) Test_Gateway_TLS_okSecret() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectGwConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectGwConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Check Maps
-	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
+	mapFileRelativePath := "hug_" + s.IntTest().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
-	mapFileRelativePath = "hug_" + s.Test().Namespace + "_gateway_https"
+	mapFileRelativePath = "hug_" + s.IntTest().Namespace + "_gateway_https"
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
@@ -106,35 +106,35 @@ func (s *GatewayTLSTestSuite) Test_Gateway_TLS_Dynamic_ok_missing_ok_Secret() {
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectGwConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectGwConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// 2 - Delete the secret
 	secret := s.deleteSecret("offload")
 	expectedListenerStatusesPath = path.Join(expectationsPath, "gw-listener_statuses_ko_2.yaml")
 	expectedListenerStatuses = s.YamlToListenerStatuses(expectedListenerStatusesPath)
-	s.expectGwConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectGwConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// // 3 - Re-create the secret
 	s.createSecret(secret)
 	expectedListenerStatusesPath = path.Join(expectationsPath, "gw-listener_statuses_ok_3.yaml")
 	expectedListenerStatuses = s.YamlToListenerStatuses(expectedListenerStatusesPath)
-	s.expectGwConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectGwConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Check Maps
-	mapFileRelativePath := "hug_" + s.Test().Namespace + "_gateway_http"
+	mapFileRelativePath := "hug_" + s.IntTest().Namespace + "_gateway_http"
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 
-	mapFileRelativePath = "hug_" + s.Test().Namespace + "_gateway_https"
+	mapFileRelativePath = "hug_" + s.IntTest().Namespace + "_gateway_https"
 	s.ExpectMapContents(mapFileRelativePath, expectedMapsPath)
 }
 
 func (s *GatewayTLSTestSuite) deleteSecret(name string) *v1.Secret {
 	var secret v1.Secret
-	err := s.Test().Client.Get(s.Test().Ctx, client.ObjectKey{Name: name, Namespace: s.Test().Namespace}, &secret)
+	err := s.IntTest().Client.Get(s.IntTest().Ctx, client.ObjectKey{Name: name, Namespace: s.IntTest().Namespace}, &secret)
 	s.Require().NoError(err)
 
-	err = s.Test().Client.Delete(s.Test().Ctx, &secret)
+	err = s.IntTest().Client.Delete(s.IntTest().Ctx, &secret)
 	s.Require().NoError(err)
 
 	return &secret
@@ -142,6 +142,6 @@ func (s *GatewayTLSTestSuite) deleteSecret(name string) *v1.Secret {
 
 func (s *GatewayTLSTestSuite) createSecret(secret *v1.Secret) {
 	secret.ResourceVersion = ""
-	err := s.Test().Client.Create(s.Test().Ctx, secret)
+	err := s.IntTest().Client.Create(s.IntTest().Ctx, secret)
 	s.Require().NoError(err)
 }

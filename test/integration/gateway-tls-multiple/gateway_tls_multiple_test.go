@@ -46,36 +46,36 @@ func (s *GatewayTLSMultipleSuite) Test_Gateway_TLS_multiple_same_namespace_ok() 
 	expectedListenerStatuses := s.YamlToListenerStatuses(expectedListenerStatusesPath)
 
 	gwName := "gateway"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, gwName, expectedConditions, expectedListenerStatuses)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, gwName, expectedConditions, expectedListenerStatuses)
 
 	// Check certificates
 	expectedCerts := []*models.SslCertificate{
 		{
-			StorageName: path.Join(s.Test().HaproxyCfgDir, "certs", s.Test().Namespace, "of/hug_e2e-tests-gateway-tls-multiple_offload.pem"),
+			StorageName: path.Join(s.IntTest().HaproxyCfgDir, "certs", s.IntTest().Namespace, "of/hug_e2e-tests-gateway-tls-multiple_offload.pem"),
 			Subject:     "/CN=offload.haproxy",
 		},
 		{
-			StorageName: path.Join(s.Test().HaproxyCfgDir, "certs", s.Test().Namespace, "of/hug_e2e-tests-gateway-tls-multiple_offload2.pem"),
+			StorageName: path.Join(s.IntTest().HaproxyCfgDir, "certs", s.IntTest().Namespace, "of/hug_e2e-tests-gateway-tls-multiple_offload2.pem"),
 			Subject:     "/CN=offload2.haproxy",
 		},
 	}
-	s.ExpectCertificates(s.Test().Ctx, expectedCerts)
+	s.ExpectCertificates(s.IntTest().Ctx, expectedCerts)
 
 	// Check crt-list
 	expectedCrtLists := map[futils.FilePath][]string{ // map[crt-list .File]
 		{
-			Dir:      path.Join(s.Test().HaproxyCfgDir, "certlists"),
+			Dir:      path.Join(s.IntTest().HaproxyCfgDir, "certlists"),
 			FileName: "/hug_https_8443.list",
 		}: {
-			path.Join(s.Test().HaproxyCfgDir, "certs", s.Test().Namespace, "of", "hug_e2e-tests-gateway-tls-multiple_offload.pem"),
-			path.Join(s.Test().HaproxyCfgDir, "certs", s.Test().Namespace, "of", "hug_e2e-tests-gateway-tls-multiple_offload2.pem"),
+			path.Join(s.IntTest().HaproxyCfgDir, "certs", s.IntTest().Namespace, "of", "hug_e2e-tests-gateway-tls-multiple_offload.pem"),
+			path.Join(s.IntTest().HaproxyCfgDir, "certs", s.IntTest().Namespace, "of", "hug_e2e-tests-gateway-tls-multiple_offload2.pem"),
 		},
 	}
-	s.ExpectCrtLists(s.Test().Ctx, expectedCrtLists)
+	s.ExpectCrtLists(s.IntTest().Ctx, expectedCrtLists)
 
 	frontendsExpectationsPath := path.Join(expectationsPath, "frontends")
 	expectedFrontends := []string{"hug_http_8080", "hug_https_8443"}
-	s.ExpectFrontends(s.Test().Ctx, frontendsExpectationsPath, expectedFrontends)
+	s.ExpectFrontends(s.IntTest().Ctx, frontendsExpectationsPath, expectedFrontends)
 
 	// Check Maps
 	mapFileRelativePath := "hug_http_8080"

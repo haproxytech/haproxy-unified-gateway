@@ -36,15 +36,15 @@ func (s *HTTPRouteTestSuite) Test_Timeout_OK() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo_80__"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -68,15 +68,15 @@ func (s *HTTPRouteTestSuite) Test_Timeout_Update() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo_80__"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -89,11 +89,11 @@ func (s *HTTPRouteTestSuite) Test_Timeout_Update() {
 	backendsExpectationsPath = path.Join(expectationsPath, "backends")
 	expectedBackends = []string{"hug_e2e-tests-httproute_http-echo_80__"}
 	s.CreateFixtures(fixturePath, []string{"route.yaml"})
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 }
 
 func (s *HTTPRouteTestSuite) Test_Timeout_Removal() {
@@ -111,15 +111,15 @@ func (s *HTTPRouteTestSuite) Test_Timeout_Removal() {
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	httpRouteName := "route-echo"
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
 
 	// haproxy.cfg Backends
 	backendsExpectationsPath := path.Join(expectationsPath, "backends")
 	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo_80__"}
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 
 	// Check Maps
 	expectedMapsPath := path.Join(expectationsPath, "maps")
@@ -132,9 +132,9 @@ func (s *HTTPRouteTestSuite) Test_Timeout_Removal() {
 	backendsExpectationsPath = path.Join(expectationsPath, "backends")
 	expectedBackends = []string{"hug_e2e-tests-httproute_http-echo_80__"}
 	s.CreateFixtures(fixturePath, []string{"route.yaml"})
-	s.expectConditionsUpdated(s.Test().Ctx, s.Test().Namespace, httpRouteName, expectedConditions)
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.expectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "gateway", "http", 1)
-	s.ExpectBackends(s.Test().Ctx, backendsExpectationsPath, expectedBackends)
+	s.expectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "gateway", "http", 1)
+	s.ExpectBackends(s.IntTest().Ctx, backendsExpectationsPath, expectedBackends)
 }

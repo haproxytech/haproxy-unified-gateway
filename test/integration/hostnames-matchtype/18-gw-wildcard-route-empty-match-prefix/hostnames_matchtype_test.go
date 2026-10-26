@@ -36,11 +36,11 @@ func (s *HostnamesMatchtypeSuite18) Test_18_Wildcard_Route_Empty_Match_Prefix() 
 	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
 
 	route := "route-echo-http"
-	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, route, expectedConditions)
+	s.ExpectRouteConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, route, expectedConditions)
 
 	// Check AttachedRoutes on Gateway status
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "http", 1)
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "https", 1)
+	s.ExpectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "hug-gateway", "http", 1)
+	s.ExpectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "hug-gateway", "https", 1)
 
 	// Check Maps
 	expectedMapsPath := path.Join("expectations", "maps")

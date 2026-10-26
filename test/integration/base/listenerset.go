@@ -80,7 +80,7 @@ func (b *BaseSuite) ExpectListenerSetConditions(ctx context.Context, namespace, 
 	var why string
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, lset); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, lset); err != nil {
 			// Recorded rather than left blank: a read that keeps failing is a case
 			// naming something that is not there, and an empty explanation reads as a
 			// comparison that found nothing to say.
@@ -103,7 +103,7 @@ func (b *BaseSuite) ExpectListenerSetEntryConditions(ctx context.Context, namesp
 	var why string
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
 			why = fmt.Sprintf("the ListenerSet could not be read: %v", err)
 			return false
 		}
@@ -128,7 +128,7 @@ func (b *BaseSuite) ExpectListenerSetEntryHasCondition(ctx context.Context, name
 	var got []metav1.Condition
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
 			return false
 		}
 		for _, entry := range lset.Status.Listeners {
@@ -149,7 +149,7 @@ func (b *BaseSuite) ExpectListenerSetEntryHasCondition(ctx context.Context, name
 func (b *BaseSuite) ExpectListenerSetEntryAttachedRoutes(ctx context.Context, namespace, lsetName, entryName string, expected int32) {
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
 			return false
 		}
 		for _, entry := range lset.Status.Listeners {
@@ -170,7 +170,7 @@ func (b *BaseSuite) ExpectListenerSetEntries(ctx context.Context, namespace, lse
 	var got []string
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: lsetName, Namespace: namespace}, lset); err != nil {
 			return false
 		}
 		got = make([]string, 0, len(lset.Status.Listeners))
@@ -194,7 +194,7 @@ func (b *BaseSuite) ExpectAttachedListenerSets(ctx context.Context, namespace, g
 	var got int
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		gw := &gatewayv1.Gateway{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: gwName, Namespace: namespace}, gw); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: gwName, Namespace: namespace}, gw); err != nil {
 			return false
 		}
 		got = 0
@@ -291,7 +291,7 @@ func (b *BaseSuite) ExpectListenerSetReportsNothing(ctx context.Context, namespa
 	var entries int
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, lset); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, lset); err != nil {
 			return false
 		}
 		got = lset.Status.Conditions
@@ -324,7 +324,7 @@ func seededCondition(conditionType gatewayv1.ListenerSetConditionType) metav1.Co
 func (b *BaseSuite) ExpectListenerSetDeleted(ctx context.Context, namespace, name string) {
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		lset := &gatewayv1.ListenerSet{}
-		err := b.Test().Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, lset)
+		err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, lset)
 		return apierrors.IsNotFound(err)
 	}) {
 		b.T().Fatalf("ListenerSet %s/%s still exists", namespace, name)
@@ -345,7 +345,7 @@ func (b *BaseSuite) ExpectRouteParentHasCondition(ctx context.Context, namespace
 	var seen []string
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		route := &gatewayv1.HTTPRoute{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: routeName, Namespace: namespace}, route); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: routeName, Namespace: namespace}, route); err != nil {
 			return false
 		}
 		seen = seen[:0]
@@ -398,7 +398,7 @@ func (b *BaseSuite) ExpectRouteHasNoParent(ctx context.Context, namespace, route
 	var seen []string
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		route := &gatewayv1.HTTPRoute{}
-		if err := b.Test().Client.Get(ctx, types.NamespacedName{Name: routeName, Namespace: namespace}, route); err != nil {
+		if err := b.IntTest().Client.Get(ctx, types.NamespacedName{Name: routeName, Namespace: namespace}, route); err != nil {
 			return false
 		}
 		seen = seen[:0]

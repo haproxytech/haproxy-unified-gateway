@@ -51,14 +51,14 @@ func (s *DefaultsSuite) SetupSuite() {
 	s.BaseSuite.SetupSuite("", 0)
 
 	// Create the "test" namespace required for CRs.
-	err := utils.CreateRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
+	err := utils.CreateRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, &v1.Namespace{
 		Name: hugConfNamespace,
 	}, true)
 	s.Require().NoError(err)
 }
 
 func (s *DefaultsSuite) TearDownSuite() {
-	_ = utils.DeleteRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
+	_ = utils.DeleteRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, &v1.Namespace{
 		Name: hugConfNamespace,
 	}, false)
 	s.BaseSuite.TearDownSuite()
@@ -67,7 +67,7 @@ func (s *DefaultsSuite) TearDownSuite() {
 // expectConnectTimeout waits until HAProxy's active defaults section connect_timeout matches the expected value.
 func (s *DefaultsSuite) expectConnectTimeout(expected int64) {
 	s.Eventually(func() bool {
-		defaults, err := s.Test().HaproxyClient.DefaultsSectionGet("haproxytech")
+		defaults, err := s.IntTest().HaproxyClient.DefaultsSectionGet("haproxytech")
 		if err != nil || defaults == nil || defaults.ConnectTimeout == nil {
 			return false
 		}
@@ -79,7 +79,7 @@ func (s *DefaultsSuite) expectConnectTimeout(expected int64) {
 func (s *DefaultsSuite) expectLogTargetCount(n int) {
 	var got models.LogTargets
 	s.Eventually(func() bool {
-		defaults, err := s.Test().HaproxyClient.DefaultsSectionGet("haproxytech")
+		defaults, err := s.IntTest().HaproxyClient.DefaultsSectionGet("haproxytech")
 		if err != nil || defaults == nil {
 			return false
 		}
@@ -93,7 +93,7 @@ func (s *DefaultsSuite) expectLogTargetCount(n int) {
 func (s *DefaultsSuite) expectACLCount(n int) {
 	var got models.Acls
 	s.Eventually(func() bool {
-		defaults, err := s.Test().HaproxyClient.DefaultsSectionGet("haproxytech")
+		defaults, err := s.IntTest().HaproxyClient.DefaultsSectionGet("haproxytech")
 		if err != nil || defaults == nil {
 			return false
 		}
@@ -106,7 +106,7 @@ func (s *DefaultsSuite) expectACLCount(n int) {
 func (s *DefaultsSuite) expectHTTPErrorRuleCount(n int) {
 	var got models.HTTPErrorRules
 	s.Eventually(func() bool {
-		defaults, err := s.Test().HaproxyClient.DefaultsSectionGet("haproxytech")
+		defaults, err := s.IntTest().HaproxyClient.DefaultsSectionGet("haproxytech")
 		if err != nil || defaults == nil {
 			return false
 		}

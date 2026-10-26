@@ -59,7 +59,7 @@ type BaseSuite struct {
 	test          IntTest
 }
 
-func (b *BaseSuite) Test() IntTest {
+func (b *BaseSuite) IntTest() IntTest {
 	return b.test
 }
 
@@ -316,9 +316,9 @@ func (b *BaseSuite) dumpMetricsText() {
 // If manifestNames, it will create only the objects in manifestNames (a sublist of the files in fixturePath)
 func (b *BaseSuite) CreateFixtures(fixturePath string, manifestNames []string) {
 	params := utils.RuntimeYamlParams{
-		Ctx:               b.Test().Ctx,
-		CrtlruntimeClient: b.Test().Client,
-		Namespace:         b.Test().Namespace,
+		Ctx:               b.IntTest().Ctx,
+		CrtlruntimeClient: b.IntTest().Client,
+		Namespace:         b.IntTest().Namespace,
 		Dir:               fixturePath,
 		WaitForResult:     true,
 		ManifestNames:     manifestNames,
@@ -340,9 +340,9 @@ func (b *BaseSuite) CleanupFixturesCheckMapFiles(fixturePath string, manifestNam
 	b.T().Logf("Cleaning up fixtures in %s", fixturePath)
 	defer b.T().Logf("End of cleaning up fixtures in %s", fixturePath)
 	params := utils.RuntimeYamlParams{
-		Ctx:               b.Test().Ctx,
-		CrtlruntimeClient: b.Test().Client,
-		Namespace:         b.Test().Namespace,
+		Ctx:               b.IntTest().Ctx,
+		CrtlruntimeClient: b.IntTest().Client,
+		Namespace:         b.IntTest().Namespace,
 		Dir:               fixturePath,
 		WaitForResult:     true,
 		ManifestNames:     manifestNames,
@@ -357,8 +357,8 @@ func (b *BaseSuite) CleanupFixturesCheckMapFiles(fixturePath string, manifestNam
 
 func (b *BaseSuite) CreateFixturesInNamespace(fixturePath, namespace string, manifestNames []string) {
 	params := utils.RuntimeYamlParams{
-		Ctx:               b.Test().Ctx,
-		CrtlruntimeClient: b.Test().Client,
+		Ctx:               b.IntTest().Ctx,
+		CrtlruntimeClient: b.IntTest().Client,
 		Namespace:         namespace,
 		Dir:               fixturePath,
 		WaitForResult:     true,
@@ -371,9 +371,9 @@ func (b *BaseSuite) CreateFixturesInNamespace(fixturePath, namespace string, man
 
 func (b *BaseSuite) CleanupFixtures(fixturePath string, manifestNames []string) {
 	params := utils.RuntimeYamlParams{
-		Ctx:               b.Test().Ctx,
-		CrtlruntimeClient: b.Test().Client,
-		Namespace:         b.Test().Namespace,
+		Ctx:               b.IntTest().Ctx,
+		CrtlruntimeClient: b.IntTest().Client,
+		Namespace:         b.IntTest().Namespace,
 		Dir:               fixturePath,
 		WaitForResult:     true,
 		ManifestNames:     manifestNames,
@@ -385,8 +385,8 @@ func (b *BaseSuite) CleanupFixtures(fixturePath string, manifestNames []string) 
 
 func (b *BaseSuite) CleanupFixturesInNamespace(fixturePath, namespace string, manifestNames []string) {
 	params := utils.RuntimeYamlParams{
-		Ctx:               b.Test().Ctx,
-		CrtlruntimeClient: b.Test().Client,
+		Ctx:               b.IntTest().Ctx,
+		CrtlruntimeClient: b.IntTest().Client,
 		Namespace:         namespace,
 		Dir:               fixturePath,
 		WaitForResult:     true,
@@ -405,7 +405,7 @@ func (b *BaseSuite) ExpectCertificates(ctx context.Context, expectedCerts []*mod
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		// Runtime command to get the list of certs
 		// Warning: the returned certs are not filled completely, only the StorageName and Description
-		certs, err := b.Test().RuntimeClient.ShowCerts()
+		certs, err := b.IntTest().RuntimeClient.ShowCerts()
 		if err != nil {
 			return false
 		}
@@ -425,7 +425,7 @@ func (b *BaseSuite) ExpectCertificates(ctx context.Context, expectedCerts []*mod
 				return false
 			}
 			// Runtime command to actually get the Cert content
-			gotCert, err := b.Test().RuntimeClient.ShowCertificate(expectedCert.StorageName)
+			gotCert, err := b.IntTest().RuntimeClient.ShowCertificate(expectedCert.StorageName)
 			b.Require().NoError(err)
 			areOK := b.areCertsEqual(expectedCert, gotCert)
 			if !areOK {
@@ -453,7 +453,7 @@ func (*BaseSuite) areCertsEqual(expected, got *models.SslCertificate) bool {
 func (b *BaseSuite) ExpectCrtLists(ctx context.Context, expectedCrtLists map[futils.FilePath][]string) {
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
 		// Runtime command to get the list of crtLists
-		crtLists, err := b.Test().RuntimeClient.ShowCrtLists()
+		crtLists, err := b.IntTest().RuntimeClient.ShowCrtLists()
 		if err != nil {
 			return false
 		}
@@ -752,8 +752,8 @@ func (b *BaseSuite) ExpectRouteConditionsUpdated(ctx context.Context, namespace,
 	route := &gatewayv1.HTTPRoute{}
 	var gotConditions rc.RouteConditions
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
-		if err := b.Test().Client.Get(
-			b.Test().Ctx,
+		if err := b.IntTest().Client.Get(
+			b.IntTest().Ctx,
 			types.NamespacedName{Name: name, Namespace: namespace}, route,
 		); err != nil {
 			return false
@@ -772,8 +772,8 @@ func (b *BaseSuite) ExpectRouteConditionsUpdated(ctx context.Context, namespace,
 func (b *BaseSuite) ExpectAttachedRoute(ctx context.Context, namespace, gwName, listenerName string, expectNbAttachedRoutes int32) {
 	gw := &gatewayv1.Gateway{}
 	if !utils.WaitFor(ctx, interval, timeout, func() bool {
-		if err := b.Test().Client.Get(
-			b.Test().Ctx,
+		if err := b.IntTest().Client.Get(
+			b.IntTest().Ctx,
 			types.NamespacedName{Name: gwName, Namespace: namespace}, gw,
 		); err != nil {
 			return false

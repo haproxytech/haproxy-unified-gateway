@@ -47,21 +47,21 @@ func (s *MatchConditionsSuite) Test_MatchConditions() {
 	expectationsPath := path.Join(fixtureDirPath, "expectations")
 
 	// The valid route is Accepted with all references resolved.
-	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, "route-match-conditions",
+	s.ExpectRouteConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, "route-match-conditions",
 		s.YamlToRouteConditions(path.Join(expectationsPath, "route-conditions.yaml")))
 
 	// The route with a PCRE-only header regex drops that rule and reports
 	// PartiallyInvalid with the UnsupportedValue reason.
-	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, "route-invalid-regex",
+	s.ExpectRouteConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, "route-invalid-regex",
 		s.YamlToRouteConditions(path.Join(expectationsPath, "route-invalid-conditions.yaml")))
 
 	// Two rules with identical unconditional matches must resolve to the
 	// first rule's backend alone, not a random split between the two.
-	s.ExpectRouteConditionsUpdated(s.Test().Ctx, s.Test().Namespace, "route-dup-unconditional",
+	s.ExpectRouteConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, "route-dup-unconditional",
 		s.YamlToRouteConditions(path.Join(expectationsPath, "route-dup-conditions.yaml")))
 
 	// All three routes attach to the http listener.
-	s.ExpectAttachedRoute(s.Test().Ctx, s.Test().Namespace, "hug-gateway", "http", 3)
+	s.ExpectAttachedRoute(s.IntTest().Ctx, s.IntTest().Namespace, "hug-gateway", "http", 3)
 
 	// Map goldens: conditional path value + multi-candidate listener-route.
 	expectedMapsPath := path.Join(expectationsPath, "maps")

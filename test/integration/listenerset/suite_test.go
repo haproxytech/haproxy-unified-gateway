@@ -46,14 +46,14 @@ func TestListenerSetSuite(t *testing.T) {
 func (s *ListenerSetSuite) SetupSuite() {
 	s.BaseSuite.SetupSuite("", 0)
 
-	err := utils.CreateRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
+	err := utils.CreateRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, &v1.Namespace{
 		Name: secretNamespace,
 	}, true)
 	s.Require().NoError(err)
 }
 
 func (s *ListenerSetSuite) TearDownSuite() {
-	_ = utils.DeleteRuntimeObject(s.Test().Ctx, s.Test().Client, &v1.Namespace{
+	_ = utils.DeleteRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, &v1.Namespace{
 		Name: secretNamespace,
 	}, false)
 	s.BaseSuite.TearDownSuite()
