@@ -1,0 +1,35 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: http-echo-hello
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: http-echo-hello
+  template:
+    metadata:
+      labels:
+        app: http-echo-hello
+    spec:
+      containers:
+        - name: http-echo
+          image: "haproxytech/http-echo:latest"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8888
+              protocol: TCP
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: http-echo-hello
+spec:
+  selector:
+    app: http-echo-hello
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http

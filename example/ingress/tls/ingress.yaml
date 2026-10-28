@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello-tls
+spec:
+  ingressClassName: hug
+  # Referencing a TLS Secret is what makes HUG declare the HTTPS listener of the
+  # synthetic ingress gateway, on --https-ingress-frontend-port (8443 by default).
+  tls:
+    - hosts:
+        - hello.haproxy.local
+      secretName: hello-tls
+  rules:
+    - host: hello.haproxy.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo-tls
+                port:
+                  number: 80

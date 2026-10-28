@@ -55,3 +55,15 @@ After the image is available in your cluster, you can apply the example manifest
 
 * [Hello World](./http-route/hello-world/): A simple example of exposing a service with an HTTPRoute.
 * [Blue-Green Deployment](./http-route/blue-green/): An example of traffic splitting between two versions of a service.
+
+### Ingress Examples
+
+Kubernetes `Ingress` support is optional and disabled by default: enable it by
+starting the controller with `--enable-ingress`. See
+[documentation/ingress.md](../documentation/ingress.md) for how an Ingress is
+translated onto the Gateway API pipeline, the controller options and the
+restrictions compared to the HAProxy Ingress Controller — configuration is
+carried by the Backend CR rather than by annotations.
+
+* [Hello World](./ingress/hello-world/): An Ingress with `Prefix` and `Exact` paths.
+* [TLS Termination](./ingress/tls/): An Ingress with `spec.tls`, serving HTTPS from a Secret.

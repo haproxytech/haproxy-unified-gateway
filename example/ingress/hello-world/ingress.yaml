@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello-world
+spec:
+  ingressClassName: hug
+  rules:
+    - host: hello.ingress.local
+      http:
+        paths:
+          # Prefix: /all and every path below it (/all, /all/sub, ...).
+          # The backend port is given by number.
+          - path: /all
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo-hello
+                port:
+                  number: 80
+          # Exact: only /hostname, not /hostname/sub.
+          # The backend port is given by name and resolved against the Service.
+          - path: /hostname
+            pathType: Exact
+            backend:
+              service:
+                name: http-echo-hello
+                port:
+                  name: http
