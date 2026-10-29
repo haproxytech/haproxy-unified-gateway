@@ -127,7 +127,7 @@ func (c *clientNative) BackendEdit(backend models.Backend) error {
 				)
 			}
 		} else {
-			// We did not try runtime update (server create, for now is NOT done through runtime, it needs a reload)
+			// No runtime attempt (e.g. runtime updates disabled): reload persists the new servers.
 			reload.Instance().SetReload("[onlyServersUpdated] [reload needed] - backend %s", backend.Name)
 		}
 	} else if backendChanged { //  backendChanged = false => only metadata changed. no need to reload.
