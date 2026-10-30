@@ -1,7 +1,7 @@
 # Gateway API Conformance Testing in CI
 
 This document describes the CI pipeline for Gateway API conformance testing used in the
-`conformance-MR-GW-API-1_6_3` job. It complements the standard conformance setup
+`conformance-MR-GW-API-1_7_0` job. It complements the standard conformance setup
 described in [conformance.md](conformance.md). For publishing a release's report
 upstream, see [conformance-publish.md](conformance-publish.md).
 
@@ -157,7 +157,7 @@ Defines three resources applied together:
 
 ---
 
-## CI pipeline — `conformance-MR-GW-API-1_6_3`
+## CI pipeline — `conformance-MR-GW-API-1_7_0`
 
 The job runs on every push and merge request. Its script executes three tasks:
 
@@ -176,7 +176,7 @@ into the Kind cluster:
 
 ```
 docker build → haproxytech/hug-conformance:latest
-kind load docker-image → conformance-mr-1-6-3 cluster
+kind load docker-image → conformance-mr-1-7-0 cluster
 ```
 
 Must happen after the cluster exists (step 1) and before the Job runs (step 3).
@@ -198,8 +198,8 @@ is no registry to pull from.
 4. **Retrieves results** using `docker cp` from the Kind node container (accessible via
    the DinD Docker daemon):
    ```
-   docker cp conformance-mr-1-6-3-control-plane:/tmp/conformance-results/junit.xml ...
-   docker cp conformance-mr-1-6-3-control-plane:/tmp/conformance-results/conformance-report.yaml ...
+   docker cp conformance-mr-1-7-0-control-plane:/tmp/conformance-results/junit.xml ...
+   docker cp conformance-mr-1-7-0-control-plane:/tmp/conformance-results/conformance-report.yaml ...
    ```
 5. **Deletes** the Job and generates an HTML report.
 6. **Exits** with the Job's status — if tests failed, the CI step fails.
@@ -214,9 +214,9 @@ Deletes the Kind cluster regardless of whether the job succeeded or failed.
 
 | File | Content |
 |---|---|
-| `conformance-report-1.6.3.yaml` | Gateway API conformance report (YAML) |
-| `conformance-junit-1.6.3.xml` | JUnit XML — shown as test results in GitLab MR |
-| `conformance-junit-1.6.3.html` | Human-readable HTML summary |
+| `conformance-report-1.7.0.yaml` | Gateway API conformance report (YAML) |
+| `conformance-junit-1.7.0.xml` | JUnit XML — shown as test results in GitLab MR |
+| `conformance-junit-1.7.0.html` | Human-readable HTML summary |
 
 All three are written to `${CI_PROJECT_DIR}` and declared under `artifacts.paths` so
 they are always uploaded even when the job fails (`when: always`).

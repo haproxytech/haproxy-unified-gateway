@@ -10,4 +10,4 @@ versions:
     ga: "-"
     min_eol: "-"
     gw_api:
-      - "1.6.3"
+      - "1.7.0"

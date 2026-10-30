@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -36,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -287,7 +289,7 @@ func (r *GatewayReconciler) buildDeployment(resourceName, gwNS, gwName, gatewayF
 			"run": resourceName,
 			// The watched Gateway's namespace and name are labeled to allow the HUG controller to correlate the Deployment with the correct Gateway.
 			labelGatewayNSKey:   gwNS,
-			labelGatewayNameKey: gwName,
+			labelGatewayNameKey: gatewayNameLabelValue(gwName),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &one,
@@ -365,7 +367,7 @@ func (r *GatewayReconciler) buildService(resourceName, gwNS, gwName, svcLabelVal
 			hugServiceLabelKey: svcLabelVal,
 			// The watched Gateway's namespace and name are labeled to the HUG Service
 			labelGatewayNSKey:   gwNS,
-			labelGatewayNameKey: gwName,
+			labelGatewayNameKey: gatewayNameLabelValue(gwName),
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"run": resourceName},
@@ -384,6 +386,15 @@ func (r *GatewayReconciler) buildService(resourceName, gwNS, gwName, svcLabelVal
 func resourceName(gwNS, gwName string) string {
 	h := sha256.Sum256([]byte(gwNS + "/" + gwName))
 	return fmt.Sprintf("hug-%x", h[:8])
+}
+
+// Gateway names may exceed the 63-byte label value limit (253-byte DNS
+// subdomains since Gateway API v1.7.0); truncate the excess for labels.
+func gatewayNameLabelValue(gwName string) string {
+	if len(gwName) <= validation.LabelValueMaxLength {
+		return gwName
+	}
+	return strings.TrimRight(gwName[:validation.LabelValueMaxLength], "-._")
 }
 
 // serviceLabelValue returns the value of the app.kubernetes.io/name label

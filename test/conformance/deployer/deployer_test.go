@@ -15,6 +15,7 @@ package deployer
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -95,4 +97,35 @@ func TestReconcileDeploymentHealsGWAPICompat(t *testing.T) {
 	value, ok := gwAPICompatEnv(got.Spec.Template.Spec.Containers[0].Env)
 	require.True(t, ok, "reconciled deployment must set GWAPI_COMPAT")
 	require.Equal(t, "1", value)
+}
+
+// The GatewayNameMaximumLength conformance test uses a 253-byte gateway name,
+// which must not exceed the 63-byte label value limit on created resources.
+func TestGatewayNameLabelValue(t *testing.T) {
+	require.Equal(t, "gw", gatewayNameLabelValue("gw"))
+	require.Equal(t, strings.Repeat("a", 63), gatewayNameLabelValue(strings.Repeat("a", 63)))
+	require.Equal(t, strings.Repeat("a", 63), gatewayNameLabelValue(strings.Repeat("a", 253)))
+
+	// A cut may land on a separator; the value must stay a valid label.
+	require.Equal(t, strings.Repeat("a", 62), gatewayNameLabelValue(strings.Repeat("a", 62)+"-"+strings.Repeat("b", 200)))
+
+	r := &GatewayReconciler{Config: Config{
+		DeployerNs:      "haproxy-unified-gateway",
+		ControllerImage: "haproxytech/haproxy-unified-gateway:latest",
+		HugConfCRD:      "haproxy-unified-gateway/hugconf",
+	}}
+	gwNS := "gateway-conformance-infra"
+	gwName := "gateway-name-maximum-length-" + strings.Repeat("a", 253-28)
+	require.Len(t, gwName, 253)
+	res := resourceName(gwNS, gwName)
+
+	deploy := r.buildDeployment(res, gwNS, gwName, gwNS+"/"+gwName, hugServiceLabelKey+":"+res)
+	svc := r.buildService(res, gwNS, gwName, res)
+	for _, labels := range []map[string]string{deploy.Labels, svc.Labels} {
+		for k, v := range labels {
+			require.Empty(t, validation.IsValidLabelValue(v), "label %s=%q", k, v)
+		}
+	}
+	require.Equal(t, gwName[:63], deploy.Labels[labelGatewayNameKey])
+	require.Equal(t, gwNS, svc.Labels[labelGatewayNSKey])
 }

@@ -165,8 +165,8 @@ of invalid TLSRoutes.
 The conformance framework deploys its own echo backends. `task kind-create` pre-pulls
 and loads these images into Kind to avoid in-cluster pull timeouts:
 
-- `gcr.io/k8s-staging-gateway-api/echo-basic:v20260204-monthly-2026.01-60-g28382302`
-- `registry.k8s.io/coredns/coredns:v1.12.2`
+- `registry.k8s.io/gateway-api/conformance/echo-basic:v0.1.0`
+- `registry.k8s.io/gateway-api/conformance/echo-basic:v0.2.0`
 
 ---
 

@@ -18,3 +18,5 @@ spec:
           port: 80
       sessionPersistence:
         type: Header
+        header:
+          name: "X-Session"

@@ -172,7 +172,7 @@ func findPreviousJob() (int, int, error) {
 		}
 
 		for _, j := range jobs {
-			if j.Name == "conformance-GW-API-1_6_3" {
+			if j.Name == "conformance-GW-API-1_7_0" {
 				return j.ID, p.ID, nil
 			}
 		}
@@ -184,7 +184,7 @@ func downloadJUnit(jobID int) ([]byte, error) {
 	projectID := os.Getenv("CI_PROJECT_ID")
 	junitFile := os.Getenv("JUNIT_FILE")
 	if junitFile == "" {
-		junitFile = "conformance-junit-1.6.3.xml"
+		junitFile = "conformance-junit-1.7.0.xml"
 	}
 
 	data, err := gitlabAPI(fmt.Sprintf("/projects/%s/jobs/%d/artifacts", projectID, jobID))
@@ -248,7 +248,7 @@ func postToSlack(message string) error {
 func main() {
 	junitFile := os.Getenv("JUNIT_FILE")
 	if junitFile == "" {
-		junitFile = "conformance-junit-1.6.3.xml"
+		junitFile = "conformance-junit-1.7.0.xml"
 	}
 
 	todayData, err := os.ReadFile(junitFile)

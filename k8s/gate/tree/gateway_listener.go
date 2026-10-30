@@ -491,24 +491,26 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 		}
 
 		nsName := l.certificateRefKey(certRef)
-		treeSecret, ok := gateSecrets[nsName]
-		if !ok || treeSecret.TreeStatus.Status == store.StatusDeleted {
-			msg := fmt.Sprintf("Secret %s/%s does not exist", nsName.Namespace, nsName.Name)
-			l.CheckSecret = CheckResult{
-				Valid:      false,
-				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
-			}
-			continue
-		}
+		// The grant is checked before existence: an ungranted cross-namespace
+		// reference is RefNotPermitted even when the Secret is missing.
 		isAccessGranted := l.ExemptFromReferenceGrant || referenceGrantManager.IsAccessGranted(
 			l.referenceGrantFrom(),
-			GrantTo{Group: "", Kind: "Secret", Namespace: treeSecret.K8sResource.GetNamespace(), Name: treeSecret.K8sResource.GetName()},
+			GrantTo{Group: "", Kind: "Secret", Namespace: nsName.Namespace, Name: nsName.Name},
 		)
 		if !isAccessGranted {
 			msg := fmt.Sprintf("Secret reference %s/%s is not granted for listener in %s", nsName.Namespace, nsName.Name, l.ownerDescription())
 			l.CheckSecret = CheckResult{
 				Valid:      false,
 				Conditions: l.conditionsFor(conditions.VerdictRefNotPermitted, msg),
+			}
+			continue
+		}
+		treeSecret, ok := gateSecrets[nsName]
+		if !ok || treeSecret.TreeStatus.Status == store.StatusDeleted {
+			msg := fmt.Sprintf("Secret %s/%s does not exist", nsName.Namespace, nsName.Name)
+			l.CheckSecret = CheckResult{
+				Valid:      false,
+				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
 			}
 			continue
 		}

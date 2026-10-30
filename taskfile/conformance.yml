@@ -3,8 +3,8 @@ version: "3"
 
 vars:
   # Images required by the Gateway API conformance test suite
-  CONFORMANCE_ECHO_IMAGE: "gcr.io/k8s-staging-gateway-api/echo-basic:v20260204-monthly-2026.01-60-g28382302"
-  CONFORMANCE_COREDNS_IMAGE: "registry.k8s.io/coredns/coredns:v1.12.2"
+  CONFORMANCE_ECHO_IMAGE: "registry.k8s.io/gateway-api/conformance/echo-basic:v0.1.0"
+  CONFORMANCE_ECHO_IMAGE_UDP: "registry.k8s.io/gateway-api/conformance/echo-basic:v0.2.0"
 
 tasks:
   ### -----------------
@@ -27,7 +27,7 @@ tasks:
     desc: "pre-pull images required by conformance tests"
     cmds:
       - docker pull {{.CONFORMANCE_ECHO_IMAGE}}
-      - docker pull {{.CONFORMANCE_COREDNS_IMAGE}}
+      - docker pull {{.CONFORMANCE_ECHO_IMAGE_UDP}}
 
   conformance-create-ci:
     desc: "create a Kind cluster for conformance testing in Docker-in-Docker CI"
@@ -69,7 +69,7 @@ tasks:
       # Load images into Kind (HUG + conformance test images)
       - cmd: $(check-go-tool {{.KIND}}) load docker-image haproxytech/haproxy-unified-gateway:{{.HUG_CONTROLLER_IMAGE_TAG}} --name={{.CLUSTER_NAME}}
       - cmd: $(check-go-tool {{.KIND}}) load docker-image {{.CONFORMANCE_ECHO_IMAGE}} --name={{.CLUSTER_NAME}}
-      - cmd: $(check-go-tool {{.KIND}}) load docker-image {{.CONFORMANCE_COREDNS_IMAGE}} --name={{.CLUSTER_NAME}}
+      - cmd: $(check-go-tool {{.KIND}}) load docker-image {{.CONFORMANCE_ECHO_IMAGE_UDP}} --name={{.CLUSTER_NAME}}
       # Create namespace
       - /{{.kubectl}} apply -f {{.CONFIG_DIR}}/hug/namespace.yaml
       # Install CRDs

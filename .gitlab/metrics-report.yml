@@ -1,7 +1,7 @@
 metrics-report:
   stage: metrics-report
   needs:
-    - job: tests-GW-API-1_6_3
+    - job: tests-GW-API-1_7_0
       artifacts: true
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'

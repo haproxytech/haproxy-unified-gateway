@@ -18,5 +18,6 @@ spec:
           port: 80
       sessionPersistence:
         type: Cookie
-        sessionName: "sticky-cookie"
+        cookie:
+          name: "sticky-cookie"
         absoluteTimeout: 60s

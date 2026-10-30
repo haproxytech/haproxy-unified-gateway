@@ -143,17 +143,63 @@ func (sp *gatewayStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("wrong type %T", obj)
 	}
-	gwConds := generic.NewConditionsFromMetav1Conditions(gw.Status.Conditions)
-	if !sp.conditions.Equal(gwConds) {
+	// Foreign condition types are carried over, not compared: counting them
+	// would fail every check and force a rewrite each cycle.
+	owned, _ := splitOwnedConditions(gatewayOwnedConditionTypes, gw.Status.Conditions)
+	if !sp.conditions.Equal(generic.NewConditionsFromMetav1Conditions(owned)) {
 		return false, nil
 	}
-	if !ListenerStatusesEqual(sp.listenerStatuses, gw.Status.Listeners) {
+	if !listenerStatusesOwnEqual(sp.listenerStatuses, gw.Status.Listeners) {
 		return false, nil
 	}
 	if !attachedListenerSetsEqual(gw.Status.AttachedListenerSets, sp.attachedListenerSets) {
 		return false, nil
 	}
 	return gatewayAddressesEqual(sp.addresses, gw.Status.Addresses), nil
+}
+
+// The condition types this controller is responsible for. The CRD seeds
+// placeholders for these at creation; they are ours to replace or drop. Any
+// other type on the status belongs to another controller and is preserved.
+var (
+	gatewayOwnedConditionTypes = map[generic.ConditionType]struct{}{
+		generic.ConditionType(gatewayv1.GatewayConditionAccepted):   {},
+		generic.ConditionType(gatewayv1.GatewayConditionProgrammed): {},
+	}
+	listenerOwnedConditionTypes = map[generic.ConditionType]struct{}{
+		generic.ConditionType(gatewayv1.ListenerConditionAccepted):     {},
+		generic.ConditionType(gatewayv1.ListenerConditionProgrammed):   {},
+		generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs): {},
+		generic.ConditionType(gatewayv1.ListenerConditionConflicted):   {},
+	}
+)
+
+// splitOwnedConditions partitions live conditions by whether their type is one
+// we are responsible for.
+func splitOwnedConditions(owned map[generic.ConditionType]struct{}, live []metav1.Condition) (own, foreign []metav1.Condition) {
+	own = make([]metav1.Condition, 0, len(live))
+	foreign = make([]metav1.Condition, 0)
+	for _, cond := range live {
+		if _, ok := owned[generic.ConditionType(cond.Type)]; ok {
+			own = append(own, cond)
+		} else {
+			foreign = append(foreign, cond)
+		}
+	}
+	return own, foreign
+}
+
+// listenerStatusesOwnEqual is ListenerStatusesEqual narrowed to the condition
+// types we are responsible for, so another controller's conditions on the live
+// listener are neither compared nor lost in the copy.
+func listenerStatusesOwnEqual(ours, live []gatewayv1.ListenerStatus) bool {
+	filtered := make([]gatewayv1.ListenerStatus, len(live))
+	for i, ls := range live {
+		filtered[i] = ls
+		own, _ := splitOwnedConditions(listenerOwnedConditionTypes, ls.Conditions)
+		filtered[i].Conditions = own
+	}
+	return ListenerStatusesEqual(ours, filtered)
 }
 
 // attachedListenerSetsEqual compares the count we computed against the published
@@ -192,7 +238,22 @@ func (sp *gatewayStatusPatcher) SetStatus(obj client.Object) error {
 	if !ok {
 		return fmt.Errorf("wrong type %T", obj)
 	}
-	metav1conds := sp.conditions.ToMetav1Conditions()
+	// The update replaces the whole status, so conditions another controller
+	// wrote have to be carried over explicitly.
+	_, foreignConds := splitOwnedConditions(gatewayOwnedConditionTypes, gw.Status.Conditions)
+	metav1conds := append(sp.conditions.ToMetav1Conditions(), foreignConds...)
+
+	listeners := make([]gatewayv1.ListenerStatus, len(sp.listenerStatuses))
+	for i, computed := range sp.listenerStatuses {
+		for _, live := range gw.Status.Listeners {
+			if live.Name != computed.Name {
+				continue
+			}
+			_, foreign := splitOwnedConditions(listenerOwnedConditionTypes, live.Conditions)
+			computed.Conditions = append(slices.Clone(computed.Conditions), foreign...)
+		}
+		listeners[i] = computed
+	}
 
 	// A fresh pointer per call: the API status holds a pointer, the patcher holds a
 	// value, and handing out the patcher's own field would let the published status
@@ -200,7 +261,7 @@ func (sp *gatewayStatusPatcher) SetStatus(obj client.Object) error {
 	attachedListenerSets := sp.attachedListenerSets
 	gw.Status = gatewayv1.GatewayStatus{
 		Conditions:           metav1conds,
-		Listeners:            sp.listenerStatuses,
+		Listeners:            listeners,
 		Addresses:            sp.addresses,
 		AttachedListenerSets: &attachedListenerSets,
 	}

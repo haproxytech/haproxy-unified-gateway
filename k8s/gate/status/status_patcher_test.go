@@ -367,6 +367,110 @@ func TestAttachedListenerSetsEqual(t *testing.T) {
 //go:fix inline
 func pointerTo[T any](v T) *T { return new(v) }
 
+// Conditions another controller wrote on the Gateway or a listener survive our
+// status writes untouched, and their presence alone does not make every cycle
+// rewrite the status (v1.7 conformance: GatewayPreserveForeignConditions).
+func TestGatewayStatusPatcher_PreservesForeignConditions(t *testing.T) {
+	programmedCondition := func(message string, generation int64) generic.Condition {
+		return generic.Condition{
+			Type:               generic.ConditionType(gatewayv1.ListenerConditionProgrammed),
+			Status:             metav1.ConditionTrue,
+			Reason:             "Programmed",
+			Message:            message,
+			ObservedGeneration: generation,
+		}
+	}
+	foreignCondition := func(generation int64) metav1.Condition {
+		return metav1.Condition{
+			Type:               "conformance.gateway.networking.k8s.io/StaleCondition",
+			Status:             metav1.ConditionTrue,
+			Reason:             "Seeded",
+			Message:            "another controller's claim",
+			ObservedGeneration: generation,
+			LastTransitionTime: metav1.Now(),
+		}
+	}
+	newTreeGateway := func(message string, generation int64) *tree.Gateway {
+		gw := tree.NewGateway(&gatewayv1.Gateway{Namespace: "infra", Name: "gw"})
+		gw.Valid = true
+		gw.Listeners = []*tree.Listener{{
+			K8sGatewayListener: &gatewayv1.Listener{Name: "http", Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+			Conditions: generic.Conditions{
+				generic.ConditionType(gatewayv1.ListenerConditionProgrammed): programmedCondition(message, generation),
+			},
+		}}
+		return gw
+	}
+
+	gw := newTreeGateway("first write", 1)
+	sp := newGatewayStatusPatcher(gw, nil, testExtractGVK, slog.Default())
+
+	live := &gatewayv1.Gateway{}
+	upToDate, err := sp.StatusEqual(live)
+	require.NoError(t, err)
+	require.False(t, upToDate, "nothing published yet")
+	require.NoError(t, sp.SetStatus(live))
+
+	// Another controller seeds a condition on the Gateway and on the listener,
+	// and the CRD seeds a Programmed placeholder for a type we own.
+	seededGw := foreignCondition(live.Generation)
+	live.Status.Conditions = append(live.Status.Conditions, seededGw, crdPlaceholder(string(gatewayv1.GatewayConditionProgrammed)))
+	live.Status.Listeners[0].Conditions = append(live.Status.Listeners[0].Conditions, seededGw)
+
+	upToDate, err = sp.StatusEqual(live)
+	require.NoError(t, err)
+	require.False(t, upToDate, "a placeholder for an owned type is ours to replace")
+
+	// Our own state moves; the write keeps the foreign condition, drops the
+	// placeholder for the owned type we do not compute, and updates ours.
+	gw = newTreeGateway("second write", 2)
+	sp = newGatewayStatusPatcher(gw, nil, testExtractGVK, slog.Default())
+	upToDate, err = sp.StatusEqual(live)
+	require.NoError(t, err)
+	require.False(t, upToDate, "our listener condition changed")
+	require.NoError(t, sp.SetStatus(live))
+
+	require.Equal(t, []metav1.Condition{seededGw},
+		foreignConditionsIn(live.Status.Conditions), "gateway-level foreign condition")
+	require.Len(t, live.Status.Listeners, 1)
+	require.Equal(t, []metav1.Condition{seededGw},
+		foreignConditionsIn(live.Status.Listeners[0].Conditions), "listener-level foreign condition")
+
+	programmed := false
+	for _, cond := range live.Status.Listeners[0].Conditions {
+		if cond.Type == string(gatewayv1.ListenerConditionProgrammed) {
+			programmed = cond.Message == "second write" && cond.ObservedGeneration == 2
+		}
+	}
+	require.True(t, programmed, "our own condition must still be updated")
+
+	upToDate, err = sp.StatusEqual(live)
+	require.NoError(t, err)
+	require.True(t, upToDate, "the write settles with the foreign conditions still present")
+}
+
+func foreignConditionsIn(conditions []metav1.Condition) []metav1.Condition {
+	foreign := make([]metav1.Condition, 0)
+	for _, cond := range conditions {
+		if cond.Type == "conformance.gateway.networking.k8s.io/StaleCondition" {
+			foreign = append(foreign, cond)
+		}
+	}
+	return foreign
+}
+
+// crdPlaceholder mirrors the default condition the Gateway CRD seeds at
+// creation, for a type the controller owns but does not compute here.
+func crdPlaceholder(conditionType string) metav1.Condition {
+	return metav1.Condition{
+		Type:               conditionType,
+		Status:             metav1.ConditionUnknown,
+		Reason:             "Pending",
+		Message:            "Waiting for controller",
+		ObservedGeneration: 0,
+	}
+}
+
 // The count is read from the tree and published as a pointer on the API status. The two
 // halves are checked together: a patcher that read the field but wrote nothing, or wrote
 // a constant, would pass only one of them.

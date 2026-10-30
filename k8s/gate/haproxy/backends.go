@@ -282,7 +282,7 @@ func (b *HaproxyConfMgrImpl) upsertHTTPRouteBackends(routeKey k8stypes.Namespace
 				RouteName:          route.K8sResource.Name,
 				RuleIndex:          ruleIndex,
 				BackendIndex:       backendRefIndex,
-				SessionPersistence: k8sRule.SessionPersistence,
+				SessionPersistence: k8sRule.SessionPersistence, //lint:ignore SA1019 deprecated upstream, kept for existing users
 				HTTPTimeouts:       k8sRule.Timeouts,
 			}
 			b.addImpactedHTTPBackendUpserted(beName, routeKey, backendRef, k8sRule.Filters, matchPrefix, persistenceCandidate)
@@ -689,7 +689,10 @@ func (b *HaproxyConfMgrImpl) newBackend(backendName string, md metadata.MetaData
 	// Handling session persistence with cookie
 	if sessionPersistence != nil &&
 		utils.PointerDefaultValueIfNil(sessionPersistence.Type) == gatewayv1.CookieBasedSessionPersistence {
-		sessionName := utils.PointerDefaultValueIfNil(sessionPersistence.SessionName)
+		var sessionName string
+		if sessionPersistence.Cookie != nil {
+			sessionName = string(utils.PointerDefaultValueIfNil(sessionPersistence.Cookie.Name))
+		}
 		if sessionName == "" {
 			sessionName = fmt.Sprintf("gwapi-%s", strings.ToLower(backendName))
 		}

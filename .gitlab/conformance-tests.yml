@@ -3,7 +3,7 @@
 # HUG_CONFORMANCE_SKIP_TESTS, a different name from the job-level variable on
 # purpose, so GitLab precedence cannot shadow the override.
 
-conformance-GW-API-1_6_3:
+conformance-GW-API-1_7_0:
   allow_failure: true
   stage: conformance-tests
   retry: 0
@@ -21,8 +21,8 @@ conformance-GW-API-1_6_3:
   variables:
     # Runner kernels lack ip6table_raw; docker 29 needs it for IPv6 endpoints.
     DOCKER_INSECURE_NO_IPTABLES_RAW: "1"
-    GWAPI_VERSION: "1.6.3"
-    CLUSTER_NAME: "conformance-1-6-3"
+    GWAPI_VERSION: "1.7.0"
+    CLUSTER_NAME: "conformance-1-7-0"
     CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-${GWAPI_VERSION}.yaml"
     CONFORMANCE_JUNIT_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.xml"
     CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.html"
@@ -56,7 +56,7 @@ conformance-GW-API-1_6_3:
     reports:
       junit: conformance-junit-${GWAPI_VERSION}.xml
 
-conformance-MR-GW-API-1_6_3:
+conformance-MR-GW-API-1_7_0:
   allow_failure: false
   stage: conformance
   retry: 0
@@ -73,8 +73,8 @@ conformance-MR-GW-API-1_6_3:
   variables:
     # Runner kernels lack ip6table_raw; docker 29 needs it for IPv6 endpoints.
     DOCKER_INSECURE_NO_IPTABLES_RAW: "1"
-    GWAPI_VERSION: "1.6.3"
-    CLUSTER_NAME: "conformance-mr-1-6-3"
+    GWAPI_VERSION: "1.7.0"
+    CLUSTER_NAME: "conformance-mr-1-7-0"
     CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-${GWAPI_VERSION}.yaml"
     CONFORMANCE_JUNIT_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.xml"
     CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.html"
@@ -162,7 +162,7 @@ conformance-publish:
   variables:
     # Runner kernels lack ip6table_raw; docker 29 needs it for IPv6 endpoints.
     DOCKER_INSECURE_NO_IPTABLES_RAW: "1"
-    GWAPI_VERSION: "1.6.3"
+    GWAPI_VERSION: "1.7.0"
     CLUSTER_NAME: "conformance-publish"
     # The suite runs unskipped. To narrow one run, set
     # HUG_CONFORMANCE_SKIP_TESTS at pipeline-run time: a different name, so

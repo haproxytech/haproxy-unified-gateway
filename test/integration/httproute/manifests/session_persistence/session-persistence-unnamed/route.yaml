@@ -18,3 +18,4 @@ spec:
           port: 80
       sessionPersistence:
         type: Cookie
+        cookie: {}

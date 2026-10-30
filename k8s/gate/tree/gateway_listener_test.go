@@ -639,6 +639,52 @@ func TestCompositeConflictNamesItsKindsInTheMessage(t *testing.T) {
 		"two kinds: the reason names one, so the message has to name both")
 }
 
+// checkCertificateRefs must refuse an ungranted cross-namespace reference with
+// RefNotPermitted even when the Secret does not exist, and keep
+// InvalidCertificateRef for the missing-secret case the grant does allow --
+// same namespace, or granted from elsewhere (v1.7 conformance:
+// GatewaySecretMissingReferenceGrant).
+func TestCheckCertificateRefs_VerdictOrder(t *testing.T) {
+	crossNs := gatewayv1.Namespace("certs")
+	newListener := func(certRef gatewayv1.SecretObjectReference) *Listener {
+		terminate := gatewayv1.TLSModeTerminate
+		return &Listener{
+			ListenerKey:              gatewayListenerKey(client.ObjectKey{Namespace: "infra", Name: "gw"}, "https"),
+			OwnerKind:                kindGateway,
+			ExemptFromReferenceGrant: false,
+			K8sGatewayListener: &gatewayv1.Listener{
+				Name:     "https",
+				Port:     443,
+				Protocol: gatewayv1.HTTPSProtocolType,
+				TLS: &gatewayv1.ListenerTLSConfig{
+					Mode:            &terminate,
+					CertificateRefs: []gatewayv1.SecretObjectReference{certRef},
+				},
+			},
+		}
+	}
+	resolvedRefs := func(t *testing.T, l *Listener) string {
+		t.Helper()
+		cond, ok := l.CheckSecret.Conditions.GetCondition(generic.ConditionType(gatewayv1.ListenerConditionResolvedRefs))
+		require.True(t, ok, "a rejected certificateRef must report ResolvedRefs")
+		return cond.Reason
+	}
+
+	t.Run("cross-namespace and ungranted, secret missing", func(t *testing.T) {
+		l := newListener(gatewayv1.SecretObjectReference{Name: "missing", Namespace: &crossNs})
+		l.checkCertificateRefs(nil, NewReferenceGrantManager())
+		assert.False(t, l.CheckSecret.Valid)
+		assert.Equal(t, string(gatewayv1.ListenerReasonRefNotPermitted), resolvedRefs(t, l))
+	})
+
+	t.Run("same namespace, secret missing", func(t *testing.T) {
+		l := newListener(gatewayv1.SecretObjectReference{Name: "missing"})
+		l.checkCertificateRefs(nil, NewReferenceGrantManager())
+		assert.False(t, l.CheckSecret.Valid)
+		assert.Equal(t, string(gatewayv1.ListenerReasonInvalidCertificateRef), resolvedRefs(t, l))
+	})
+}
+
 // The previous Programmed condition of a listener is read from the resource that
 // declares it. An entry looked up in its parent Gateway's status.listeners finds a
 // homonym -- the API allows an entry to share a name with a Gateway listener -- and
