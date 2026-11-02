@@ -269,3 +269,28 @@ All three are written to `${CI_PROJECT_DIR}` and declared under `artifacts.paths
 they are always uploaded even when the job fails (`when: always`). On an MR the files
 are uploaded by each shard and cover only that shard's tests.
 
+---
+
+## Which pipelines run the suite
+
+| Pipeline | Runs the suite as | Report |
+|---|---|---|
+| Merge request | one job per shard | partial, one per shard |
+| Push to a branch | one job per shard | partial, one per shard |
+| Nightly schedule | `conformance-GW-API-<version>` | one complete report |
+| Tag `v*` | `conformance-publish` | one complete report |
+
+Two rules still schedule the suite twice:
+
+- A tag pipeline has `$CI_PIPELINE_SOURCE == 'push'`, so the sharded MR job runs
+  beside `conformance-publish` on every release. Adding
+  `&& $CI_COMMIT_TAG == null` to that rule drops the duplicate run.
+- A push to the default branch runs `conformance-GW-API-<version>` (full suite,
+  `allow_failure: true`) and the sharded MR job (full suite, fail closed). One of
+  them should own the default branch; the `conformance-report` diff job in
+  `.gitlab/conformance-report.yml` follows whichever one keeps the push rule.
+
+A push that has an open merge request can also produce both a branch pipeline and
+a merge request pipeline. A `workflow:rules` section removes that duplication for
+the whole repository, so it belongs in a change of its own.
+
