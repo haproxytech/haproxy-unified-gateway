@@ -76,22 +76,27 @@ A two-stage Docker build:
 FROM golang:${GO_VERSION}-alpine AS builder
 RUN go install gotest.tools/gotestsum@v1.13.0
 RUN go test -c -tags=conformance ./test/conformance/ -o /conformance.test
+RUN GO111MODULE=off go build -o /test2json "$(go env GOROOT)/src/cmd/test2json"
 ```
 
 - `go test -c` compiles `test/conformance/` into a standalone binary without running it.
 - `-tags=conformance` is required to include files guarded by `//go:build conformance`.
 - `gotestsum` is installed to wrap test output into JUnit XML at runtime.
+- `test2json` ships only as Go source, so it is compiled here as well.
 
 **Stage 2 — runtime:**
 ```dockerfile
-FROM golang:${GO_VERSION}-alpine
+FROM alpine:3
 COPY --from=builder /conformance.test /conformance.test
+COPY --from=builder /test2json /test2json
 COPY --from=builder /go/bin/gotestsum /gotestsum
 COPY ci/conformance/run.sh /run.sh
 ```
 
-Uses `golang:alpine` (not plain `alpine`) because `go tool test2json` — needed at
-runtime to convert test output to JSON — is part of the Go toolchain.
+Plain `alpine` is enough: every binary in the image is statically linked, and the
+toolchain's only runtime use, `go tool test2json`, is now `/test2json`. The
+smaller image is what `kind load docker-image` copies into the cluster, which is
+one of the fixed costs of every conformance job.
 
 ---
 
@@ -104,7 +109,7 @@ CONFORMANCE_REPORT_OUTPUT="${RESULTS_DIR}/conformance-report.yaml" \
 /gotestsum \
   --raw-command \
   --junitfile "${RESULTS_DIR}/junit.xml" \
-  -- go tool test2json -t /conformance.test \
+  -- /test2json -t /conformance.test \
     -test.v -test.timeout 60m ${EXTRA_FLAGS}
 ```
 
@@ -114,7 +119,7 @@ CONFORMANCE_REPORT_OUTPUT="${RESULTS_DIR}/conformance-report.yaml" \
 /conformance.test -test.v
         │  (verbose text output)
         ▼
-go tool test2json -t
+/test2json -t
         │  (JSON test events)
         ▼
 gotestsum --raw-command

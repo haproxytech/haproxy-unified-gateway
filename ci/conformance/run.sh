@@ -12,7 +12,7 @@ CONFORMANCE_REPORT_OUTPUT="${RESULTS_DIR}/conformance-report.yaml" \
   --format standard-verbose \
   --raw-command \
   --junitfile "${RESULTS_DIR}/junit.xml" \
-  -- go tool test2json -t /conformance.test \
+  -- /test2json -t /conformance.test \
     -test.v \
     -test.timeout 60m \
     ${EXTRA_FLAGS}
