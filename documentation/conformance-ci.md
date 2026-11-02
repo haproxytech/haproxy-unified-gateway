@@ -302,11 +302,12 @@ A shard pays its fixed costs once, so two overlaps were tried. Both are recorded
 here so the next attempt starts from the measurement instead of repeating it.
 
 - **Running the two image builds beside the cluster setup** cut the fixed cost by
-  about 90 seconds per shard, but made the run flaky: the suite then stalled
-  fetching its GatewayClass (`context deadline exceeded` against the API service
-  for the whole 180s setup deadline). Six green shards became two to six failed
-  ones. The control plane and the compiles share the hit on the same host, which
-  is the likely cause and worth proving with control-plane logs before retrying.
+  about 90 seconds per shard, but those runs then failed with API timeouts
+  (`context deadline exceeded`, once for the whole 180s setup deadline) more often
+  than before: six green shards, then two to six failed ones across four runs.
+  The same class of timeout also appears without that change, so the overlap is
+  not proven to be the cause. Control-plane logs are the missing evidence, and
+  they are not collected today.
 - **Caching the built test image archive** does nothing on this infrastructure:
   the runners have no shared cache server, so an entry written by one pipeline
   never reaches the next (the job log says the cache is extracted locally).

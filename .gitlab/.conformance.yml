@@ -3,7 +3,9 @@
 # tests the other shards own.
 .conformance-mr:
   allow_failure: false
-  retry: 0
+  # One retry per shard: a flaky test now fails the MR from six independent
+  # runs instead of one, and HTTPRouteMultipleGateways is a known flake.
+  retry: 1
   image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
   services:
     - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
