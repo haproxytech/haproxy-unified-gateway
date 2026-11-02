@@ -17,4 +17,5 @@ test/conformance/conformance-report.yaml
 conformance-junit.xml
 conformance-junit.html
 conformance-runs/
+generated-conformance.yml
 gitlab-mr-checker

@@ -56,68 +56,45 @@ conformance-GW-API-1_7_0:
     reports:
       junit: conformance-junit-${GWAPI_VERSION}.xml
 
+# The MR run is split across the shards declared in .gitlab/conformance-jobs.yml:
+# the generator renders a child pipeline with one job per shard, each in its own
+# kind cluster, and this trigger job keeps the unsuffixed name so a green MR
+# means every shard passed. A shard is told which tests to skip rather than
+# which to run: the suite has no "run only these" switch, and a skipped test is
+# still visible in the report while a dropped one is not.
+#
+# The body of a shard job lives in .gitlab/.conformance.yml, which the generated
+# child pipeline includes.
+conformance-jobs-generate:
+  stage: conformance
+  needs: []
+  rules: &conformance_mr_rules
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'push'
+  image:
+    name: $HAPROXY_REGISTRY_GO/golang:latest-alpine
+    entrypoint: [""]
+  tags:
+    - go
+  script:
+    - go run ./cmd/gitlab-conformance-jobs
+  artifacts:
+    paths:
+      - generated-conformance.yml
+    expire_in: 60 minutes
+
 conformance-MR-GW-API-1_7_0:
   allow_failure: false
   stage: conformance
-  retry: 0
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    - if: $CI_PIPELINE_SOURCE == 'push'
-  image: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-go$GO_VERSION
-  services:
-    - name: $HAPROXY_REGISTRY_GO/docker:$DOCKER_VERSION-dind
-      alias: docker
-  tags:
-    - go
-  variables:
-    # Runner kernels lack ip6table_raw; docker 29 needs it for IPv6 endpoints.
-    DOCKER_INSECURE_NO_IPTABLES_RAW: "1"
-    GWAPI_VERSION: "1.7.0"
-    CLUSTER_NAME: "conformance-mr-1-7-0"
-    CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-${GWAPI_VERSION}.yaml"
-    CONFORMANCE_JUNIT_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.xml"
-    CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.html"
-    CONFORMANCE_RUN_TEST: ""
-    HUG_SERVICE_TYPE: "ClusterIP"
-    HUG_TEST_LISTENERSET: "1"
-    # Pod label selector for conformance-collect-debug-mr.
-    # When set, that task collects logs, haproxy.cfg and map files from the
-    # matching HUG pod after the conformance run. The deployer intentionally
-    # does NOT delete the pod when its gateway is removed, keeping it alive
-    # so artifacts can be retrieved here before the cluster is torn down.
-    # Leave empty (default) to skip collection entirely.
-    # Example: "run=hug-4ff08ccae6d535c8"  (sha derived from gateway ns/name)
-    HUG_LABEL_COLLECT_LOGS: ""
-  before_script:
-    - export PATH=$PATH:/root/go/bin
-    - docker login -u='$app' -p "$CI_REGISTRY_TOKEN" registry.haproxy.com
-    - docker pull -q $HAPROXY_REGISTRY_GO/alpine:3
-    - docker image tag $HAPROXY_REGISTRY_GO/alpine:3 alpine:3
-    - docker pull -q $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine
-    - docker image tag $HAPROXY_REGISTRY_GO/golang:$GO_VERSION-alpine golang:$GO_VERSION-alpine
-    - sed -i "s~FROM golang~FROM $HAPROXY_REGISTRY_GO/golang~g" "build/Dockerfile"
-    - sed -i "s~FROM haproxytech/haproxy-alpine~FROM $HAPROXY_REGISTRY_GO/haproxy-alpine~g" "build/Dockerfile"
-    - docker build -t haproxytech/haproxy-unified-gateway -f build/Dockerfile .
-  script:
-    - task conformance-create-ci
-    - task conformance-build-test-image
-    # Controller had ~2 min since deploy; dump its state before the suite scales it down.
-    - task conformance-dump-controller-debug || true
-    - task conformance-run-job
-  after_script:
-    - task conformance-dump-controller-debug STAGE=post-run || true
-    - task conformance-collect-debug-mr || true
-    - task kind-delete
-  artifacts:
-    when: always
-    paths:
-      - conformance-report-${GWAPI_VERSION}.yaml
-      - conformance-junit-${GWAPI_VERSION}.xml
-      - conformance-junit-${GWAPI_VERSION}.html
-      - debug-hug/
-    reports:
-      junit: conformance-junit-${GWAPI_VERSION}.xml
+  needs:
+    - job: conformance-jobs-generate
+      artifacts: true
+  rules: *conformance_mr_rules
+  trigger:
+    include:
+      - artifact: generated-conformance.yml
+        job: conformance-jobs-generate
+    strategy: depend
 
 # Publish a conformance report for a release, producing the files an upstream
 # kubernetes-sigs/gateway-api MR adds. One job, one input: the version.

@@ -157,9 +157,51 @@ Defines three resources applied together:
 
 ---
 
+## Sharding the MR run
+
+The MR job takes about 20 minutes because the suite is sequential: the per-Gateway
+deployer starts one controller per Gateway and the suite may not run its tests in
+parallel (see [conformance.md](conformance.md#architecture--per-gateway-deployer)).
+Splitting the suite is what shortens the run, so the MR job is fanned out over the
+shards declared in [`.gitlab/conformance-jobs.yml`](../.gitlab/conformance-jobs.yml):
+
+```
+conformance-jobs-generate  (go run ./cmd/gitlab-conformance-jobs)
+        ↓ generated-conformance.yml (artifact)
+conformance-MR-GW-API-1_7_0 (trigger, strategy: depend)
+        ↓ child pipeline
+  shard 1/6 → kind cluster + in-cluster Job → its tests
+  shard 2/6 → kind cluster + in-cluster Job → its tests
+  ...
+```
+
+The generator reads the suite's test list from the `gateway-api` conformance
+package, so a test upstream adds is assigned without editing anything here. It deals
+the tests round robin in upstream order, which keeps a slow family such as
+`TLSRoute` from landing in one shard, and renders one child job per shard, each
+`extends` the `.conformance-mr` body in
+[`.gitlab/.conformance.yml`](../.gitlab/.conformance.yml).
+
+A shard is told which tests to **skip**, not which to run:
+
+- The suite has no "run only these" switch; it has `-run-test` (one exact name) and
+  `-skip-tests` (a list).
+- A skipped test stays visible in the JUnit report and in the suite's own report,
+  which marks the run `partial`. Dropping tests from the list would instead make
+  each shard report look like a full run over fewer tests.
+- `CONFORMANCE_RUN_TEST` keeps working: the shards that do not own the named test
+  skip it and pass.
+
+Because every shard report is partial, only the nightly and the release
+(`conformance-publish`) jobs run the whole suite; they are not sharded. The trigger
+job keeps the unsuffixed name, so a green MR still means every shard passed.
+
+---
+
 ## CI pipeline — `conformance-MR-GW-API-1_7_0`
 
-The job runs on every push and merge request. Its script executes three tasks:
+The job runs on every push and merge request. Each shard job executes three tasks:
+
 
 ### Step 1 — `conformance-create-ci`
 
@@ -214,9 +256,11 @@ Deletes the Kind cluster regardless of whether the job succeeded or failed.
 
 | File | Content |
 |---|---|
-| `conformance-report-1.7.0.yaml` | Gateway API conformance report (YAML) |
+| `conformance-report-1.7.0.yaml` | Gateway API conformance report (YAML), partial on an MR shard |
 | `conformance-junit-1.7.0.xml` | JUnit XML — shown as test results in GitLab MR |
 | `conformance-junit-1.7.0.html` | Human-readable HTML summary |
 
 All three are written to `${CI_PROJECT_DIR}` and declared under `artifacts.paths` so
-they are always uploaded even when the job fails (`when: always`).
+they are always uploaded even when the job fails (`when: always`). On an MR the files
+are uploaded by each shard and cover only that shard's tests.
+
