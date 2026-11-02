@@ -294,3 +294,21 @@ A push that has an open merge request can also produce both a branch pipeline an
 a merge request pipeline. A `workflow:rules` section removes that duplication for
 the whole repository, so it belongs in a change of its own.
 
+---
+
+## Optimisations that were measured and not kept
+
+A shard pays its fixed costs once, so two overlaps were tried. Both are recorded
+here so the next attempt starts from the measurement instead of repeating it.
+
+- **Running the two image builds beside the cluster setup** cut the fixed cost by
+  about 90 seconds per shard, but made the run flaky: the suite then stalled
+  fetching its GatewayClass (`context deadline exceeded` against the API service
+  for the whole 180s setup deadline). Six green shards became two to six failed
+  ones. The control plane and the compiles share the hit on the same host, which
+  is the likely cause and worth proving with control-plane logs before retrying.
+- **Caching the built test image archive** does nothing on this infrastructure:
+  the runners have no shared cache server, so an entry written by one pipeline
+  never reaches the next (the job log says the cache is extracted locally).
+  Sharing the image would need the project container registry instead.
+
