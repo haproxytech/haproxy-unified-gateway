@@ -137,6 +137,10 @@ func TestConformance(t *testing.T) {
 		features.SupportHTTPRoutePathRedirect,
 		features.SupportHTTPRoutePortRedirect,
 		features.SupportHTTPRouteSchemeRedirect,
+		// Extended: every redirect status code the spec allows.
+		features.SupportHTTPRoute303RedirectStatusCode,
+		features.SupportHTTPRoute307RedirectStatusCode,
+		features.SupportHTTPRoute308RedirectStatusCode,
 		// Extended: per-backendRef header modification.
 		features.SupportHTTPRouteBackendRequestHeaderModification,
 		// Extended: CORS policy and parentRef listener-port selection.

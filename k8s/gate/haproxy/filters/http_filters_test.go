@@ -346,6 +346,58 @@ func TestRequestRedirectRules(t *testing.T) {
 	}
 }
 
+// The redirect status code is the only thing a status-only redirect decides, and
+// 303/307/308 are gated behind their own conformance features. Every rule of a
+// redirect filter must carry the requested code, defaulting to 302.
+func TestRequestRedirectRules_CarryTheStatusCode(t *testing.T) {
+	filters := []struct {
+		name   string
+		filter func(code *int) gatewayv1.HTTPRequestRedirectFilter
+	}{
+		{name: "status only", filter: func(code *int) gatewayv1.HTTPRequestRedirectFilter {
+			return gatewayv1.HTTPRequestRedirectFilter{StatusCode: code}
+		}},
+		{name: "with scheme", filter: func(code *int) gatewayv1.HTTPRequestRedirectFilter {
+			return gatewayv1.HTTPRequestRedirectFilter{Scheme: new("https"), StatusCode: code}
+		}},
+		{name: "with a full path", filter: func(code *int) gatewayv1.HTTPRequestRedirectFilter {
+			return gatewayv1.HTTPRequestRedirectFilter{
+				Path: &gatewayv1.HTTPPathModifier{
+					Type:            gatewayv1.FullPathHTTPPathModifier,
+					ReplaceFullPath: new("/elsewhere"),
+				},
+				StatusCode: code,
+			}
+		}},
+	}
+
+	codes := []struct {
+		name string
+		code *int
+		want int64
+	}{
+		{name: "default", want: 302},
+		{name: "301", code: new(301), want: 301},
+		{name: "303", code: new(303), want: 303},
+		{name: "307", code: new(307), want: 307},
+		{name: "308", code: new(308), want: 308},
+	}
+
+	for _, shape := range filters {
+		for _, c := range codes {
+			t.Run(shape.name+"/"+c.name, func(t *testing.T) {
+				filter := shape.filter(c.code)
+				rules := requestRedirectRules(&filter, "/")
+				require.NotEmpty(t, rules)
+				for i, rule := range rules {
+					require.NotNil(t, rule.RedirCode, "rule %d must set the redirect code", i)
+					assert.Equal(t, c.want, *rule.RedirCode, "rule %d", i)
+				}
+			})
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // urlRewriteRules
 // ---------------------------------------------------------------------------
