@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: TCPRoute
+metadata:
+  name: tcp-weighted-route
+spec:
+  parentRefs:
+    - name: tcp-weighted-gateway
+      sectionName: tcp
+  rules:
+    - backendRefs:
+        - name: tcp-weighted-blue
+          port: 443
+          weight: 90
+        - name: tcp-green
+          port: 443
+          weight: 10
