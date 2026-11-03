@@ -124,6 +124,7 @@ The conformance report is the artifact implementations submit to the upstream
 |---|---|
 | `GATEWAY-HTTP` | Enabled by default |
 | `GATEWAY-TLS` | Enabled by default |
+| `GATEWAY-TCP` | Enabled by default |
 
 ## Supported features declared
 
@@ -150,6 +151,7 @@ The conformance report is the artifact implementations submit to the upstream
 - `SupportHTTPRouteParentRefPort` (Extended, in `GATEWAY-HTTP`)
 - `SupportHTTPRouteDestinationPortMatching` (Extended, in `GATEWAY-HTTP`)
 - `SupportTLSRoute` (from the `GATEWAY-TLS` profile)
+- `SupportTCPRoute` (from the `GATEWAY-TCP` profile)
 - `SupportListenerSet` when `HUG_TEST_LISTENERSET=1`
 
 Extended features can be added to `test/conformance/conformance_test.go`

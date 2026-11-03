@@ -126,6 +126,8 @@ func TestConformance(t *testing.T) {
 		features.SupportGatewayAddressEmpty,
 		features.SupportGatewayHTTPListenerIsolation,
 		features.SupportGatewayPort8080,
+		// Core: the GATEWAY-TCP profile's route kind.
+		features.SupportTCPRoute,
 		// Extended: HTTPRoute method and query-param matching, enabled by the
 		// same conditional-candidate machinery as header matching.
 		features.SupportHTTPRouteMethodMatching,
@@ -154,6 +156,7 @@ func TestConformance(t *testing.T) {
 	conformanceProfiles := []suite.ConformanceProfileName{
 		suite.GatewayHTTPConformanceProfileName,
 		suite.GatewayTLSConformanceProfileName,
+		suite.GatewayTCPConformanceProfileName,
 	}
 
 	// ListenerSet is a feature the HTTP and TLS profiles carry, not a profile of its own, so
