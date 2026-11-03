@@ -339,6 +339,60 @@ func refGrant(ns string) *gatewayv1beta1.ReferenceGrant {
 	return &gatewayv1beta1.ReferenceGrant{Namespace: ns, Name: "grant"}
 }
 
+func tcpRouteToServiceNs(routeNs, svcName, svcNs string) *gatewayv1.TCPRoute {
+	ref := gatewayv1.BackendObjectReference{Name: gatewayv1.ObjectName(svcName)}
+	if svcNs != "" {
+		ns := gatewayv1.Namespace(svcNs)
+		ref.Namespace = &ns
+	}
+	return &gatewayv1.TCPRoute{
+		Namespace: routeNs, Name: "r",
+		Spec: gatewayv1.TCPRouteSpec{Rules: []gatewayv1.TCPRouteRule{{
+			BackendRefs: []gatewayv1.BackendRef{{BackendObjectReference: ref}},
+		}}},
+	}
+}
+
+// A grant event must not reach routes outside the namespaces this instance
+// watches: secondary watches do not re-apply the primary predicate.
+func TestEnqueueTCPRouteForReferenceGrantHonoursNamespaces(t *testing.T) {
+	cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
+		svcWithAnnotation("team-a", "echo", "shared/tuning"),
+		tcpRouteToServiceNs("team-a", "echo", ""),
+	).Build()
+
+	reqs := enqueueTCPRouteForReferenceGrant(utils.NewDedicatedNamespaces([]string{"other"}))(cl, testExtractGVKBackend)(
+		context.Background(), refGrant("shared"),
+	)
+	if len(reqs) != 0 {
+		t.Fatalf("expected no enqueue outside the watched namespaces, got %v", reqs)
+	}
+
+	reqs = enqueueTCPRouteForReferenceGrant(utils.NewDedicatedNamespaces(nil))(cl, testExtractGVKBackend)(
+		context.Background(), refGrant("shared"),
+	)
+	if len(reqs) != 1 {
+		t.Fatalf("expected the team-a route to be enqueued without a restriction, got %v", reqs)
+	}
+}
+
+// A namespace label change can admit or revoke attachments under a Selector,
+// so every TCPRoute of that namespace is rechecked.
+func TestEnqueueTCPRoutesForNamespace(t *testing.T) {
+	cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
+		tcpRouteToServiceNs("team-a", "echo", ""),
+		tcpRouteToServiceNs("team-b", "echo", ""),
+	).Build()
+
+	ns := &apiv1.Namespace{Name: "team-a"}
+	reqs := enqueueTCPRoutesForNamespace(utils.NewDedicatedNamespaces(nil))(cl, testExtractGVKBackend)(
+		context.Background(), ns,
+	)
+	if len(reqs) != 1 || reqs[0].Namespace != "team-a" || reqs[0].Name != "r" {
+		t.Fatalf("expected only the team-a route to be enqueued, got %v", reqs)
+	}
+}
+
 func TestEnqueueHTTPRouteForReferenceGrant(t *testing.T) {
 	t.Run("all same-namespace does not enqueue", func(t *testing.T) {
 		cl := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
