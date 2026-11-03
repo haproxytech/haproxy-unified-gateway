@@ -20,7 +20,12 @@ tasks:
         if [ "{{.HUG_CONTROLLER_IMAGE_TAG}}" = "latest" ]; then
           echo "HUG_CONTROLLER_IMAGE_TAG=latest - using the locally built image"
         else
-          docker pull haproxytech/haproxy-unified-gateway:{{.HUG_CONTROLLER_IMAGE_TAG}}
+          # The release image is pushed by a GitHub workflow that races this tag
+          # pipeline; wait for the manifest instead of failing on the first miss.
+          timeout 50m bash -c 'until docker pull haproxytech/haproxy-unified-gateway:{{.HUG_CONTROLLER_IMAGE_TAG}}; do
+            echo "haproxytech/haproxy-unified-gateway:{{.HUG_CONTROLLER_IMAGE_TAG}} not published yet, retrying in 30s"
+            sleep 30
+          done'
         fi
 
   conformance-pull-images:

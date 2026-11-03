@@ -53,7 +53,8 @@ It does **not** build the controller: it pulls
 `haproxytech/haproxy-unified-gateway:<tag-without-v>` from Docker Hub, so the bits
 under test are the published release artifact. On a tag pipeline that creates an
 ordering dependency on `.github/workflows/docker_auto_release.yml` having pushed
-the image; `retry: 0` makes a lost race fail loudly — re-run once it is published.
+the image. The pull waits (bounded) for the manifest to appear, and the job keeps
+`retry: 2` for a run that still loses the race.
 
 
 ---
