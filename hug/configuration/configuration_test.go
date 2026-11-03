@@ -15,6 +15,7 @@ package configuration
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/peterbourgon/ff/v4"
@@ -89,5 +90,57 @@ func TestGWAPICompatCLI(t *testing.T) {
 				t.Errorf("args %v must set GWAPICompat=true", args)
 			}
 		})
+	}
+}
+
+// An upgrade reuses the configuration files an earlier release wrote, so the
+// pieces TCPRoute needs are appended when missing, once.
+func TestEnsureConfigAdditions(t *testing.T) {
+	dir := t.TempDir()
+	cfg := HUGConfig{
+		MainCfgFile:  dir + "/haproxy.cfg",
+		RouteLuaFile: dir + "/route.lua",
+	}
+
+	// Files as written by the previous release: neither addition present.
+	oldCfg := "defaults haproxytech\n  mode tcp\n\nbackend backend_not_found from haproxytech\n  mode http\n"
+	if err := os.WriteFile(cfg.MainCfgFile, []byte(oldCfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldLua := "function route(txn)\nend\ncore.register_action(\"route\", { \"http-req\" }, route)\n"
+	if err := os.WriteFile(cfg.RouteLuaFile, []byte(oldLua), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cfg.ensureConfigAdditions(); err != nil {
+		t.Fatalf("ensureConfigAdditions: %v", err)
+	}
+
+	mainCfg, err := os.ReadFile(cfg.MainCfgFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mainCfg), tcpNotFoundBackendMarker) {
+		t.Errorf("fallback backend not appended:\n%s", mainCfg)
+	}
+
+	routeLua, err := os.ReadFile(cfg.RouteLuaFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(routeLua), tcpRouteRegistrationMarker) {
+		t.Errorf("tcp-req registration not appended:\n%s", routeLua)
+	}
+
+	// A second run must not duplicate anything.
+	if err := cfg.ensureConfigAdditions(); err != nil {
+		t.Fatalf("second ensureConfigAdditions: %v", err)
+	}
+	mainCfgAgain, err := os.ReadFile(cfg.MainCfgFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(mainCfg) != string(mainCfgAgain) {
+		t.Errorf("second run changed the file:\n%s", mainCfgAgain)
 	}
 }

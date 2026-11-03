@@ -652,6 +652,7 @@ var StandardMaps = []string{
 	"path_prefix.map",
 	"path_regex.map",
 	"sni.map",
+	"tcp_route.map",
 }
 
 // RuntimeMaps is the subset of StandardMaps that HAProxy loads via map() directives
@@ -660,6 +661,7 @@ var StandardMaps = []string{
 // can reach them via core.get_patref.
 var RuntimeMaps = []string{
 	"domain_wildcard_sni.map",
+	"tcp_route.map",
 	"listener_exact_match.map",
 	"listener_route_exact_match.map",
 	"listener_route_wildcard_match.map",
