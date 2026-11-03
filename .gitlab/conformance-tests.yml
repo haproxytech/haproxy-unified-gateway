@@ -88,12 +88,12 @@ conformance-GW-API-1_7_0:
 # haproxytech/haproxy-unified-gateway:<tag-without-v> from Docker Hub, so the
 # bits under test are the published release artifact. On a tag pipeline that
 # creates an ordering dependency on .github/workflows/docker_auto_release.yml
-# having pushed that tag. With retry: 0 a pull that loses that race fails the
-# job loudly; re-run it once the image is published.
+# having pushed that tag. The pull waits (bounded) for the manifest to appear,
+# and a retry: 2 covers a run that still loses the race.
 conformance-publish:
   allow_failure: false
   stage: conformance
-  retry: 0
+  retry: 2
   needs: []
   rules:
     - if: $CI_COMMIT_TAG =~ /^v/
