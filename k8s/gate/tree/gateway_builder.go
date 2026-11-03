@@ -284,6 +284,22 @@ func (b *GatewayBuilderImpl) markRoutesOfRebuiltGateways() {
 			injectIndirectUpdate(b.ClusterStore.Updates.TLSRoutes, key, route.K8sResource)
 		}
 	}
+	for key, route := range b.ControllerStore.GateTree.TCPRoutes {
+		if route == nil || route.K8sResource == nil {
+			continue
+		}
+		if b.routeServesAnyRebuiltGateway(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace, rebuilt) {
+			injectIndirectUpdate(b.ClusterStore.Updates.TCPRoutes, key, route.K8sResource)
+		}
+	}
+	for key, route := range b.ControllerStore.UnmanagedGateTree.TCPRoutes {
+		if route == nil || route.K8sResource == nil {
+			continue
+		}
+		if b.routeServesAnyRebuiltGateway(route.K8sResource.Spec.ParentRefs, route.K8sResource.Namespace, rebuilt) {
+			injectIndirectUpdate(b.ClusterStore.Updates.TCPRoutes, key, route.K8sResource)
+		}
+	}
 }
 
 // routeServesAnyRebuiltGateway reports whether one of a route's parentRefs designates a
@@ -411,7 +427,7 @@ func (b *GatewayBuilderImpl) checkListeners(treeGw *Gateway) {
 
 		switch listener.Protocol() {
 		// This switch will be completed with all needed checks per protocol
-		case gatewayv1.HTTPProtocolType, gatewayv1.TLSProtocolType:
+		case gatewayv1.HTTPProtocolType, gatewayv1.TLSProtocolType, gatewayv1.TCPProtocolType:
 			listener.checkRouteGroupKind(rejectedRouteKinds, gateManagedRouteGroupKindsByProtocol)
 			listener.checkProtocol(gateManagedRouteGroupKindsByProtocol)
 			listener.checkConflict(b.ControllerStore.conflictsByPort)

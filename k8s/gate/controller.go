@@ -40,17 +40,10 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	meta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	runtimelog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -163,29 +156,7 @@ func Add(
 		return fmt.Errorf("cannot register controllers: %w", err)
 	}
 
-	clusterStore := &store.ClusterStore{
-		GatewayClasses:    make(map[types.NamespacedName]*gatewayv1.GatewayClass),
-		Gateways:          make(map[types.NamespacedName]*gatewayv1.Gateway),
-		HTTPRoutes:        make(map[types.NamespacedName]*gatewayv1.HTTPRoute),
-		TLSRoutes:         make(map[types.NamespacedName]*gatewayv1alpha2.TLSRoute),
-		Services:          make(map[types.NamespacedName]*apiv1.Service),
-		Namespaces:        make(map[types.NamespacedName]*apiv1.Namespace),
-		Secrets:           make(map[types.NamespacedName]*apiv1.Secret),
-		ConfigMaps:        make(map[types.NamespacedName]*apiv1.ConfigMap),
-		GatewayAPICRDs:    make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
-		HugGates:          make(map[types.NamespacedName]*v3.HugGate),
-		HugConfs:          make(map[types.NamespacedName]*v3.HugConf),
-		EndpointSlices:    make(map[types.NamespacedName]*discoveryV1.EndpointSlice),
-		ReferenceGrants:   make(map[types.NamespacedName]*gatewayv1beta1.ReferenceGrant),
-		BackendCRs:        make(map[types.NamespacedName]*v3.Backend),
-		GlobalCRs:         make(map[types.NamespacedName]*v3.Global),
-		DefaultsCRs:       make(map[types.NamespacedName]*v3.Defaults),
-		Updates:           store.NewClusterUpdates(),
-		Ingresses:         map[types.NamespacedName]*networkingv1.Ingress{},
-		IngressClasses:    map[types.NamespacedName]*networkingv1.IngressClass{},
-		IngressBackendCRs: map[types.NamespacedName]*unstructured.Unstructured{},
-		ListenerSets:      map[types.NamespacedName]*gatewayv1.ListenerSet{},
-	}
+	clusterStore := store.NewClusterStore()
 
 	var certificateStorage storage.CertificateStorage
 	var err error
@@ -440,6 +411,78 @@ func listenerSetReferenceGrantPredicate() k8spredicate.Predicate {
 		return referenceGrantCouldCoverListenerSet(e.ObjectOld) || referenceGrantCouldCoverListenerSet(e.ObjectNew)
 	}
 	return p
+}
+
+// tcpRouteControllerCfgs returns the TCPRoute controller registration, or none
+// when the cluster does not serve its CRD. Same probe rationale as ListenerSet:
+// watching a Kind the cluster does not serve stalls the informer.
+func tcpRouteControllerCfgs(ctx context.Context, cfg config.Configuration, mgr manager.Manager, extractGVK utilsk8s.ExtractGVK) []ctlrCfg {
+	gvk := extractGVK(objtypes.ObjectTypeTCPRoute)
+	installed, err := crdInstalled(mgr.GetRESTMapper(), gvk)
+	if !installed {
+		logCRDUnavailable(ctx, cfg, gvk, "TCPRoute CRD", "the TCPRoute controller is disabled", err)
+		return nil
+	}
+
+	dedicatedNs := utils.NewDedicatedNamespaces(cfg.Namespaces)
+	return []ctlrCfg{{
+		name:       "TCPRoute",
+		objectType: objtypes.ObjectTypeTCPRoute,
+		options: []Option{
+			WithK8sPredicate(
+				k8spredicate.And(
+					k8spredicate.GenerationChangedPredicate{},
+					predicate.NewNamespacePredicate(cfg.Namespaces),
+				),
+			),
+			// Same dependency edges as TLSRoute: the parents, the target
+			// Services, the Service-level Backend CRs, and the grants.
+			WithEnqueueFor([]enqueueForParams{
+				{
+					watchSource: objtypes.ObjectTypeGateway,
+					enqueueFunc: enqueueTCPRouteForGateway(dedicatedNs),
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				},
+				{
+					watchSource: objtypes.ObjectTypeService,
+					enqueueFunc: enqueueTCPRouteForService(dedicatedNs),
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				},
+				{
+					watchSource: objtypes.ObjectTypeBackend,
+					enqueueFunc: enqueueTCPRouteForBackendCR(dedicatedNs),
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				},
+				{
+					watchSource: objtypes.ObjectTypeRefGrant,
+					enqueueFunc: enqueueTCPRouteForReferenceGrant(dedicatedNs),
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				},
+				{
+					// A listener's allowedRoutes selector reads namespace
+					// labels: a label change can admit or revoke attachments.
+					watchSource: &apiv1.Namespace{},
+					enqueueFunc: enqueueTCPRoutesForNamespace(dedicatedNs),
+					predicate: k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						predicate.NewNamespacePredicate(cfg.Namespaces),
+					),
+				},
+			}),
+		},
+	}}
 }
 
 // crdInstalled reports whether the cluster serves the given Kind. The resolution
@@ -862,6 +905,10 @@ func registerControllers(ctx context.Context, extractGVK utilsk8s.ExtractGVK, cf
 	// so it is watched whenever the cluster serves its CRD, and skipped -- with a
 	// reason -- when it does not.
 	controllerRegisterCfgs = append(controllerRegisterCfgs, listenerSetControllerCfgs(ctx, cfg, mgr, extractGVK)...)
+
+	// TCPRoute is part of the Gateway API standard channel as well, with the same
+	// CRD-served-or-skip rule as ListenerSet.
+	controllerRegisterCfgs = append(controllerRegisterCfgs, tcpRouteControllerCfgs(ctx, cfg, mgr, extractGVK)...)
 
 	for _, registerConfig := range controllerRegisterCfgs {
 		params := registerParams{

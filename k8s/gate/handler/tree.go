@@ -78,21 +78,8 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 	serviceBuilder := tree.NewServiceBuilder(controllerStore)
 
 	// --------------
-	// HTTPRoute
-	httpRouteBuilder := tree.NewHTTPRouteBuilder(tree.HTTPRouteBuilderParams{
-		ControllerStore:       controllerStore,
-		MapsStorage:           cfg.MapsStorage,
-		RuntimeUpdate:         cfg.RuntimeUpdateHaproxy,
-		ReferenceGrantManager: referenceGrantManager,
-	})
-
-	// --------------
-	// TLSRoute
-	tlsRouteBuilder := tree.NewTLSRouteBuilder(tree.TLSRouteBuilderParams{
-		ControllerStore:       controllerStore,
-		MapsStorage:           cfg.MapsStorage,
-		ReferenceGrantManager: referenceGrantManager,
-	})
+	// Routes of every kind, in the order their builders must run
+	routeBuilders := newRouteBuilders(controllerStore, cfg, referenceGrantManager)
 
 	defaultsCRBuilder := tree.NewDefaultsCRBuilder(controllerStore)
 
@@ -101,36 +88,59 @@ func NewGateTreeBuilder(controllerStore *tree.ControllerStore, cfg GateTreeConfi
 
 	referenceGrantBuilder := tree.NewReferenceGrantBuilder(controllerStore, referenceGrantManager)
 
+	postBuilders := []tree.Builder{
+		referenceGrantBuilder,
+		secretBuilder,
+		gatewayClassBuilder,
+		// Before gatewayBuilder, the single reader of GateTree.ListenerSets: it
+		// assembles each Gateway's merged listener list from that mirror, which
+		// therefore has to be current by then. Deliberately not a pre-builder --
+		// see ListenerSetContributionBuilder.
+		tree.NewListenerSetContributionBuilder(controllerStore),
+		gatewayBuilder,
+		virtualListenerBuilder,
+		certificateBuilder,
+		serviceBuilder,
+	}
+	// Roll up conditions after the Gateway checks and counts after the route
+	// builders. Route-only changes need fresh attachedRoutes even when no
+	// frontend is applied and no programming feedback follows.
+	postBuilders = append(postBuilders, routeBuilders...)
+	postBuilders = append(postBuilders, tree.NewListenerSetVerdictBuilder(controllerStore), defaultsCRBuilder)
+
 	treeBuilder := GateTreeBuilder{
 		cfg:              cfg,
 		referenceManager: referenceManager,
 		ControllerStore:  controllerStore,
-		postBuilders: []tree.Builder{
-			referenceGrantBuilder,
-			secretBuilder,
-			gatewayClassBuilder,
-			// Before gatewayBuilder, the single reader of GateTree.ListenerSets: it
-			// assembles each Gateway's merged listener list from that mirror, which
-			// therefore has to be current by then. Deliberately not a pre-builder --
-			// see ListenerSetContributionBuilder.
-			tree.NewListenerSetContributionBuilder(controllerStore),
-			gatewayBuilder,
-			virtualListenerBuilder,
-			certificateBuilder,
-			serviceBuilder,
-			httpRouteBuilder,
-			tlsRouteBuilder,
-			// Roll up conditions after the Gateway checks and counts after both
-			// route builders. Route-only changes need fresh attachedRoutes even
-			// when no frontend is applied and no programming feedback follows.
-			tree.NewListenerSetVerdictBuilder(controllerStore),
-			defaultsCRBuilder,
-		},
+		postBuilders:     postBuilders,
 	}
 
 	treeBuilder.attachIngressBuilders(controllerStore)
 
 	return treeBuilder
+}
+
+// newRouteBuilders builds the route-kind builders in the order they must run
+// relative to each other and to the verdict pass appended after them.
+func newRouteBuilders(controllerStore *tree.ControllerStore, cfg GateTreeConfig, referenceGrantManager *tree.ReferenceGrantManager) []tree.Builder {
+	return []tree.Builder{
+		tree.NewHTTPRouteBuilder(tree.HTTPRouteBuilderParams{
+			ControllerStore:       controllerStore,
+			MapsStorage:           cfg.MapsStorage,
+			RuntimeUpdate:         cfg.RuntimeUpdateHaproxy,
+			ReferenceGrantManager: referenceGrantManager,
+		}),
+		tree.NewTLSRouteBuilder(tree.TLSRouteBuilderParams{
+			ControllerStore:       controllerStore,
+			MapsStorage:           cfg.MapsStorage,
+			ReferenceGrantManager: referenceGrantManager,
+		}),
+		tree.NewTCPRouteBuilder(tree.TCPRouteBuilderParams{
+			ControllerStore:       controllerStore,
+			MapsStorage:           cfg.MapsStorage,
+			ReferenceGrantManager: referenceGrantManager,
+		}),
+	}
 }
 
 // attachIngressBuilders wires the opt-in Ingress support onto the builder. When

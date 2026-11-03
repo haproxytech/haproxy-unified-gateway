@@ -34,6 +34,7 @@ var (
 	ObjectTypeGlobal       = &v3.Global{}
 	ObjectTypeDefaults     = &v3.Defaults{}
 	ObjectTypeTLSRoute     = &gatewayv1alpha2.TLSRoute{}
+	ObjectTypeTCPRoute     = &gatewayv1.TCPRoute{}
 	ObjectTypeRefGrant     = &gatewayv1beta1.ReferenceGrant{}
 	ObjectTypeIngress      = &networkingv1.Ingress{}
 	ObjectTypeIngressClass = &networkingv1.IngressClass{}

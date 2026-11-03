@@ -262,6 +262,7 @@ var gateManagedRouteGroupKindsByProtocol = managedRouteGroupKindsByProtocol{
 	gatewayv1.HTTPProtocolType:  {objtypes.RouteKindHTTP},
 	gatewayv1.HTTPSProtocolType: {objtypes.RouteKindHTTP},
 	gatewayv1.TLSProtocolType:   {objtypes.RouteKindTLS},
+	gatewayv1.TCPProtocolType:   {objtypes.RouteKindTCP},
 }
 
 // supports reports whether the protocol can carry any Route kind at all.

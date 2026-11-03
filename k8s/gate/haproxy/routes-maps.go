@@ -18,6 +18,7 @@ import (
 	"context"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strings"
 
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -25,6 +26,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/metrics"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/protocols"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/tree"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/utils"
@@ -51,6 +53,7 @@ func (b *RouteMgrImpl) fillMaps() {
 	b.fillListenerRouteMapsForHTTPRoutes()
 	b.fillMapsForTLSRoutes()
 	b.fillListenerRouteMapsForTLSRoutes()
+	b.fillMapsForTCPRoutes()
 	mapsStorage := b.topManager.params.mapsStorage
 	mapsStorage.ProcessMapFiles()
 }
@@ -86,6 +89,20 @@ func (b *RouteMgrImpl) clearChangedRouteMaps() {
 	for routeKey, route := range controllerStore.GateTree.TLSRoutes {
 		if route.TreeStatus.OldTreeResource != nil {
 			b.clearRouteMapEntries("TLSRoute", routeKey)
+		}
+	}
+	for routeKey, route := range controllerStore.GateTree.TCPRoutes {
+		if route.TreeStatus.OldTreeResource != nil {
+			b.clearRouteMapEntries("TCPRoute", routeKey)
+		}
+	}
+	// A route that left our parents keeps serving from the previous cycle's map
+	// until its entries are dropped here: the managed tree no longer holds it.
+	if controllerStore.UnmanagedGateTree != nil {
+		for routeKey, route := range controllerStore.UnmanagedGateTree.TCPRoutes {
+			if route.TreeStatus.OldTreeResource != nil {
+				b.clearRouteMapEntries("TCPRoute", routeKey)
+			}
 		}
 	}
 }
@@ -350,6 +367,132 @@ func (*RouteMgrImpl) listenersForTLSRoute(route *tree.TLSRoute) []*tree.Listener
 		return nil
 	}
 	return listenersFromAttachments(route.Listeners)
+}
+
+// fillMapsForTCPRoutes fills each TCP frontend's tcp_route map: the port's
+// oldest valid TCPRoute is the only one served, per the API's tie-break for
+// indistinct routes, and its rule's backends become the port's target.
+//
+// All attached routes are visited every cycle, not only the changed ones: the
+// winner can change without its own update -- the previous winner being deleted
+// or invalidated -- and an unchanged runner-up must then take the entry over.
+func (b *RouteMgrImpl) fillMapsForTCPRoutes() {
+	controllerStore := b.topManager.controllerStore
+	mapsStorage := b.topManager.params.mapsStorage
+
+	for vlName, vListener := range controllerStore.GateTree.VirtualListeners {
+		if vListener.ProtocolCategory != protocols.ProcotolCategoryTCP || vListener.Status == store.StatusDeleted {
+			continue
+		}
+		frontendName := b.topManager.getFrontendName(vlName)
+		tcpRouteMap := mapsStorage.GetTCPRouteMapFile(frontendName)
+
+		seen := map[k8stypes.NamespacedName]struct{}{}
+		var candidates []*tree.TCPRoute
+		for _, listener := range vListener.Listeners {
+			for routeKey := range listener.AttachedRoutes {
+				if _, duplicate := seen[routeKey]; duplicate {
+					continue
+				}
+				seen[routeKey] = struct{}{}
+				route, ok := controllerStore.GateTree.TCPRoutes[routeKey]
+				if !ok || route.K8sResource == nil || route.TreeStatus.Status == store.StatusDeleted {
+					continue
+				}
+				if !route.Valid {
+					continue
+				}
+				candidates = append(candidates, route)
+			}
+		}
+
+		slices.SortFunc(candidates, func(a, b *tree.TCPRoute) int {
+			createdAtA := a.K8sResource.CreationTimestamp.Time
+			createdAtB := b.K8sResource.CreationTimestamp.Time
+			if !createdAtA.Equal(createdAtB) {
+				if createdAtA.Before(createdAtB) {
+					return -1
+				}
+				return 1
+			}
+			return strings.Compare(a.K8sResource.Namespace+"/"+a.K8sResource.Name,
+				b.K8sResource.Namespace+"/"+b.K8sResource.Name)
+		})
+
+		for i, route := range candidates {
+			origin := maps.NewRouteOrigin("TCPRoute", vlName, k8stypes.NamespacedName{
+				Namespace: route.K8sResource.Namespace,
+				Name:      route.K8sResource.Name,
+			})
+			if i == 0 {
+				tcpRouteMap.ApplyRoute(origin, b.tcpRouteTargets(vlName, route))
+				continue
+			}
+			// Losing candidates write nothing; the clear keeps a former winner
+			// from keeping the port after it lost to an older route.
+			tcpRouteMap.ApplyRoute(origin, nil)
+		}
+	}
+}
+
+// tcpRouteTargets renders the winner's rule as the port's map entry: valid
+// backends by weight. An invalid backendRef keeps its share as a rejected
+// connection under compatibility, and is treated as absent otherwise. With no
+// valid target left the entry is dropped, leaving the connection to the
+// frontend's no-route fallback.
+func (b *RouteMgrImpl) tcpRouteTargets(vlName string, route *tree.TCPRoute) map[maps.EntryKey]map[string]*maps.WeightedValue {
+	backends := map[string]*maps.WeightedValue{}
+	for _, rule := range route.Rules {
+		for _, backendRef := range rule.K8sResource.BackendRefs {
+			checkResult, ok := rule.CheckBackendRef.Get(backendRef.BackendObjectReference)
+			if !ok {
+				continue
+			}
+			var targetName string
+			if checkResult.Valid {
+				svcKey := tree.ServiceNsNameKey(route.K8sResource.Namespace, backendRef.BackendObjectReference)
+				var svcPort int32
+				if backendRef.Port != nil {
+					svcPort = int32(*backendRef.Port)
+				}
+				beName, err := b.topManager.getBackendName(svcKey, svcPort, "")
+				if err != nil {
+					b.topManager.logger.LogAttrs(
+						context.Background(), slog.LevelError, "Processing TCPRoute [map update]",
+						logging.LogAttrError(err),
+					)
+					continue
+				}
+				targetName = beName
+			} else if b.topManager.params.GWAPICompat {
+				// Gateway API: the invalid ref's share must be rejected, not
+				// handed to the other backends; the no-server fallback does the
+				// rejecting.
+				targetName = TCPBackendNotFound
+			} else {
+				continue
+			}
+			// API default is 1; an explicit 0 receives no traffic.
+			weight := int32(1)
+			if backendRef.Weight != nil {
+				weight = *backendRef.Weight
+			}
+			if weight == 0 {
+				continue
+			}
+			if existing, exists := backends[targetName]; exists {
+				existing.Weight = new(utils.PointerDefaultValueIfNil(existing.Weight) + weight)
+				continue
+			}
+			backends[targetName] = &maps.WeightedValue{ValueName: targetName, Weight: new(weight)}
+		}
+	}
+	if len(backends) == 0 {
+		return nil
+	}
+	return map[maps.EntryKey]map[string]*maps.WeightedValue{
+		{Hostname: vlName}: backends,
+	}
 }
 
 func (b *RouteMgrImpl) fillMapsForHTTPRoutes() {

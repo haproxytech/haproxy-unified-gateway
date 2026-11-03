@@ -40,7 +40,7 @@ docker push <your-registry>/http-echo:latest
 kind load docker-image http-echo:latest --name <kind-cluster-name>
 ```
 
-After the image is available in your cluster, you can apply the example manifests, and the TLSRoute/HTTPRoute examples will use this image as the backend.
+After the image is available in your cluster, you can apply the example manifests, and the TCPRoute/TLSRoute/HTTPRoute examples will use this image as the backend.
 
 ### Gateway API
 
@@ -67,3 +67,7 @@ carried by the Backend CR rather than by annotations.
 
 * [Hello World](./ingress/hello-world/): An Ingress with `Prefix` and `Exact` paths.
 * [TLS Termination](./ingress/tls/): An Ingress with `spec.tls`, serving HTTPS from a Secret.
+
+### TCPRoute Examples
+
+* [TCP](./tcproute/tcp/): A simple example of exposing a TCP service with a TCPRoute.

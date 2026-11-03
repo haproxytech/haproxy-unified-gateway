@@ -51,6 +51,7 @@ type BackendOwnerType string
 const (
 	BackendOwnerTypeHTTPRoute BackendOwnerType = "HTTPRoute"
 	BackendOwnerTypeTLSRoute  BackendOwnerType = "TLSRoute"
+	BackendOwnerTypeTCPRoute  BackendOwnerType = "TCPRoute"
 	cookieKey                                  = "ohph7OoGhong"
 )
 
@@ -339,7 +340,7 @@ func (b *HaproxyConfMgrImpl) upsertTLSRouteBackends(routeKey k8stypes.Namespaced
 						errs.Add(err)
 						continue
 					}
-					b.addImpactedLTSBackendUpserted(beName, routeKey, backendRef)
+					b.addImpactedLTSBackendUpserted(beName, routeKey, backendRef.BackendObjectReference)
 					upsertedBackendsReferencedByRoute[beName] = struct{}{}
 				}
 			}
@@ -412,6 +413,131 @@ func (b *HaproxyConfMgrImpl) onUpsertedTLSRoute(routeKey k8stypes.NamespacedName
 		}
 	}
 	return nil
+}
+
+func (b *HaproxyConfMgrImpl) processTCPRoutes() error {
+	var errs utils.Errors
+	for routeKey, tcpRoute := range b.controllerStore.GateTree.TCPRoutes {
+		switch tcpRoute.TreeStatus.Status {
+		case store.StatusUnchanged:
+			continue
+		case store.StatusUpserted:
+			err := b.onUpsertedTCPRoute(routeKey, tcpRoute)
+			errs.Add(err)
+		case store.StatusDeleted:
+			err := b.onDeletedTCPRoute(routeKey, tcpRoute)
+			errs.Add(err)
+		}
+	}
+	// A route that moved to a parent this controller does not manage keeps no
+	// ownership: nothing may keep serving it after the move.
+	if unmanaged := b.controllerStore.UnmanagedGateTree; unmanaged != nil {
+		for routeKey, tcpRoute := range unmanaged.TCPRoutes {
+			if tcpRoute.TreeStatus.Status != store.StatusUpserted {
+				continue
+			}
+			b.dropTCPRouteBackends(routeKey)
+		}
+	}
+
+	// Cleanup Backends that are not referenced anymore
+	if err := b.cleanupUnreferencedBackends(); err != nil {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to cleanup unreferenced backends",
+			logging.LogAttrError(err),
+		)
+		errs.Add(err)
+	}
+
+	if err := b.processBackendsModifiedInCycle(); err != nil {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError, "Failed to process backends modified in cycle",
+			logging.LogAttrError(err),
+		)
+		errs.Add(err)
+	}
+
+	return errs.Result()
+}
+
+func (b *HaproxyConfMgrImpl) onUpsertedTCPRoute(routeKey k8stypes.NamespacedName, tcpRoute *tree.TCPRoute) error {
+	if tcpRoute.Valid {
+		b.logTCPRouteUpdate("upserted", routeKey)
+		return b.upsertTCPRouteBackends(routeKey, tcpRoute)
+	}
+	b.logTCPRouteUpdate("upserted-invalid", routeKey)
+	b.dropTCPRouteBackends(routeKey)
+	return nil
+}
+
+func (b *HaproxyConfMgrImpl) onDeletedTCPRoute(routeKey k8stypes.NamespacedName, _ *tree.TCPRoute) error {
+	b.logTCPRouteUpdate("deleted", routeKey)
+	b.dropTCPRouteBackends(routeKey)
+	return nil
+}
+
+// dropTCPRouteBackends releases the route's ownership of its backends. A
+// backend another route still owns is refreshed, not deleted: deletion waits
+// for the last owner.
+func (b *HaproxyConfMgrImpl) dropTCPRouteBackends(routeKey k8stypes.NamespacedName) {
+	for beName := range b.backendOwners.getBackendsReferencedByTCPRoute(routeKey) {
+		b.backendOwners.removeTCPRoute(beName, routeKey)
+		if b.backendOwners.hasOwners(beName) {
+			b.backendsImpactedInCycle.Unreferenced[beName] = struct{}{}
+			continue
+		}
+		b.addImpactedBackendDeleted(beName)
+	}
+}
+
+func (b *HaproxyConfMgrImpl) logTCPRouteUpdate(action string, key k8stypes.NamespacedName) {
+	b.logger.LogAttrs(
+		context.Background(), slog.LevelDebug, "Processing TCPRoute ["+action+"]",
+		logging.LogAttrKey(key),
+	)
+}
+
+func (b *HaproxyConfMgrImpl) upsertTCPRouteBackends(routeKey k8stypes.NamespacedName, route *tree.TCPRoute) error {
+	var errs utils.Errors
+	upsertedBackendsReferencedByRoute := make(map[string]struct{})
+	for _, rule := range route.Rules {
+		for _, backendRef := range rule.K8sResource.BackendRefs {
+			// Only valid refs own a backend. Under compatibility the invalid
+			// refs' share is rejected at connection time by the map value, not
+			// by a backend.
+			checkResult, ok := rule.CheckBackendRef.Get(backendRef.BackendObjectReference)
+			if !ok || !checkResult.Valid {
+				continue
+			}
+			var svcPort int32
+			svcNsName := tree.ServiceNsNameKey(route.K8sResource.Namespace, backendRef.BackendObjectReference)
+			if backendRef.Port != nil {
+				svcPort = int32(*backendRef.Port)
+			}
+			beName, err := b.getBackendName(svcNsName, svcPort, "")
+			if err != nil {
+				b.logger.LogAttrs(context.Background(), slog.LevelError, "Failed to compute backendName",
+					logging.LogAttrError(err))
+				errs.Add(err)
+				continue
+			}
+			if err := b.backendOwners.addTCPRoute(beName, routeKey, route.K8sResource); err != nil {
+				errs.Add(err)
+				continue
+			}
+			b.addImpactedLTSBackendUpserted(beName, routeKey, backendRef.BackendObjectReference)
+			upsertedBackendsReferencedByRoute[beName] = struct{}{}
+		}
+	}
+
+	// Drop ownership of the backends the route no longer references
+	backendsReferencedByRoute := b.backendOwners.getBackendsReferencedByTCPRoute(routeKey)
+	unreferenced := utils.SetDifference(backendsReferencedByRoute, upsertedBackendsReferencedByRoute)
+	for unreferencedBeName := range unreferenced {
+		b.backendOwners.removeTCPRoute(unreferencedBeName, routeKey)
+		b.backendsImpactedInCycle.Unreferenced[unreferencedBeName] = struct{}{}
+	}
+	return errs.Result()
 }
 
 func (b *HaproxyConfMgrImpl) onValidTLSRouteUpserted(routeKey k8stypes.NamespacedName, route *tree.TLSRoute) error {
@@ -532,17 +658,17 @@ func (b *HaproxyConfMgrImpl) registerNoBackendRefsBackend(routeKey k8stypes.Name
 }
 
 func (b *HaproxyConfMgrImpl) addImpactedLTSBackendUpserted(backendName string, routeKey client.ObjectKey,
-	tlsBackendRef gatewayv1alpha2.BackendRef,
+	backendRef gatewayv1.BackendObjectReference,
 ) {
-	// TLSRoute carries no route-level filters, but the BackendObjectReference is
-	// needed so the Service-level Backend CR merge (mergeServiceBackendCR) can
-	// resolve the target Service from this backend.
+	// TLSRoute and TCPRoute carry no route-level filters, but the
+	// BackendObjectReference is needed so the Service-level Backend CR merge
+	// (mergeServiceBackendCR) can resolve the target Service from this backend.
 	impactedBe := BackendImpactedInCycle{
 		Name:         backendName,
 		HTTPRouteKey: routeKey,
 		BackendRef: gatewayv1.HTTPBackendRef{
 			BackendRef: gatewayv1.BackendRef{
-				BackendObjectReference: tlsBackendRef.BackendObjectReference,
+				BackendObjectReference: backendRef,
 			},
 		},
 	}
@@ -573,6 +699,14 @@ func (bo *BackendReferencedBy) addTLSRoute(backendName string, routeKey k8stypes
 	return nil
 }
 
+func (bo *BackendReferencedBy) addTCPRoute(backendName string, routeKey k8stypes.NamespacedName, route *gatewayv1.TCPRoute) error {
+	if route == nil {
+		return errors.New("nil route")
+	}
+	bo.add(backendName, BackendOwnerTypeTCPRoute, routeKey, route.Generation)
+	return nil
+}
+
 func (bo *BackendReferencedBy) add(backendName string, ownerType BackendOwnerType, ownerKey client.ObjectKey, generation int64) {
 	if _, ok := bo.owners[backendName]; !ok {
 		bo.owners[backendName] = make(map[BackendOwnerType]map[client.ObjectKey]int64)
@@ -589,6 +723,10 @@ func (bo *BackendReferencedBy) removeHTTPRoute(backendName string, routeKey k8st
 
 func (bo *BackendReferencedBy) removeTLSRoute(backendName string, routeKey k8stypes.NamespacedName) {
 	bo.remove(backendName, BackendOwnerTypeTLSRoute, routeKey)
+}
+
+func (bo *BackendReferencedBy) removeTCPRoute(backendName string, routeKey k8stypes.NamespacedName) {
+	bo.remove(backendName, BackendOwnerTypeTCPRoute, routeKey)
 }
 
 func (bo *BackendReferencedBy) remove(backendName string, ownerType BackendOwnerType, ownerKey client.ObjectKey) {
@@ -611,6 +749,20 @@ func (bo *BackendReferencedBy) getBackendsReferencedByTLSRoute(ownerKey client.O
 	return bo.getBackendsReferencedBy(BackendOwnerTypeTLSRoute, ownerKey)
 }
 
+func (bo *BackendReferencedBy) getBackendsReferencedByTCPRoute(ownerKey client.ObjectKey) map[string]struct{} { // map[beName] -> struct{}
+	return bo.getBackendsReferencedBy(BackendOwnerTypeTCPRoute, ownerKey)
+}
+
+// hasOwners reports whether any route of any kind still owns the backend.
+func (bo *BackendReferencedBy) hasOwners(backendName string) bool {
+	for _, ownersByRoute := range bo.owners[backendName] {
+		if len(ownersByRoute) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func (bo *BackendReferencedBy) getBackendsReferencedBy(ownerType BackendOwnerType, ownerKey client.ObjectKey) map[string]struct{} { // map[beName] -> struct{}
 	backends := make(map[string]struct{})
 	for backendName, ownersForBackend := range bo.owners {
@@ -628,7 +780,8 @@ func (bo *BackendReferencedBy) getBackendsReferencedBy(ownerType BackendOwnerTyp
 func (b *HaproxyConfMgrImpl) cleanupUnreferencedBackends() error {
 	var err utils.Errors
 	err.Add(b.cleanupUnreferencedBackendsForHTTPRoutes(BackendOwnerTypeHTTPRoute),
-		b.cleanupUnreferencedBackendsForHTTPRoutes(BackendOwnerTypeTLSRoute))
+		b.cleanupUnreferencedBackendsForHTTPRoutes(BackendOwnerTypeTLSRoute),
+		b.cleanupUnreferencedBackendsForHTTPRoutes(BackendOwnerTypeTCPRoute))
 	return err.Result()
 }
 
@@ -1249,7 +1402,14 @@ func (b *HaproxyConfMgrImpl) processBackendsUpsertedInCycle() utils.Errors {
 			}
 		}
 		if !ok {
-			err := fmt.Errorf("could not find owners for type %s/%s", BackendOwnerTypeHTTPRoute, BackendOwnerTypeTLSRoute)
+			ownersForRoute, ok = owners[BackendOwnerTypeTCPRoute]
+			if ok {
+				isHTTPBackend = false
+				ownerType = BackendOwnerTypeTCPRoute
+			}
+		}
+		if !ok {
+			err := fmt.Errorf("could not find owners for type %s/%s/%s", BackendOwnerTypeHTTPRoute, BackendOwnerTypeTLSRoute, BackendOwnerTypeTCPRoute)
 			errs.Add(err)
 			continue
 		}
@@ -1348,6 +1508,10 @@ func (b *HaproxyConfMgrImpl) processBackendsUnreferencedInCycle() utils.Errors {
 		if !ok {
 			ownersForRoute, ok = owners[BackendOwnerTypeTLSRoute]
 			ownerType = BackendOwnerTypeTLSRoute
+		}
+		if !ok {
+			ownersForRoute, ok = owners[BackendOwnerTypeTCPRoute]
+			ownerType = BackendOwnerTypeTCPRoute
 		}
 		if !ok {
 			// No more owners, delete it

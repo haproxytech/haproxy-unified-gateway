@@ -20,10 +20,10 @@ A `Backend` CR is never rendered on its own — it only takes effect once it is
 | Mechanism | Declared on | Applies to | Selects the backend by |
 |---|---|---|---|
 | **Route-level** | an `HTTPRoute` `backendRef` (`ExtensionRef` filter) | HTTPRoute **only** | the specific `backendRef` (its filter hash) |
-| **Service-level** | a `Service` annotation (`gate.v3.haproxy.org/cr-backend`) | HTTPRoute **and** TLSRoute | every backend built for that Service |
+| **Service-level** | a `Service` annotation (`gate.v3.haproxy.org/cr-backend`) | HTTPRoute, **TLSRoute and TCPRoute** | every backend built for that Service |
 
-> **TLSRoute note:** TLSRoute rules have no filters, so the route-level mechanism
-> is not available for TLSRoutes. A TLSRoute can only receive a Backend CR through
+> **TLSRoute and TCPRoute note:** their rules have no filters, so the route-level
+> mechanism is not available for them. They can only receive a Backend CR through
 > the Service-level annotation.
 
 Both mechanisms can be combined; when they collide the **Service-level CR wins**
@@ -127,7 +127,7 @@ value in the CR replaces the current one.
 
 ---
 
-## Service-level attachment (HTTPRoute and TLSRoute)
+## Service-level attachment (HTTPRoute, TLSRoute and TCPRoute)
 
 Annotate the target `Service` with `gate.v3.haproxy.org/cr-backend`. The CR is
 then merged into **every** backend HUG builds for that Service, no matter which

@@ -56,6 +56,7 @@ type ClusterUpdates struct {
 	Gateways          map[types.NamespacedName]Update[*gatewayv1.Gateway]
 	HTTPRoutes        map[types.NamespacedName]Update[*gatewayv1.HTTPRoute]
 	TLSRoutes         map[types.NamespacedName]Update[*gatewayv1alpha2.TLSRoute]
+	TCPRoutes         map[types.NamespacedName]Update[*gatewayv1.TCPRoute]
 	Services          map[types.NamespacedName]Update[*v1.Service]
 	Namespaces        map[types.NamespacedName]Update[*v1.Namespace]
 	Secrets           map[types.NamespacedName]Update[*v1.Secret]
@@ -80,6 +81,7 @@ func NewClusterUpdates() ClusterUpdates {
 		Gateways:          make(map[types.NamespacedName]Update[*gatewayv1.Gateway]),
 		HTTPRoutes:        make(map[types.NamespacedName]Update[*gatewayv1.HTTPRoute]),
 		TLSRoutes:         make(map[types.NamespacedName]Update[*gatewayv1alpha2.TLSRoute]),
+		TCPRoutes:         make(map[types.NamespacedName]Update[*gatewayv1.TCPRoute]),
 		Services:          make(map[types.NamespacedName]Update[*v1.Service]),
 		Namespaces:        make(map[types.NamespacedName]Update[*v1.Namespace]),
 		Secrets:           make(map[types.NamespacedName]Update[*v1.Secret]),

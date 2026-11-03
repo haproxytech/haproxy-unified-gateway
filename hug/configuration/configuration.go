@@ -245,6 +245,46 @@ func (c *HUGConfig) ensureConfigFiles() error {
 	return nil
 }
 
+// ensureConfigAdditions appends the phrases a later release needs to files an
+// earlier release wrote. User content is kept; only the missing pieces are
+// added, once.
+func (c *HUGConfig) ensureConfigAdditions() error {
+	additions := []struct{ path, marker, addition string }{
+		{c.MainCfgFile, tcpNotFoundBackendMarker, tcpNotFoundBackendAddition},
+		{c.RouteLuaFile, tcpRouteRegistrationMarker, tcpRouteRegistrationAddition},
+	}
+	for _, addition := range additions {
+		content, err := os.ReadFile(addition.path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(content), addition.marker) {
+			continue
+		}
+		file, err := os.OpenFile(addition.path, os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+		if _, err = file.WriteString(addition.addition); err != nil {
+			_ = file.Close()
+			return err
+		}
+		if err = file.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+const (
+	// TCPRoute frontends fall back to this tcp-mode, no-server backend.
+	tcpNotFoundBackendMarker   = "backend backend_tcp_not_found"
+	tcpNotFoundBackendAddition = "\nbackend backend_tcp_not_found\n  mode tcp\n"
+	// Weighted TCPRoute selection reuses the shared route action.
+	tcpRouteRegistrationMarker   = `core.register_action("route", { "tcp-req" }, route)`
+	tcpRouteRegistrationAddition = "\n-- Weighted selection for TCPRoute frontends.\ncore.register_action(\"route\", { \"tcp-req\" }, route)\n"
+)
+
 func (c *HUGConfig) Init(external External) error {
 	// --------------
 	// Apply defaults
@@ -310,7 +350,9 @@ func (c *HUGConfig) Init(external External) error {
 	if err = c.ensureConfigFiles(); err != nil {
 		return err
 	}
-
+	if err = c.ensureConfigAdditions(); err != nil {
+		return err
+	}
 	// Directories
 	c.CertsDir = filepath.Join(c.HaproxyDirs.CfgDir, config.DefaultCertsDirName)
 	c.CertListDir = filepath.Join(c.HaproxyDirs.CfgDir, config.DefaultCertFilesDirName)
