@@ -71,3 +71,5 @@ carried by the Backend CR rather than by annotations.
 ### TCPRoute Examples
 
 * [TCP](./tcproute/tcp/): A simple example of exposing a TCP service with a TCPRoute.
+* [Weighted split](./tcproute/tcp-weighted/): Two TCP backends sharing connections by weight, with a script counting the split.
+* [Backend CR](./tcproute/backend-crd/): Customising the generated TCP backend through a Backend CR attached to the Service.

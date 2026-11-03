@@ -1,0 +1,8 @@
+apiVersion: gate.v3.haproxy.org/v3
+kind: Backend
+metadata:
+  name: backend-tcp-tuning
+spec:
+  server_timeout: 120000
+  balance:
+    algorithm: leastconn
