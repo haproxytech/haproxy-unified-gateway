@@ -64,3 +64,39 @@ func TestSelectedJobsSplitsOnPipelineSource(t *testing.T) {
 		assert.Len(t, Manifest{Jobs: jobs}.selectedJobs(Trigger{Source: source}), want, "source %q", source)
 	}
 }
+
+func TestNightlyJobRunsOnlyForTheNightlySchedule(t *testing.T) {
+	manifest := Manifest{Jobs: []JobSet{{
+		Name:   "conformance-GW-API-1_7_0",
+		Stage:  "conformance-tests",
+		When:   whenScheduleNightly,
+		Shards: 2,
+	}}}
+
+	assert.Len(t, manifest.selectedJobs(Trigger{Source: sourceMR}), 0)
+	assert.Len(t, manifest.selectedJobs(Trigger{Source: sourcePush}), 0)
+	assert.Len(t, manifest.selectedJobs(Trigger{Source: "schedule"}), 0,
+		"a schedule without the nightly type runs nothing")
+	assert.Len(t, manifest.selectedJobs(Trigger{Source: "schedule", ScheduleType: scheduleNightly}), 1)
+	assert.Len(t, manifest.selectedJobs(Trigger{Source: "web", ScheduleType: scheduleNightly}), 1,
+		"keyed on the type so a manual pipeline can rehearse it")
+}
+
+// TestLoadManifestRejectsTwoReportSets guards the merged report's name, which
+// the diff and its history rely on.
+func TestLoadManifestRejectsTwoReportSets(t *testing.T) {
+	_, err := loadManifest(writeManifest(t, `
+jobs:
+  - name: conformance-MR-GW-API-1_7_0
+    stage: conformance-tests
+    when: mr_or_push
+    shards: 6
+    report: true
+  - name: conformance-GW-API-1_7_0
+    stage: conformance-tests
+    when: schedule_nightly
+    shards: 6
+    report: true
+`))
+	assert.Error(t, err)
+}

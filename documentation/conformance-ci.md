@@ -184,7 +184,7 @@ The generator reads the suite's test list from the `gateway-api` conformance
 package, so a test upstream adds is assigned without editing anything here. It deals
 the tests round robin in upstream order, which keeps a slow family such as
 `TLSRoute` from landing in one shard, and renders one child job per shard, each
-`extends` the `.conformance-mr` body in
+`extends` the `.conformance-shard` body in
 [`.gitlab/.conformance.yml`](../.gitlab/.conformance.yml).
 
 A shard is told which tests to **skip**, not which to run:
@@ -261,13 +261,16 @@ Deletes the Kind cluster regardless of whether the job succeeded or failed.
 
 | File | Content |
 |---|---|
-| `conformance-report-1.7.0.yaml` | Gateway API conformance report (YAML), partial on an MR shard |
-| `conformance-junit-1.7.0.xml` | JUnit XML — shown as test results in GitLab MR |
-| `conformance-junit-1.7.0.html` | Human-readable HTML summary |
+| `conformance-report-1.7.0-<shard>.yaml` | Gateway API conformance report (YAML), partial: one shard only |
+| `conformance-junit-1.7.0-<shard>.xml` | JUnit XML for one shard — shown as test results in GitLab MR |
+| `conformance-junit-1.7.0-<shard>.html` | Human-readable HTML summary for one shard |
 
-All three are written to `${CI_PROJECT_DIR}` and declared under `artifacts.paths` so
-they are always uploaded even when the job fails (`when: always`). On an MR the files
-are uploaded by each shard and cover only that shard's tests.
+The shard number keeps the files apart, so the report job can collect every shard's
+JUnit from one directory. They are written to `${CI_PROJECT_DIR}` and declared under
+`artifacts.paths`, so they are uploaded even when the job fails (`when: always`).
+
+The nightly run adds `reports/conformance-junit.xml`: every shard's suite merged into
+one document, which is the run the report diff compares.
 
 ---
 
@@ -275,20 +278,22 @@ are uploaded by each shard and cover only that shard's tests.
 
 | Pipeline | Runs the suite as | Report |
 |---|---|---|
-| Merge request | one job per shard | partial, one per shard |
-| Push to a branch | one job per shard | partial, one per shard |
-| Nightly schedule | `conformance-GW-API-<version>` | one complete report |
-| Tag `v*` | `conformance-publish` | one complete report |
+| Merge request | six shards, fail closed | partial, one per shard |
+| Push to a branch | six shards, fail closed | partial, one per shard |
+| Nightly schedule | six shards, `allow_failure: true` | merged JUnit, then the diff |
+| Tag `v*` | `conformance-publish` only | one complete report |
 
-Two rules still schedule the suite twice:
+Each pipeline source has exactly one owner, so the suite is not run twice for the
+same event anymore:
 
-- A tag pipeline has `$CI_PIPELINE_SOURCE == 'push'`, so the sharded MR job runs
-  beside `conformance-publish` on every release. Adding
-  `&& $CI_COMMIT_TAG == null` to that rule drops the duplicate run.
-- A push to the default branch runs `conformance-GW-API-<version>` (full suite,
-  `allow_failure: true`) and the sharded MR job (full suite, fail closed). One of
-  them should own the default branch; the `conformance-report` diff job in
-  `.gitlab/conformance-report.yml` follows whichever one keeps the push rule.
+- A tag pipeline no longer matches the sharded run: the rule requires
+  `$CI_COMMIT_TAG == null`, so only `conformance-publish` runs the suite for a
+  release.
+- The nightly schedule no longer has a separate unsharded job. It renders the same
+  six shards, followed by `conformance-report` inside the child pipeline, which
+  merges the shards' JUnit files with `cmd/junit-merge` and compares the merged run
+  with the previous scheduled one (`cmd/conformance-diff`). That job runs even when
+  a shard failed, so a diff is still reported on a bad night.
 
 A push that has an open merge request can also produce both a branch pipeline and
 a merge request pipeline. A `workflow:rules` section removes that duplication for

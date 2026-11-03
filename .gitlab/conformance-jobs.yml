@@ -3,15 +3,26 @@
 #
 #   name:   the job name without its shard suffix; the trigger job in
 #           .gitlab/conformance-tests.yml keeps the unsuffixed name so a green
-#           MR means every shard passed.
+#           run means every shard passed.
 #   stage:  the child pipeline stage the shard job runs in.
-#   when:   mr_or_push -- the only value the generator accepts today.
-#   shards: the suite's tests are dealt round robin across this many jobs, each
-#           with its own kind cluster. Every test is skipped by the jobs that do
-#           not own it, so the union still covers the whole suite; a tag or
-#           nightly run stays unsharded to produce one complete report.
+#   when:   mr_or_push        -- merge requests and branch pushes
+#           schedule_nightly  -- pipelines with SCHEDULE_TYPE=nightly
+#   shards: how many jobs the suite's tests are dealt across, each with its own
+#           kind cluster. Every test is skipped by the jobs that do not own it,
+#           so the union still covers the whole suite.
+#   report: adds one job after the shards that merges their JUnit files and
+#           diffs them against the previous scheduled run. At most one set.
 jobs:
   - name: conformance-MR-GW-API-1_7_0
     stage: conformance-tests
     when: mr_or_push
     shards: 6
+
+  # The nightly run exists to feed the report diff, so a shard failure is not a
+  # pipeline failure; the merged report still covers whatever ran.
+  - name: conformance-GW-API-1_7_0
+    stage: conformance-tests
+    when: schedule_nightly
+    shards: 6
+    allow_failure: true
+    report: true

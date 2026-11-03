@@ -1,7 +1,7 @@
-# Body of one conformance MR shard. cmd/gitlab-conformance-jobs renders one job
-# per shard into a child pipeline, each adding only CONFORMANCE_SKIP_TESTS: the
-# tests the other shards own.
-.conformance-mr:
+# Body of one conformance shard, used by the merge-request and nightly runs alike.
+# cmd/gitlab-conformance-jobs renders one job per shard into a child pipeline,
+# each adding its shard number and the tests the other shards own.
+.conformance-shard:
   allow_failure: false
   # One retry per shard: a flaky test now fails the MR from six independent
   # runs instead of one, and HTTPRouteMultipleGateways is a known flake.
@@ -22,9 +22,11 @@
     DOCKER_INSECURE_NO_IPTABLES_RAW: "1"
     GWAPI_VERSION: "1.7.0"
     CLUSTER_NAME: "conformance-mr-1-7-0"
-    CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-${GWAPI_VERSION}.yaml"
-    CONFORMANCE_JUNIT_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.xml"
-    CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}.html"
+    # The shard number keeps each shard's result files apart, so the report job
+    # can collect every shard's JUnit from one directory.
+    CONFORMANCE_REPORT_OUTPUT: "${CI_PROJECT_DIR}/conformance-report-${GWAPI_VERSION}-${CONFORMANCE_SHARD}.yaml"
+    CONFORMANCE_JUNIT_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}-${CONFORMANCE_SHARD}.xml"
+    CONFORMANCE_JUNIT_HTML_OUTPUT: "${CI_PROJECT_DIR}/conformance-junit-${GWAPI_VERSION}-${CONFORMANCE_SHARD}.html"
     CONFORMANCE_RUN_TEST: ""
     HUG_SERVICE_TYPE: "ClusterIP"
     HUG_TEST_LISTENERSET: "1"
@@ -59,9 +61,9 @@
   artifacts:
     when: always
     paths:
-      - conformance-report-${GWAPI_VERSION}.yaml
-      - conformance-junit-${GWAPI_VERSION}.xml
-      - conformance-junit-${GWAPI_VERSION}.html
+      - conformance-report-${GWAPI_VERSION}-${CONFORMANCE_SHARD}.yaml
+      - conformance-junit-${GWAPI_VERSION}-${CONFORMANCE_SHARD}.xml
+      - conformance-junit-${GWAPI_VERSION}-${CONFORMANCE_SHARD}.html
       - debug-hug/
     reports:
-      junit: conformance-junit-${GWAPI_VERSION}.xml
+      junit: conformance-junit-${GWAPI_VERSION}-${CONFORMANCE_SHARD}.xml

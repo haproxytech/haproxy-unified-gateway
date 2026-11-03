@@ -7,8 +7,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"slices"
@@ -25,11 +27,11 @@ type junitTestSuite struct {
 }
 
 type junitTestCase struct {
-	Classname string        `xml:"classname,attr"`
-	Name      string        `xml:"name,attr"`
 	Failure   *junitFailure `xml:"failure"`
 	Error     *junitError   `xml:"error"`
 	Skipped   *junitSkipped `xml:"skipped"`
+	Classname string        `xml:"classname,attr"`
+	Name      string        `xml:"name,attr"`
 }
 
 type (
@@ -43,9 +45,21 @@ type pipeline struct {
 }
 
 type job struct {
-	ID   int    `json:"id"`
 	Name string `json:"name"`
+	ID   int    `json:"id"`
 }
+
+type downstreamPipeline struct {
+	ID int `json:"id"`
+}
+
+type bridge struct {
+	DownstreamPipeline downstreamPipeline `json:"downstream_pipeline"`
+}
+
+// reportJobName is the child-pipeline job holding the merged JUnit of a run.
+// cmd/gitlab-conformance-jobs renders it under this name.
+const reportJobName = "conformance-report"
 
 func parseJUnit(data []byte) (map[string]string, error) {
 	var suites junitTestSuites
@@ -135,9 +149,11 @@ func gitlabAPI(path string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func findPreviousJob() (int, int, error) {
+func findPreviousJob() (jobID, pipelineID int, err error) {
 	projectID := os.Getenv("CI_PROJECT_ID")
-	currentPipeline := os.Getenv("CI_PIPELINE_ID")
+	// The report job runs inside the child pipeline, so the run to skip is the
+	// parent one, not CI_PIPELINE_ID.
+	currentPipeline := os.Getenv("PARENT_PIPELINE_ID")
 	ref := os.Getenv("CI_COMMIT_REF_NAME")
 
 	data, err := gitlabAPI(fmt.Sprintf(
@@ -158,26 +174,46 @@ func findPreviousJob() (int, int, error) {
 			continue
 		}
 
-		jobsData, err := gitlabAPI(fmt.Sprintf(
-			"/projects/%s/pipelines/%d/jobs?per_page=100",
+		// The suite's jobs, and the report job that holds the merged JUnit, are
+		// in the child pipeline the schedule's trigger job started.
+		bridgesData, err := gitlabAPI(fmt.Sprintf(
+			"/projects/%s/pipelines/%d/bridges?per_page=100",
 			projectID, p.ID,
 		))
 		if err != nil {
 			continue
 		}
 
-		var jobs []job
-		if err := json.Unmarshal(jobsData, &jobs); err != nil {
+		var bridges []bridge
+		if err := json.Unmarshal(bridgesData, &bridges); err != nil {
 			continue
 		}
 
-		for _, j := range jobs {
-			if j.Name == "conformance-GW-API-1_7_0" {
-				return j.ID, p.ID, nil
+		for _, b := range bridges {
+			if b.DownstreamPipeline.ID == 0 {
+				continue
+			}
+			jobsData, err := gitlabAPI(fmt.Sprintf(
+				"/projects/%s/pipelines/%d/jobs?per_page=100",
+				projectID, b.DownstreamPipeline.ID,
+			))
+			if err != nil {
+				continue
+			}
+
+			var jobs []job
+			if err := json.Unmarshal(jobsData, &jobs); err != nil {
+				continue
+			}
+
+			for _, j := range jobs {
+				if j.Name == reportJobName {
+					return j.ID, p.ID, nil
+				}
 			}
 		}
 	}
-	return 0, 0, fmt.Errorf("no previous scheduled conformance job found")
+	return 0, 0, errors.New("no previous scheduled conformance run found")
 }
 
 func downloadJUnit(jobID int) ([]byte, error) {
@@ -203,8 +239,11 @@ func downloadJUnit(jobID int) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			defer rc.Close()
-			return io.ReadAll(rc)
+			content, err := io.ReadAll(rc)
+			if closeErr := rc.Close(); closeErr != nil && err == nil {
+				err = closeErr
+			}
+			return content, err
 		}
 	}
 	return nil, fmt.Errorf("%s not found in artifacts", junitFile)
@@ -253,14 +292,12 @@ func main() {
 
 	todayData, err := os.ReadFile(junitFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", junitFile, err)
-		os.Exit(1)
+		log.Fatalf("Error reading %s: %v", junitFile, err)
 	}
 
 	today, err := parseJUnit(todayData)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing today's JUnit: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error parsing today's JUnit: %v", err)
 	}
 
 	prevJobID, prevPipelineID, err := findPreviousJob()
@@ -273,14 +310,12 @@ func main() {
 
 	prevData, err := downloadJUnit(prevJobID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error downloading previous JUnit: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error downloading previous JUnit: %v", err)
 	}
 
 	previous, err := parseJUnit(prevData)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing previous JUnit: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error parsing previous JUnit: %v", err)
 	}
 
 	type change struct {
@@ -343,7 +378,6 @@ func main() {
 	fmt.Println(message)
 
 	if err := postToSlack(message); err != nil {
-		fmt.Fprintf(os.Stderr, "Error posting to Slack: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error posting to Slack: %v", err)
 	}
 }

@@ -83,12 +83,55 @@ func TestRenderOneJobPerShardAsValidYAML(t *testing.T) {
 	for _, l := range p.Legs {
 		job, ok := parsed[l.Name].(map[string]any)
 		require.True(t, ok, "job %q missing from the rendered pipeline", l.Name)
-		assert.Equal(t, ".conformance-mr", job["extends"])
+		assert.Equal(t, ".conformance-shard", job["extends"])
 		variables, ok := job["variables"].(map[string]any)
 		require.True(t, ok, "job %q has no variables", l.Name)
 		assert.Equal(t, l.SkipTests, variables["CONFORMANCE_SKIP_TESTS"])
+		assert.Equal(t, l.Shard, variables["CONFORMANCE_SHARD"])
 	}
 	assert.Len(t, parsed, 3+2, "three jobs plus include and stages")
+}
+
+// TestNightlySetRendersShardsAndReport covers what the nightly run needs: shards
+// that may fail, and a report job after them that merges and diffs.
+func TestNightlySetRendersShardsAndReport(t *testing.T) {
+	jobs := []JobSet{{
+		Name:         "conformance-GW-API-1_7_0",
+		Stage:        "conformance-tests",
+		When:         whenScheduleNightly,
+		Shards:       2,
+		AllowFailure: true,
+		Report:       true,
+	}}
+	p := buildPipeline(jobs, sevenTests())
+	require.Len(t, p.Legs, 2)
+	require.Len(t, p.Reports, 1)
+	assert.Equal(t, []string{"conformance-tests", "conformance-report"}, p.Stages)
+	for _, l := range p.Legs {
+		assert.True(t, l.AllowFailure, "a nightly shard must not fail the pipeline")
+	}
+
+	content, err := render(p)
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(content), &parsed))
+
+	shard, ok := parsed["conformance-GW-API-1_7_0:1/2"].(map[string]any)
+	require.True(t, ok, "the first nightly shard must be rendered")
+	assert.Equal(t, true, shard["allow_failure"])
+
+	report, ok := parsed["conformance-report"].(map[string]any)
+	require.True(t, ok, "the nightly set must render a report job")
+	assert.Equal(t, "conformance-report", report["stage"])
+	rules, ok := report["rules"].([]any)
+	require.True(t, ok, "the report job must declare rules")
+	first, ok := rules[0].(map[string]any)
+	require.True(t, ok, "the report job's first rule must be a mapping")
+	assert.Equal(t, "always", first["when"], "the report must run even when a shard failed")
+}
+
+func TestOnlyReportSetsGetAReportJob(t *testing.T) {
+	assert.Empty(t, buildPipeline(mrJobSet(6), sevenTests()).Reports)
 }
 
 func TestRenderWithoutJobsKeepsThePipelineValid(t *testing.T) {

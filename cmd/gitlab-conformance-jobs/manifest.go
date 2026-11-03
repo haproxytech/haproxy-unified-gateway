@@ -23,10 +23,14 @@ import (
 
 // JobSet is one conformance job definition, fanned out over its shards.
 type JobSet struct {
-	Name   string `yaml:"name"`
-	Stage  string `yaml:"stage"`
-	When   string `yaml:"when"`
-	Shards int    `yaml:"shards"`
+	Name         string `yaml:"name"`
+	Stage        string `yaml:"stage"`
+	When         string `yaml:"when"`
+	Shards       int    `yaml:"shards"`
+	AllowFailure bool   `yaml:"allow_failure"`
+	// Report adds one job after the shards that merges their JUnit files and
+	// diffs them against the previous scheduled run.
+	Report bool `yaml:"report"`
 }
 
 // Manifest is the parsed .gitlab/conformance-jobs.yml.
@@ -36,13 +40,16 @@ type Manifest struct {
 
 // Trigger describes the pipeline the generator runs in.
 type Trigger struct {
-	Source string
+	Source       string
+	ScheduleType string
 }
 
 const (
-	whenMROrPush = "mr_or_push"
-	sourceMR     = "merge_request_event"
-	sourcePush   = "push"
+	whenMROrPush        = "mr_or_push"
+	whenScheduleNightly = "schedule_nightly"
+	sourceMR            = "merge_request_event"
+	sourcePush          = "push"
+	scheduleNightly     = "nightly"
 )
 
 var errUnknownWhen = errors.New("unknown when value")
@@ -57,10 +64,18 @@ func loadManifest(path string) (Manifest, error) {
 	if err = yaml.Unmarshal(data, &manifest); err != nil {
 		return Manifest{}, err
 	}
+	reports := 0
 	for _, job := range manifest.Jobs {
 		if err = job.validate(); err != nil {
 			return Manifest{}, err
 		}
+		if job.Report {
+			reports++
+		}
+	}
+	// The merged report keeps the name the diff and its history use.
+	if reports > 1 {
+		return Manifest{}, fmt.Errorf("at most one job set may set report: true, found %d", reports)
 	}
 	return manifest, nil
 }
@@ -74,18 +89,23 @@ func (j JobSet) validate() error {
 	if j.Shards < 1 {
 		return fmt.Errorf("job %q needs at least one shard", j.Name)
 	}
-	if j.When != whenMROrPush {
-		return fmt.Errorf("%w %q for job %q (want %q)", errUnknownWhen, j.When, j.Name, whenMROrPush)
+	if j.When != whenMROrPush && j.When != whenScheduleNightly {
+		return fmt.Errorf("%w %q for job %q", errUnknownWhen, j.When, j.Name)
 	}
 	return nil
 }
 
 // selected reports whether this job set runs in the given pipeline.
 func (j JobSet) selected(t Trigger) bool {
-	if j.When != whenMROrPush {
-		return false
+	switch j.When {
+	case whenMROrPush:
+		return t.Source == sourceMR || t.Source == sourcePush
+	case whenScheduleNightly:
+		// Keyed on the schedule type rather than the source, so the same set can
+		// be rehearsed from a manual pipeline.
+		return t.ScheduleType == scheduleNightly
 	}
-	return t.Source == sourceMR || t.Source == sourcePush
+	return false
 }
 
 // selectedJobs returns the job sets that run in the given pipeline.
@@ -101,5 +121,8 @@ func (m Manifest) selectedJobs(t Trigger) []JobSet {
 
 // triggerFromEnv reads the pipeline context from the GitLab CI environment.
 func triggerFromEnv() Trigger {
-	return Trigger{Source: os.Getenv("CI_PIPELINE_SOURCE")}
+	return Trigger{
+		Source:       os.Getenv("CI_PIPELINE_SOURCE"),
+		ScheduleType: os.Getenv("SCHEDULE_TYPE"),
+	}
 }
