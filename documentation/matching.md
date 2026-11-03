@@ -79,6 +79,22 @@ backends keep their own weights, so mixed rules forward the valid
 portion as before. Without the flag, any invalid `backendRef` drops the
 rule from routing, like an unprogrammable match.
 
+## TCPRoute
+
+A `TCPRoute` attaches to a `TCP` protocol listener, and selection is by
+port alone: of the routes attached to one listener, only the oldest
+(then `{namespace}/{name}`) receives connections; the others stay
+Accepted with no traffic, per the Gateway API tie-break. Weighted
+`backendRefs` split connections randomly, by weight.
+
+A TCP port with no route, or a share that resolves to no backend, closes
+the connection: a TCP client must not receive an HTTP error page. Under
+`--gwapi-compat`, an invalid `backendRef` keeps its weight as rejected
+connections -- weighted `80`, it rejects roughly `80%` of them -- while
+without the flag it is treated as absent and the remaining backends take
+its share; a route whose refs are all invalid rejects every connection
+in both modes.
+
 Conformance deployments enable this flag on every generated controller (see
 [conformance.md](conformance.md)).
 

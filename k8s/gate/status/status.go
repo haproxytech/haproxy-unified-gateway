@@ -55,6 +55,7 @@ type StatusUpdater interface {
 		gateways map[types.NamespacedName]*tree.Gateway,
 		httpRoutes map[types.NamespacedName]*tree.HTTPRoute,
 		tlsRoutes map[types.NamespacedName]*tree.TLSRoute,
+		tcpRoutes map[types.NamespacedName]*tree.TCPRoute,
 		listenerSets map[types.NamespacedName]*tree.ListenerSet) PreparedStatusUpdates
 	// UpdateStatus dispatches a previously prepared batch of writes to the
 	// background goroutine. Any stale pending batch is replaced by the new one.
@@ -156,6 +157,7 @@ func (s *StatusUpdaterImpl) PrepareStatusUpdate(ctx context.Context,
 	gateways map[types.NamespacedName]*tree.Gateway,
 	httpRoutes map[types.NamespacedName]*tree.HTTPRoute,
 	tlsRoutes map[types.NamespacedName]*tree.TLSRoute,
+	tcpRoutes map[types.NamespacedName]*tree.TCPRoute,
 	listenerSets map[types.NamespacedName]*tree.ListenerSet,
 ) PreparedStatusUpdates {
 	var writes PreparedStatusUpdates
@@ -164,6 +166,7 @@ func (s *StatusUpdaterImpl) PrepareStatusUpdate(ctx context.Context,
 	writes = append(writes, s.prepareListenerSetUpdates(ctx, listenerSets)...)
 	writes = append(writes, s.prepareHTTPRouteUpdates(httpRoutes)...)
 	writes = append(writes, s.prepareTLSRouteUpdates(tlsRoutes)...)
+	writes = append(writes, s.prepareTCPRouteUpdates(tcpRoutes)...)
 	return writes
 }
 
@@ -359,6 +362,33 @@ func (s *StatusUpdaterImpl) prepareTLSRouteUpdates(tlsRoutes map[types.Namespace
 		}
 		writes = append(writes, func(ctx context.Context) {
 			s.writeTLSRouteStatus(ctx, params)
+		})
+	}
+	return writes
+}
+
+func (s *StatusUpdaterImpl) prepareTCPRouteUpdates(tcpRoutes map[types.NamespacedName]*tree.TCPRoute) PreparedStatusUpdates {
+	var writes PreparedStatusUpdates
+	for _, tcpRoute := range tcpRoutes {
+		if tcpRoute.TreeStatus.Status == store.StatusDeleted || tcpRoute.TreeStatus.Status == "" {
+			continue
+		}
+		s.config.logger.LogAttrs(
+			context.Background(), slog.LevelDebug,
+			"Preparing status update",
+			logging.LogAttrResource(tcpRoute.K8sResource, s.config.extractGVK(tcpRoute.K8sResource)),
+		)
+		params := StatusUpdateParams[*gatewayv1.TCPRoute]{
+			Object:        objtypes.ObjectTypeTCPRoute,
+			NsName:        types.NamespacedName{Name: tcpRoute.K8sResource.Name, Namespace: tcpRoute.K8sResource.Namespace},
+			StatusPatcher: newTCPRouteStatusPatcher(tcpRoute),
+			Getter:        s.config.client,
+			StatusUpdater: s.config.client.Status(),
+			Logger:        s.config.logger,
+			extractGVK:    s.config.extractGVK,
+		}
+		writes = append(writes, func(ctx context.Context) {
+			s.writeTCPRouteStatus(ctx, params)
 		})
 	}
 	return writes

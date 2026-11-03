@@ -105,6 +105,24 @@ func (b *ReferenceGrantBuilderImpl) recheckGrantDependents() {
 		}
 	}
 
+	for routeKey, route := range b.controllerStore.GateTree.TCPRoutes {
+		if route == nil || route.K8sResource == nil || route.TreeStatus.Status == store.StatusDeleted {
+			continue
+		}
+		if _, present := b.controllerStore.ClusterStore.Updates.TCPRoutes[routeKey]; present {
+			continue
+		}
+		if !tcpRouteReferencesNamespace(route, namespaces) {
+			continue
+		}
+		b.controllerStore.ClusterStore.Updates.TCPRoutes[routeKey] = store.Update[*gatewayv1.TCPRoute]{
+			NewObject: route.K8sResource,
+			OldObject: route.K8sResource,
+			Status:    store.StatusUpserted,
+			Indirect:  true,
+		}
+	}
+
 	for gwKey, gw := range b.controllerStore.GateTree.Gateways {
 		if gw == nil || gw.K8sResource == nil || gw.TreeStatus.Status == store.StatusDeleted {
 			continue
@@ -153,6 +171,22 @@ func routeReferencesNamespace(rules []*HTTPRouteRule, routeNs string, namespaces
 // tlsRouteReferencesNamespace reports whether any rule of the TLSRoute holds a
 // cross-namespace backend reference into one of the namespaces.
 func tlsRouteReferencesNamespace(route *TLSRoute, namespaces map[string]struct{}) bool {
+	for _, rule := range route.Rules {
+		if rule == nil {
+			continue
+		}
+		for _, backendRef := range rule.K8sResource.BackendRefs {
+			if refNamespaceHits(backendRef.BackendObjectReference.Namespace, route.K8sResource.Namespace, namespaces) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// tcpRouteReferencesNamespace reports whether any rule of the TCPRoute holds a
+// cross-namespace backend reference into one of the namespaces.
+func tcpRouteReferencesNamespace(route *TCPRoute, namespaces map[string]struct{}) bool {
 	for _, rule := range route.Rules {
 		if rule == nil {
 			continue

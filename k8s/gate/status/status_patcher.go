@@ -579,6 +579,67 @@ func FilterTLSRouteStatusByControllerName(tlsRouteStatus v1alpha2.TLSRouteStatus
 }
 
 // ---------------------------
+// TCPRoute
+
+func newTCPRouteStatusPatcher(tcpRoute *tree.TCPRoute) StatusPatcher {
+	return &tcpRouteStatusPatcher{
+		controllerName: tcpRoute.ControllerName,
+		conditions:     tcpRoute.Conditions,
+	}
+}
+
+var _ StatusPatcher = &tcpRouteStatusPatcher{}
+
+type tcpRouteStatusPatcher struct {
+	controllerName string
+	conditions     rc.RouteConditions
+}
+
+func (sp *tcpRouteStatusPatcher) StatusEqual(obj client.Object) (bool, error) {
+	tcpRoute, ok := obj.(*gatewayv1.TCPRoute)
+	if !ok {
+		return false, fmt.Errorf("wrong type %T", obj)
+	}
+	filteredCondFromClusterRoute := FilterTCPRouteStatusByControllerName(tcpRoute.Status, sp.controllerName)
+	clusterConds := rc.NewRouteConditionsFromV1RouteConditions(filteredCondFromClusterRoute.Parents, sp.controllerName)
+
+	return RouteStatusesEqual(clusterConds, sp.conditions), nil
+}
+
+func (sp *tcpRouteStatusPatcher) SetStatus(obj client.Object) error {
+	tcpRoute, ok := obj.(*gatewayv1.TCPRoute)
+	if !ok {
+		return fmt.Errorf("wrong type %T", obj)
+	}
+
+	// Start with a list of statuses from other controllers.
+	preservedStatuses := make([]gatewayv1.RouteParentStatus, 0, len(tcpRoute.Status.Parents))
+	for _, parentStatus := range tcpRoute.Status.Parents {
+		if parentStatus.ControllerName != gatewayv1.GatewayController(sp.controllerName) {
+			preservedStatuses = append(preservedStatuses, parentStatus)
+		}
+	}
+
+	// Append our controller's new statuses.
+	newParentStatuses := append(preservedStatuses, sp.conditions.ToV1RouteConditions().Parents...)
+	sortRouteParentStatusByParentRef(newParentStatuses)
+	tcpRoute.Status.Parents = newParentStatuses
+	return nil
+}
+
+func FilterTCPRouteStatusByControllerName(tcpRouteStatus gatewayv1.TCPRouteStatus, controllerName string) gatewayv1.TCPRouteStatus {
+	filtered := make([]gatewayv1.RouteParentStatus, 0, len(tcpRouteStatus.RouteStatus.Parents))
+	for _, parent := range tcpRouteStatus.RouteStatus.Parents {
+		if parent.ControllerName == gatewayv1.GatewayController(controllerName) {
+			filtered = append(filtered, parent)
+		}
+	}
+	return gatewayv1.TCPRouteStatus{
+		Parents: filtered,
+	}
+}
+
+// ---------------------------
 // Gateway listener feedback (Programmed conditions only, sourced from the tree)
 
 // newGatewayListenerFeedbackStatusPatcher snapshots the Programmed condition

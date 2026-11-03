@@ -40,6 +40,7 @@ type ClusterStore struct {
 	Gateways          map[types.NamespacedName]*gatewayv1.Gateway
 	HTTPRoutes        map[types.NamespacedName]*gatewayv1.HTTPRoute
 	TLSRoutes         map[types.NamespacedName]*gatewayv1alpha2.TLSRoute
+	TCPRoutes         map[types.NamespacedName]*gatewayv1.TCPRoute
 	Services          map[types.NamespacedName]*v1.Service
 	Namespaces        map[types.NamespacedName]*v1.Namespace
 	Secrets           map[types.NamespacedName]*v1.Secret
@@ -66,6 +67,36 @@ type ClusterStoreUpdater interface {
 	ResetUpdates()
 }
 
+// NewClusterStore builds the controller's cluster store with every resource
+// map allocated: the store adapter is registered per GVK at updater
+// construction, so an unallocated map silently drops that Kind's updates.
+func NewClusterStore() *ClusterStore {
+	return &ClusterStore{
+		GatewayClasses:    make(map[types.NamespacedName]*gatewayv1.GatewayClass),
+		Gateways:          make(map[types.NamespacedName]*gatewayv1.Gateway),
+		HTTPRoutes:        make(map[types.NamespacedName]*gatewayv1.HTTPRoute),
+		TLSRoutes:         make(map[types.NamespacedName]*gatewayv1alpha2.TLSRoute),
+		TCPRoutes:         make(map[types.NamespacedName]*gatewayv1.TCPRoute),
+		Services:          make(map[types.NamespacedName]*v1.Service),
+		Namespaces:        make(map[types.NamespacedName]*v1.Namespace),
+		Secrets:           make(map[types.NamespacedName]*v1.Secret),
+		ConfigMaps:        make(map[types.NamespacedName]*v1.ConfigMap),
+		GatewayAPICRDs:    make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
+		HugGates:          make(map[types.NamespacedName]*v3.HugGate),
+		BackendCRs:        make(map[types.NamespacedName]*v3.Backend),
+		GlobalCRs:         make(map[types.NamespacedName]*v3.Global),
+		DefaultsCRs:       make(map[types.NamespacedName]*v3.Defaults),
+		HugConfs:          make(map[types.NamespacedName]*v3.HugConf),
+		EndpointSlices:    make(map[types.NamespacedName]*discoveryV1.EndpointSlice),
+		ReferenceGrants:   make(map[types.NamespacedName]*gatewayv1beta1.ReferenceGrant),
+		Ingresses:         make(map[types.NamespacedName]*networkingv1.Ingress),
+		IngressClasses:    make(map[types.NamespacedName]*networkingv1.IngressClass),
+		IngressBackendCRs: make(map[types.NamespacedName]*unstructured.Unstructured),
+		ListenerSets:      make(map[types.NamespacedName]*gatewayv1.ListenerSet),
+		Updates:           NewClusterUpdates(),
+	}
+}
+
 type ClusterStoreUpdaterImpl struct {
 	clusterStore *ClusterStore
 	storeAdapter *storeAdapter
@@ -89,6 +120,7 @@ func NewClusterStoreUpdaterImpl(
 				extractGVK(&gatewayv1.Gateway{}):                newObjectStoreImpl(clusterStore.Gateways, clusterStore.Updates.Gateways, logger),
 				extractGVK(&gatewayv1.HTTPRoute{}):              newObjectStoreImpl(clusterStore.HTTPRoutes, clusterStore.Updates.HTTPRoutes, logger),
 				extractGVK(&gatewayv1alpha2.TLSRoute{}):         newObjectStoreImpl(clusterStore.TLSRoutes, clusterStore.Updates.TLSRoutes, logger),
+				extractGVK(&gatewayv1.TCPRoute{}):               newObjectStoreImpl(clusterStore.TCPRoutes, clusterStore.Updates.TCPRoutes, logger),
 				extractGVK(&v1.Service{}):                       newObjectStoreImpl(clusterStore.Services, clusterStore.Updates.Services, logger),
 				extractGVK(&v1.Namespace{}):                     newObjectStoreImpl(clusterStore.Namespaces, clusterStore.Updates.Namespaces, logger),
 				extractGVK(&v1.Secret{}):                        newObjectStoreImpl(clusterStore.Secrets, clusterStore.Updates.Secrets, logger),

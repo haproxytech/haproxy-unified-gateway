@@ -379,6 +379,49 @@ func (b *HaproxyConfMgrImpl) backendsByServiceForTLSRoute(routeOwners map[client
 	}
 }
 
+func (b *HaproxyConfMgrImpl) backendsByServiceForTCPRoute(routeOwners map[client.ObjectKey]int64,
+	beName string,
+	servicesByBackend map[client.ObjectKey]map[BackendPort]struct{},
+) {
+	for ownerRouteKey := range routeOwners {
+		treeTCPRoute, ok := b.controllerStore.GateTree.TCPRoutes[ownerRouteKey]
+		if !ok {
+			b.logger.LogAttrs(context.Background(), slog.LevelError, "could not find TCPRoute in GateTree", logging.LogAttrKey(ownerRouteKey))
+			continue
+		}
+		for _, rule := range treeTCPRoute.Rules {
+			for _, hBackendRef := range rule.K8sResource.BackendRefs {
+				// Only refs that resolved own servers: an invalid ref's share
+				// is rejected, not fed by its Service.
+				if checkResult, ok := rule.CheckBackendRef.Get(hBackendRef.BackendObjectReference); !ok || !checkResult.Valid {
+					continue
+				}
+				backendRef := hBackendRef.BackendObjectReference
+				nsName := utils.GetNamespacedName(backendRef.Name, backendRef.Namespace, treeTCPRoute.K8sResource.Namespace)
+				var svcPort int32
+				if backendRef.Port != nil {
+					svcPort = int32(*backendRef.Port)
+				}
+				ruleBeName, err := b.getBackendName(nsName, svcPort, "")
+				if err != nil {
+					continue
+				}
+				if ruleBeName != beName {
+					continue
+				}
+				if servicesByBackend[nsName] == nil {
+					servicesByBackend[nsName] = make(map[BackendPort]struct{})
+				}
+				backendPort := BackendPort{
+					backendName: beName,
+					svcPort:     svcPort,
+				}
+				servicesByBackend[nsName][backendPort] = struct{}{}
+			}
+		}
+	}
+}
+
 // backendsByService returns a:
 // map[service key]map[backendName] struct{} for all referenced backend
 func (b *HaproxyConfMgrImpl) backendsByService() map[client.ObjectKey]map[BackendPort]struct{} {
@@ -391,6 +434,10 @@ func (b *HaproxyConfMgrImpl) backendsByService() map[client.ObjectKey]map[Backen
 			routeType = BackendOwnerTypeTLSRoute
 		}
 		if !ok {
+			routeOwners, ok = b.backendOwners.owners[beName][BackendOwnerTypeTCPRoute]
+			routeType = BackendOwnerTypeTCPRoute
+		}
+		if !ok {
 			continue
 		}
 		switch routeType {
@@ -398,6 +445,8 @@ func (b *HaproxyConfMgrImpl) backendsByService() map[client.ObjectKey]map[Backen
 			b.backendsByServiceForHTTPRoute(routeOwners, beName, servicesByBackend)
 		case BackendOwnerTypeTLSRoute:
 			b.backendsByServiceForTLSRoute(routeOwners, beName, servicesByBackend)
+		case BackendOwnerTypeTCPRoute:
+			b.backendsByServiceForTCPRoute(routeOwners, beName, servicesByBackend)
 		}
 	}
 	return servicesByBackend

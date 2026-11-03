@@ -154,6 +154,13 @@ func (b *HaproxyConfMgrImpl) ComputeDiffs(ctx context.Context) error {
 			logging.LogAttrError(err))
 	}
 
+	// ------------
+	// TCPRoutes
+	if err := b.processTCPRoutes(); err != nil {
+		logger.LogAttrs(context.Background(), slog.LevelInfo, "Error processing TCPRoutes",
+			logging.LogAttrError(err))
+	}
+
 	// -----------
 	// Routes (All types)
 	if err := b.firstSync.routeManager.processRoutes(); err != nil {

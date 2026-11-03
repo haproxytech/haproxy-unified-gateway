@@ -234,6 +234,11 @@ end
 -- Register the function to be called from HAProxy
 core.register_action("route", { "http-req" }, route)
 
+-- Same weighted-random selection for TCPRoutes, whose frontends are pure TCP:
+-- the tcp_request content rules set txn.route from the port's map, and the
+-- weighted JSON answer lands in txn.backend exactly as for HTTP.
+core.register_action("route", { "tcp-req" }, route)
+
 -- ---------------------------------------------------------------------------
 -- Match-condition evaluation (headers, method, query params)
 --

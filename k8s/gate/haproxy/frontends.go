@@ -153,6 +153,10 @@ func (b *HaproxyConfMgrImpl) clearListenerMapOrigins(vlName string, l *tree.List
 			listenerRouteExactMatchMap.RemoveEntriesFrom(routeOrigin)
 			listenerRouteWildcardMatchMap.RemoveEntriesFrom(routeOrigin)
 		}
+		// TCPRoute map entries are keyed by the port's virtual listener, not
+		// the listener: selection has no hostname to tell listeners apart.
+		tcpRouteOrigin := maps.NewRouteOrigin("TCPRoute", vlName, routeKey)
+		b.params.mapsStorage.GetTCPRouteMapFile(frontendName).RemoveEntriesFrom(tcpRouteOrigin)
 	}
 }
 
@@ -172,6 +176,12 @@ func (b *HaproxyConfMgrImpl) fillListenerMaps(vListenerName string, vListener *t
 	listenerWildcardMatchMap := b.params.mapsStorage.GetListenerWildcardMatchMapFile(frontendName)
 
 	for _, l := range vListener.Listeners {
+		if !protocols.CarriesHostname(l.Protocol()) {
+			// A TCP or UDP listener claims no hostname, so there is nothing
+			// for the hostname maps to select on; its frontend routes by
+			// port alone.
+			continue
+		}
 		hostname := l.Hostname()
 		hostnameStr := ""
 		if hostname != nil {
@@ -242,6 +252,12 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 			sniMap.Path.FullPath(),
 		)
 
+	case vListener.ProtocolCategory == protocols.ProcotolCategoryTCP:
+		tcpRules, backendSwitchingRules, aclList = tcpFrontendRules(
+			vListenerName,
+			b.params.mapsStorage.GetTCPRouteMapFile(frontendName).Path.FullPath(),
+		)
+
 	default:
 		httpRules, aclList = httpFrontendRules(
 			listenerExactMatchMap.Path.FullPath(),
@@ -266,15 +282,26 @@ func (b *HaproxyConfMgrImpl) newFrontend(vListenerName string, vListener *tree.V
 	}
 
 	fe := &models.Frontend{
-		Name:           frontendName,
-		From:           b.params.DefaultsSectionName,
-		Metadata:       md,
-		DefaultBackend: "backend_not_found",
+		Name:     frontendName,
+		From:     b.params.DefaultsSectionName,
+		Metadata: md,
+		DefaultBackend: func() string {
+			// A TCP client must never be answered by the http backend_not_found
+			// in cleartext; the tcp-mode fallback has no server, so the
+			// connection is closed instead.
+			if vListener.ProtocolCategory == protocols.ProcotolCategoryTCP {
+				return TCPBackendNotFound
+			}
+			return "backend_not_found"
+		}(),
 		Mode: func() string {
 			if vListener.ProtocolCategory == protocols.ProtocolCategorySecure || vListener.ProtocolCategory == protocols.ProtocolCategoryInsecure {
 				return "http"
 			}
 			if vListener.ProtocolCategory == protocols.ProtocolCategoryTLS {
+				return "tcp"
+			}
+			if vListener.ProtocolCategory == protocols.ProcotolCategoryTCP {
 				return "tcp"
 			}
 			return ""
@@ -672,6 +699,74 @@ func (b *HaproxyConfMgrImpl) bindParams(_, vListenerName string, vListener *tree
 // this rule set live in the sess scope — keep it that way: the route_is_json
 // ACL reads var(sess.sni_match), matching the scope in which sni_match is
 // written. Mixing sess and txn leaves the ACL branch permanently dead.
+// TCPBackendNotFound is the static tcp-mode, no-server backend a TCP frontend
+// falls back to: no route for the port, no backend for the chosen share. A
+// backend with no server closes the connection, which is the API's required
+// "actively reject" for unroutable traffic.
+const TCPBackendNotFound = "backend_tcp_not_found"
+
+// tcpFrontendRules returns the connection-time rules implementing TCPRoute
+// selection. The only selection input is the port, so the map key is the
+// virtual listener name -- a literal stable for the frontend's whole life,
+// which keeps the rules static: route changes only rewrite the map file,
+// runtime-updatable with no reprogram of the frontend.
+//
+// The value formats are the HTTP frontend's: a bare backend name, or the
+// weighted-random JSON answered by the shared lua.route action, here in a
+// tcp-request content rule. Rules without an entry, or a share picked from an
+// invalid backendRef under compatibility, resolve to no backend and fall to
+// TCPBackendNotFound.
+func tcpFrontendRules(vListenerName, tcpRouteMap string) ([]*models.TCPRequestRule, []*models.BackendSwitchingRule, []*models.ACL) {
+	tcpRules := []*models.TCPRequestRule{
+		{ // tcp-request inspect-delay 1000
+			// None of the rules below reads the payload, but a content ruleset
+			// only completes once data arrives or the delay expires: without it
+			// a server-first protocol (no client hello) would never be routed.
+			// 1ms lets those connections through without slowing client-first
+			// ones, whose data arrives first.
+			Type:    "inspect-delay",
+			Timeout: new(int64(1000)),
+		},
+		{ // tcp-request content set-var(txn.route) str(<virtual listener>),map(tcp_route.map)
+			Type:     "content",
+			Action:   "set-var",
+			VarName:  "route",
+			VarScope: "txn",
+			Expr:     "str(" + vListenerName + "),map(" + tcpRouteMap + ")",
+			Metadata: map[string]any{"hug": "TCPRoute selection for the port"},
+		},
+		{ // tcp-request content lua.route if route_is_json
+			Type:      "content",
+			Action:    "lua",
+			LuaAction: "route",
+			Cond:      "if",
+			CondTest:  "route_is_json",
+			Metadata:  map[string]any{"hug": "for lua routing"},
+		},
+	}
+	backendSwitchingRules := []*models.BackendSwitchingRule{
+		{
+			Name:     "%[var(txn.backend)]",
+			Cond:     "if",
+			CondTest: "route_is_json",
+		},
+		{
+			Name: "%[var(txn.route)]",
+		},
+	}
+	aclList := []*models.ACL{
+		{ // acl route_is_json var(txn.route),bytes(0,1) -m str {
+			ACLName:   "route_is_json",
+			Criterion: "var(txn.route),bytes(0,1)",
+			Value:     "-m str {",
+			Metadata: map[string]any{
+				"hug": "for lua routing",
+			},
+		},
+	}
+	return tcpRules, backendSwitchingRules, aclList
+}
+
 func tlsPassthroughRules(
 	listenerExactMatch, listenerWildcardMatch,
 	listenerRouteExactMatch, listenerRouteWildcardMatch,
