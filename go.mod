@@ -7,7 +7,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/renameio v1.0.1
-	github.com/haproxytech/client-native/v6 v6.3.12
+	github.com/haproxytech/client-native/v6 v6.3.13
 	github.com/imdario/mergo v0.3.16
 	github.com/joho/godotenv v1.5.1
 	github.com/lmittmann/tint v1.1.2
