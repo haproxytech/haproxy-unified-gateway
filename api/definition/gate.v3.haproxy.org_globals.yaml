@@ -485,6 +485,19 @@ spec:
                 insecure_setuid_wanted:
                   description: insecure setuid wanted
                   type: boolean
+                jwt_options:
+                  description: jwt options
+                  properties:
+                    allow_none_alg:
+                      description: Allow unsigned JWTs using the none algorithm in the jwt_verify converter.
+                      type: boolean
+                    decrypt_alg_list:
+                      description: Colon-separated list of allowed JWT decryption algorithms; supports ALL and exclusions prefixed with !.
+                      type: string
+                    decrypt_enc_list:
+                      description: Colon-separated list of allowed JWT encryption algorithms; supports ALL and exclusions prefixed with !.
+                      type: string
+                  type: object
                 limited_quic:
                   description: limited quic
                   type: boolean
@@ -1877,10 +1890,11 @@ spec:
                     idle_pool_shared:
                       description: |-
                         idle pool shared
-                        Enum: ["enabled","disabled"]
+                        Enum: ["enabled","disabled","full"]
                       enum:
                         - enabled
                         - disabled
+                        - full
                       type: string
                     idletimer:
                       description: |-
