@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/google/renameio"
+	"github.com/google/renameio/v2"
 	futils "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/fileutils"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/certificate"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"

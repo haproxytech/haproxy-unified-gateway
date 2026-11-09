@@ -21,7 +21,7 @@ import (
 	"os"
 
 	"github.com/haproxytech/client-native/v6/models"
-	"go.yaml.in/yaml/v2"
+	"go.yaml.in/yaml/v3"
 )
 
 func marshalOmitEmpty(v any) ([]byte, error) {
