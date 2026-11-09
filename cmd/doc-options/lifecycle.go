@@ -20,7 +20,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/google/renameio"
+	"github.com/google/renameio/v2"
 	"github.com/phuslu/log"
 	"gopkg.in/yaml.v3"
 )
