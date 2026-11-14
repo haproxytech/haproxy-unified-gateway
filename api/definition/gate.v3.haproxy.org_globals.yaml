@@ -182,6 +182,17 @@ spec:
                       maximum: 4294967295
                       minimum: 0
                       type: integer
+                    counters:
+                      description: |-
+                        counters
+                        Enum: ["enabled","disabled"]
+                      enum:
+                        - enabled
+                        - disabled
+                      type: string
+                    quick_exit:
+                      description: quick exit
+                      type: boolean
                     quiet:
                       description: quiet
                       type: boolean
@@ -522,6 +533,12 @@ spec:
                   required:
                     - enabled
                   type: object
+                log_tag:
+                  description: |-
+                    log tag
+                    Pattern: ^[^\s]+$
+                  pattern: ^[^\s]+$
+                  type: string
                 log_target_list:
                   description: log target list
                   items:
@@ -1462,6 +1479,9 @@ spec:
                     issuers_chain_path:
                       description: issuers chain path
                       type: string
+                    key_base:
+                      description: key base
+                      type: string
                     load_extra_del_ext:
                       description: Remove the certificate file extension before appending the extra file extension (foobar.crt loads foobar.key instead of foobar.crt.key)
                       type: boolean
@@ -2019,6 +2039,13 @@ spec:
                       description: stick counters
                       format: int64
                       type: integer
+                    streams_elasticity:
+                      description: |-
+                        Target ratio of streams per frontend connection relative to the maximum number of concurrent connections
+                        Minimum: 0
+                      format: int64
+                      minimum: 0
+                      type: integer
                     takeover_other_tg_connections:
                       description: |-
                         takeover other tg connections
@@ -2115,6 +2142,15 @@ spec:
                     force_private_cache:
                       description: force private cache
                       type: boolean
+                    hard_maxrecord:
+                      description: |-
+                        hard maxrecord
+                        Maximum: 2.147483647e+09
+                        Minimum: 0
+                      format: int64
+                      maximum: 2147483647
+                      minimum: 0
+                      type: integer
                     keylog:
                       description: |-
                         keylog
