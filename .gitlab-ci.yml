@@ -9,7 +9,7 @@ stages:
   - conformance-tests
   - metrics-report
 variables:
-  HAPROXY_VERSION: "3.2"
+  HAPROXY_VERSION: "3.4"
   KIND: v0.33.0
   DOCKER_HOST: tcp://docker:2375
   DOCKER_DRIVER: overlay2

@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 go build -buildvcs=true \
         -tags="$BUILD_TAGS" \
         -o fs/usr/local/sbin/hug ./cmd/controller
 
-FROM haproxytech/haproxy-alpine:3.2 AS builder-c
+FROM haproxytech/haproxy-alpine:3.4 AS builder-c
 RUN apk add --no-cache build-base gcc musl-dev
 WORKDIR /src
 
@@ -57,7 +57,7 @@ RUN gcc -O3 -std=c11 -pipe \
     -o haproxy_wrapper haproxy_wrapper.c
 
 # Prune files the gateway never uses; the scratch copy below removes them for real.
-FROM haproxytech/haproxy-alpine:3.2 AS haproxy-base
+FROM haproxytech/haproxy-alpine:3.4 AS haproxy-base
 RUN rm -f /usr/local/bin/dataplaneapi \
            /usr/local/etc/haproxy/dataplaneapi.yml \
            /usr/local/etc/haproxy/haproxy.cfg \
