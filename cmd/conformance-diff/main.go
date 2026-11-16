@@ -218,7 +218,7 @@ func findPreviousJob() (jobID, pipelineID int, err error) {
 
 func downloadJUnit(jobID int) ([]byte, error) {
 	projectID := os.Getenv("CI_PROJECT_ID")
-	junitFile := os.Getenv("JUNIT_FILE")
+	junitFile := os.Getenv("MERGED_JUNIT_FILE")
 	if junitFile == "" {
 		junitFile = "conformance-junit-1.7.0.xml"
 	}
@@ -285,7 +285,7 @@ func postToSlack(message string) error {
 }
 
 func main() {
-	junitFile := os.Getenv("JUNIT_FILE")
+	junitFile := os.Getenv("MERGED_JUNIT_FILE")
 	if junitFile == "" {
 		junitFile = "conformance-junit-1.7.0.xml"
 	}

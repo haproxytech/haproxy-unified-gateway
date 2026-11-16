@@ -86,10 +86,11 @@ stages:
   tags:
     - go
   variables:
-    JUNIT_FILE: "reports/conformance-junit.xml"
+    # Not JUNIT_FILE: the parent's forwarded value overrides job variables.
+    MERGED_JUNIT_FILE: "reports/conformance-junit.xml"
   script:
     - mkdir -p reports
-    - go run ./cmd/junit-merge -o "$JUNIT_FILE" conformance-junit-*.xml
+    - go run ./cmd/junit-merge -o "$MERGED_JUNIT_FILE" conformance-junit-*.xml
     - go run ./cmd/conformance-diff
   artifacts:
     when: always
