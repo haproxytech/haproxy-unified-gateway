@@ -16,6 +16,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -145,7 +146,7 @@ func (m *MapsStorageDefault) DeleteMapsDirectoryForFrontend(frontendName string)
 
 	// Remove from disk before dropping the in-memory state. Dropping the state
 	// first makes a filesystem failure unrecoverable: the entry is gone, so the
-	// directory is never retried.
+	// directory is never retried, and only the orphan removal collects it.
 	if err := os.RemoveAll(mapBaseDir); err != nil {
 		m.logger.LogAttrs(
 			context.Background(), slog.LevelWarn,
@@ -161,9 +162,74 @@ func (m *MapsStorageDefault) DeleteMapsDirectoryForFrontend(frontendName string)
 	return nil
 }
 
+// RemoveOrphanMapsDirectories removes the maps directory of every frontend the
+// configuration does not declare, and leaves the others untouched.
+//
+// It is called once at startup, with the frontends of the configuration loaded
+// from disk.
+//
+// The parameter is what to keep, not what to remove: every directory it names is
+// left in place. It is the frontends the configuration declares, which is not the
+// same set as the frontends the cluster declares: a frontend that no resource owns
+// any more is still declared by the file HAProxy is started with, so its map files
+// are still read, and it is the deletion of that frontend — once committed — that
+// removes its directory. An orphan here is a directory whose frontend is absent
+// from the configuration altogether: the leftover of a removal that did not
+// complete (a crash between the commit and the removal, or a filesystem error on a
+// removal that was never retried).
+//
+// The base directory is not wiped: the configuration HAProxy starts with
+// references map files, and nothing guarantees they would be written again before
+// the next reload, so a blanket removal would take the running configuration's
+// files away. DeleteMapsDirectory is the full reset, for a caller that knows the
+// whole directory can go.
+func (m *MapsStorageDefault) RemoveOrphanMapsDirectories(referencedFrontends []string) error {
+	referencedMapsDirectories := make(map[string]struct{}, len(referencedFrontends))
+	for _, frontendName := range referencedFrontends {
+		referencedMapsDirectories[filepath.Join(m.MapsBaseDir, frontendName)] = struct{}{}
+	}
+
+	mapsBaseDirEntries, err := os.ReadDir(m.MapsBaseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No map file was ever written.
+			return nil
+		}
+		return err
+	}
+
+	var removalErrors []error
+
+	for _, entry := range mapsBaseDirEntries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		orphanMapsDirectory := filepath.Join(m.MapsBaseDir, entry.Name())
+		if _, ok := referencedMapsDirectories[orphanMapsDirectory]; ok {
+			continue
+		}
+
+		if err := os.RemoveAll(orphanMapsDirectory); err != nil {
+			m.logger.LogAttrs(
+				context.Background(), slog.LevelWarn,
+				"failed to remove orphan maps directory",
+				slog.String("dir", orphanMapsDirectory),
+				slog.Any("error", err),
+			)
+			removalErrors = append(removalErrors, err)
+			continue
+		}
+
+		delete(m.mapFiles, orphanMapsDirectory)
+	}
+
+	return errors.Join(removalErrors...)
+}
+
 // DeleteMapsDirectory removes the whole maps base directory, for a full reset of
 // the maps storage. It is not the frontend deletion path: see
-// DeleteMapsDirectoryForFrontend.
+// DeleteMapsDirectoryForFrontend and RemoveOrphanMapsDirectories.
 func (m *MapsStorageDefault) DeleteMapsDirectory() error {
 	return os.RemoveAll(m.MapsBaseDir)
 }

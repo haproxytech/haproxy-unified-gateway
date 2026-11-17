@@ -40,6 +40,7 @@ type CertificateStorage interface {
 type MapsStorage interface {
 	DeleteMapsDirectoryForFrontend(frontendName string) error
 	DeleteMapsDirectory() error
+	RemoveOrphanMapsDirectories(referencedFrontends []string) error
 	GetPathExactMapFile(frontendName string) *maps.MapFileState
 	GetPathPrefixMapFile(frontendName string) *maps.MapFileState
 	GetPathRegexMapFile(frontendName string) *maps.MapFileState
