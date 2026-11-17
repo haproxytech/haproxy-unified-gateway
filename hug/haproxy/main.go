@@ -93,6 +93,10 @@ func (h *AppManagerImpl) Stop() {
 }
 
 func (h *AppManagerImpl) Run() {
+	// Collect the maps directories the configuration loaded from disk does not
+	// reference, before the controller can submit a single diff.
+	h.removeOrphanMapsDirectories()
+
 	// Goroutine to listen on haproxyCfgCh and perform the haproxy configuration update
 	h.wg.Go(func() {
 		for {
@@ -369,6 +373,52 @@ func (h *AppManagerImpl) removePendingMapsDirectoriesFromFrontends() {
 		}
 
 		delete(h.frontendsPendingMapsRemoval, frontendName)
+	}
+}
+
+// removeOrphanMapsDirectories removes the maps directories of the frontends the
+// configuration loaded from disk does not reference. It collects the orphans left
+// by a frontend removal that did not complete before the previous stop: a crash
+// between the commit and the removal, or a filesystem error that was never
+// retried.
+//
+// It runs once, at startup, before any transaction can change the file: that
+// configuration is the one HAProxy is started with, so a directory it does not
+// reference is unreachable by the process serving traffic. A frontend the
+// controller declares later is written its map files again during the cycle that
+// introduces it, before the reload that makes HAProxy read them.
+//
+// Removing them after the first applied configuration instead, as a way to wait
+// for a state the resources own, would miss the case this is meant for: a
+// controller restarted on a cluster that did not change receives no diff at all,
+// so no apply runs and the orphans stay for good.
+func (h *AppManagerImpl) removeOrphanMapsDirectories() {
+	frontends, err := h.client.FrontendsGet()
+	if err != nil {
+		h.logger.LogAttrs(context.Background(), slog.LevelWarn,
+			"cannot list the frontends of the applied configuration, orphan maps directories removal skipped",
+			logging.LogAttrError(err),
+		)
+		return
+	}
+
+	// The frontends the configuration on disk declares: what the removal has to
+	// keep. A frontend that no cluster resource declares any more is part of them,
+	// because HAProxy is started with that configuration and still reads its map
+	// files; the deletion of the frontend removes them once it is committed.
+	configuredFrontends := make([]string, 0, len(frontends))
+	for _, frontend := range frontends {
+		if frontend == nil {
+			continue
+		}
+		configuredFrontends = append(configuredFrontends, frontend.Name)
+	}
+
+	if err = h.mapsStorage.RemoveOrphanMapsDirectories(configuredFrontends); err != nil {
+		h.logger.LogAttrs(context.Background(), slog.LevelWarn,
+			"orphan maps directories removal incomplete",
+			logging.LogAttrError(err),
+		)
 	}
 }
 
