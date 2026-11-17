@@ -49,8 +49,21 @@ func (c *clientNative) FrontendDelete(frontendName string) error {
 	if err != nil {
 		return err
 	}
+
+	if err := configuration.DeleteFrontend(frontendName, c.activeTransaction, 0); err != nil {
+		// An already absent frontend is the desired outcome: the deletion is
+		// replayed when the cycle that deleted it was applied without being
+		// reloaded, and it must converge rather than fail on every retry.
+		if isSectionNotFound(err) {
+			return nil
+		}
+
+		return err
+	}
+
 	reload.Instance().SetReload("Frontend deleted %s", frontendName)
-	return configuration.DeleteFrontend(frontendName, c.activeTransaction, 0)
+
+	return nil
 }
 
 func (c *clientNative) FrontendsGet() (models.Frontends, error) {
