@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
 
 	"github.com/haproxytech/client-native/v6/models"
@@ -47,7 +48,12 @@ type AppManagerImpl struct {
 	wg           *sync.WaitGroup
 	logger       *slog.Logger
 	haproxyCfgCh chan diffs.HaproxyConfDiffs
-	params       params.Params
+	// frontendsPendingMapsRemoval holds the frontends whose maps directory is
+	// waiting to be removed. A frontend is queued when a committed configuration no
+	// longer declares it, and stays queued while the removal fails: the diffs that
+	// carried the deletion are reset once applied, so nothing else would retry it.
+	frontendsPendingMapsRemoval map[string]struct{}
+	params                      params.Params
 }
 
 var _ AppManager = &AppManagerImpl{}
@@ -66,14 +72,15 @@ func NewAppManager(ctx context.Context, wg *sync.WaitGroup,
 	reload.Instance().SetLogger(logger)
 
 	return &AppManagerImpl{
-		client:       haproxyClient,
-		process:      p,
-		ctx:          ctx,
-		wg:           wg,
-		logger:       mylogger,
-		params:       param,
-		haproxyCfgCh: cfgCh,
-		mapsStorage:  mapsStorage,
+		client:                      haproxyClient,
+		process:                     p,
+		ctx:                         ctx,
+		wg:                          wg,
+		logger:                      mylogger,
+		params:                      param,
+		haproxyCfgCh:                cfgCh,
+		mapsStorage:                 mapsStorage,
+		frontendsPendingMapsRemoval: map[string]struct{}{},
 	}, nil
 }
 
@@ -111,6 +118,7 @@ func (h *AppManagerImpl) Run() {
 
 func (h *AppManagerImpl) applyCfgUpdates(haproxyCfgDiffs diffs.HaproxyConfDiffs) error {
 	var err error
+	var deletedFrontends map[string]struct{}
 	// Process the received HaproxyConfDiffs
 	h.logger.LogAttrs(context.Background(), slog.LevelDebug,
 		"Starting processing HaproxyConfDiffs",
@@ -144,7 +152,7 @@ func (h *AppManagerImpl) applyCfgUpdates(haproxyCfgDiffs diffs.HaproxyConfDiffs)
 	if err = h.processUpdate(haproxyCfgDiffs.Updated, haproxyCfgDiffs.MergeStrategies); err != nil {
 		return err
 	}
-	if err = h.processDelete(haproxyCfgDiffs.Deleted); err != nil {
+	if deletedFrontends, err = h.processDelete(haproxyCfgDiffs.Deleted); err != nil {
 		return err
 	}
 
@@ -159,6 +167,19 @@ func (h *AppManagerImpl) applyCfgUpdates(haproxyCfgDiffs diffs.HaproxyConfDiffs)
 		)
 		return err
 	}
+
+	// The configuration is committed: the frontends it no longer declares can
+	// lose their maps directory now, and only now. Doing it during the delete
+	// stage would drop the maps of a frontend that is still in the applied
+	// configuration when the commit is rejected.
+	//
+	// A frontend this same commit declares again -- a listener re-created under a
+	// name a previous commit had deleted -- keeps its directory: the pending
+	// removal belongs to the deletion it survived, and the files written for it in
+	// this cycle are the ones HAProxy reads after the reload.
+	h.cancelPendingMapsRemovalOfDeclaredFrontends(haproxyCfgDiffs)
+	maps.Copy(h.frontendsPendingMapsRemoval, deletedFrontends)
+	h.removePendingMapsDirectoriesFromFrontends()
 
 	// -----------------
 	// Reload ?
@@ -250,11 +271,17 @@ func (h *AppManagerImpl) processCreate(created structured.Structured, mergeState
 	return errors.Result()
 }
 
-func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
+// processDelete applies the deletions of the given structured configuration.
+//
+// It returns the frontends it deleted: their maps directory belongs to the
+// caller, which removes it once the configuration is committed.
+func (h *AppManagerImpl) processDelete(deletedSections structured.Structured) (map[string]struct{}, error) {
 	var errors utils.Errors
 
+	deletedFrontends := make(map[string]struct{}, len(deletedSections.Frontends))
+
 	// Frontends
-	for feName := range deleted.Frontends {
+	for feName := range deletedSections.Frontends {
 		err := h.client.FrontendDelete(feName)
 		if err != nil {
 			h.logger.LogAttrs(
@@ -264,11 +291,14 @@ func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
 			errors.Add(err)
 			continue
 		}
-		h.mapsStorage.DeleteMapsDirectoryForFrontend(feName)
+		// The maps directory is removed by the caller, once the configuration is
+		// committed: until then the frontend is still declared by the applied
+		// configuration, which references its maps.
+		deletedFrontends[feName] = struct{}{}
 	}
 
 	// Backends
-	for beName := range deleted.Backends {
+	for beName := range deletedSections.Backends {
 		err := h.client.BackendDelete(beName)
 		if err != nil {
 			h.logger.LogAttrs(
@@ -281,7 +311,7 @@ func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
 	}
 
 	// Global
-	for range deleted.Globals {
+	for range deletedSections.Globals {
 		err := h.client.GlobalEdit(nil, "")
 		if err != nil {
 			h.logger.LogAttrs(
@@ -293,7 +323,7 @@ func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
 	}
 
 	// Defaults
-	for range deleted.Defaults {
+	for range deletedSections.Defaults {
 		err := h.client.DefaultsSectionEdit(nil, "")
 		if err != nil {
 			h.logger.LogAttrs(
@@ -304,7 +334,42 @@ func (h *AppManagerImpl) processDelete(deleted structured.Structured) error {
 		}
 	}
 
-	return errors.Result()
+	return deletedFrontends, errors.Result()
+}
+
+// cancelPendingMapsRemovalOfDeclaredFrontends drops from the pending removal the
+// frontends the committed configuration declares. Their directory was queued by a
+// deletion whose removal failed, and their name is all a frontend keeps across a
+// deletion and a re-creation: without this, the removal would target the files the
+// cycle just wrote for the frontend HAProxy is about to serve.
+func (h *AppManagerImpl) cancelPendingMapsRemovalOfDeclaredFrontends(committedSections diffs.HaproxyConfDiffs) {
+	for _, sectionsOfOneDirection := range []structured.Structured{
+		committedSections.Created, committedSections.Updated,
+	} {
+		for frontendName := range sectionsOfOneDirection.Frontends {
+			delete(h.frontendsPendingMapsRemoval, frontendName)
+		}
+	}
+}
+
+// removePendingMapsDirectoriesFromFrontends removes the maps directory of every
+// frontend whose removal is still pending -- the ones a committed configuration no
+// longer declares -- and keeps the ones that fail for the next successful commit to
+// retry: once the diffs are applied they are reset, so they cannot carry the
+// deletion again.
+func (h *AppManagerImpl) removePendingMapsDirectoriesFromFrontends() {
+	for frontendName := range h.frontendsPendingMapsRemoval {
+		if err := h.mapsStorage.DeleteMapsDirectoryForFrontend(frontendName); err != nil {
+			h.logger.LogAttrs(context.Background(), slog.LevelWarn,
+				"failed to remove the maps directory of a deleted frontend, the removal is retried after the next successful configuration apply",
+				slog.String("frontend", frontendName),
+				logging.LogAttrError(err),
+			)
+			continue
+		}
+
+		delete(h.frontendsPendingMapsRemoval, frontendName)
+	}
 }
 
 func (h *AppManagerImpl) processUpdate(updated structured.Structured, mergeStrategies diffs.MergeStrategies) error {

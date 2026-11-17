@@ -15,7 +15,7 @@
 package storage
 
 import (
-	"errors"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -142,16 +142,35 @@ func (m *MapsStorageDefault) ProcessMapFiles() {
 	}
 }
 
+// DeleteMapsDirectoryForFrontend removes the maps directory of a frontend.
+//
+// It is idempotent: the directory of a frontend that never had a map file, or
+// that was already removed, is simply absent. Callers retry a failed removal, and
+// a deleted frontend may be replayed, so an absent directory is not an error.
 func (m *MapsStorageDefault) DeleteMapsDirectoryForFrontend(frontendName string) error {
 	mapBaseDir := filepath.Join(m.MapsBaseDir, frontendName)
-	_, exists := m.mapFiles[mapBaseDir]
-	if !exists {
-		return errors.New("Maps directory for frontend " + frontendName + "does not exist. Can't be removed.")
+
+	// Remove from disk before dropping the in-memory state. Dropping the state
+	// first makes a filesystem failure unrecoverable: the entry is gone, so the
+	// directory is never retried.
+	if err := os.RemoveAll(mapBaseDir); err != nil {
+		m.logger.LogAttrs(
+			context.Background(), slog.LevelWarn,
+			"failed to remove maps directory",
+			slog.String("dir", mapBaseDir),
+			slog.Any("error", err),
+		)
+		return err
 	}
+
 	delete(m.mapFiles, mapBaseDir)
-	return os.RemoveAll(mapBaseDir)
+
+	return nil
 }
 
+// DeleteMapsDirectory removes the whole maps base directory, for a full reset of
+// the maps storage. It is not the frontend deletion path: see
+// DeleteMapsDirectoryForFrontend.
 func (m *MapsStorageDefault) DeleteMapsDirectory() error {
 	return os.RemoveAll(m.MapsBaseDir)
 }
