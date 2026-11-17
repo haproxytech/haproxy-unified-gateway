@@ -52,8 +52,21 @@ func (c *clientNative) BackendDelete(backendName string) error {
 	if err != nil {
 		return err
 	}
+
+	if err := configuration.DeleteBackend(backendName, c.activeTransaction, 0); err != nil {
+		// An already absent backend is the desired outcome: the deletion is
+		// replayed when the cycle that deleted it was applied without being
+		// reloaded, and it must converge rather than fail on every retry.
+		if isSectionNotFound(err) {
+			return nil
+		}
+
+		return err
+	}
+
 	reload.Instance().SetReload("Backend deleted %s", backendName)
-	return configuration.DeleteBackend(backendName, c.activeTransaction, 0)
+
+	return nil
 }
 
 func (c *clientNative) BackendsGet() (models.Backends, error) {
