@@ -22,8 +22,9 @@ const GlobalKey = "global"
 
 type Structured struct {
 	// Note that for Deleted Structured:
-	// *models.Frontend will be nil
-	// *models.Backend will be nil
+	// *models.Frontend carries only its Name and Metadata
+	// *models.Backend carries only its Name and Metadata
+	// the name is what a deletion needs, the metadata is where its owners survive
 	// certificate.CertificateData.Data will be empty
 	Frontends map[string]*models.Frontend // map[frontendName] => Frontend
 	Backends  map[string]*models.Backend  // map[backendName]  => Backend

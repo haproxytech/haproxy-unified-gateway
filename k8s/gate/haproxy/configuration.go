@@ -48,6 +48,68 @@ func (c *Configuration) resetDiffs() {
 	}
 }
 
+// reconcilePendingDiffs keeps, in the diffs left pending by a failed apply, the
+// direction that matches the last write of the current cycle.
+//
+// A pending diff is a diff the API refused: it is not in the configuration
+// HAProxy runs, so it stays in the diff set and is replayed with the next cycle,
+// which may bring the fix that makes it pass. The current cycle writes to that
+// same set, so a section can end up in several directions at once.
+//
+// The diff maps are keyed by name, so they cannot say which direction came last;
+// structured can, because every upsert writes it and every delete removes from
+// it. Two rules follow from that, and they are the reason this runs before the
+// set is applied again:
+//
+//   - a section still present in structured loses the pending deletion, and one
+//     that is absent loses its creation and its update. Dropping a re-created
+//     section's creation would leave it deleted although it is desired again, and
+//     nothing would re-emit it, its tree node having gone back to Unchanged;
+//   - a creation the API refused never reached the file, so the update recorded
+//     for the same section cannot find what it edits: the newest content has to
+//     travel on the creation, and the update is redundant. Without that, the
+//     replay would first create the refused content, fail on it again, and never
+//     reach the update carrying the correction.
+func (c *Configuration) reconcilePendingDiffs() {
+	reconcilePendingSections(c.diffs.Created.Frontends, c.diffs.Updated.Frontends, c.diffs.Deleted.Frontends, c.structured.Frontends)
+	reconcilePendingSections(c.diffs.Created.Backends, c.diffs.Updated.Backends, c.diffs.Deleted.Backends, c.structured.Backends)
+	reconcilePendingSections(c.diffs.Created.Globals, c.diffs.Updated.Globals, c.diffs.Deleted.Globals, c.structured.Globals)
+	reconcilePendingSections(c.diffs.Created.Defaults, c.diffs.Updated.Defaults, c.diffs.Deleted.Defaults, c.structured.Defaults)
+}
+
+// reconcilePendingSections applies the rules of reconcilePendingDiffs to one kind
+// of section: the last write of the cycle, desiredSections, decides which pending
+// direction survives.
+func reconcilePendingSections[V any](
+	pendingCreations, pendingUpdates, pendingDeletions, desiredSections map[string]V,
+) {
+	for sectionName := range pendingCreations {
+		if _, desired := desiredSections[sectionName]; !desired {
+			delete(pendingCreations, sectionName)
+			continue
+		}
+
+		// The creation never reached the API: the update cannot find the section it
+		// edits, so the newest content goes on the creation instead.
+		if lastUpdate, updated := pendingUpdates[sectionName]; updated {
+			pendingCreations[sectionName] = lastUpdate
+			delete(pendingUpdates, sectionName)
+		}
+	}
+
+	for sectionName := range pendingUpdates {
+		if _, desired := desiredSections[sectionName]; !desired {
+			delete(pendingUpdates, sectionName)
+		}
+	}
+
+	for sectionName := range pendingDeletions {
+		if _, desired := desiredSections[sectionName]; desired {
+			delete(pendingDeletions, sectionName)
+		}
+	}
+}
+
 func (c *Configuration) upsertFrontend(logger *slog.Logger, fe *models.Frontend, reprogramm bool) error {
 	if fe == nil {
 		logger.LogAttrs(context.Background(), slog.LevelError, "nil frontend")
@@ -118,7 +180,11 @@ func (c *Configuration) deleteFrontend(logger *slog.Logger, feName string) error
 	// We need to deep copy the frontend to avoid modifying the original
 	// as the diffs will be sent on a channel and used at the same time we continue to update the haproxy cfg store.
 
-	c.diffs.Deleted.Frontends[fe.Name] = nil
+	// The deleted section keeps its name and its metadata: the name is what a
+	// deletion needs, and the metadata is where its owners -- with the generations
+	// they were read at -- survive, which the input fingerprint reads to tell a new
+	// input from a repetition of the same failure.
+	c.diffs.Deleted.Frontends[fe.Name] = &models.Frontend{Name: fe.Name, Metadata: fe.Metadata}
 	delete(c.structured.Frontends, feName)
 	return nil
 }
@@ -371,7 +437,9 @@ func (c *Configuration) deleteBackend(logger *slog.Logger, beName string) error 
 	// We need to deep copy the backend to avoid modifying the original
 	// as the diffs will be sent on a channel and used at the same time we continue to update the haproxy cfg store.
 
-	c.diffs.Deleted.Backends[be.Name] = nil
+	// Same as a frontend: the owners of the deleted backend live in its metadata,
+	// and the fingerprint needs them to answer "is this the same input?".
+	c.diffs.Deleted.Backends[be.Name] = &models.Backend{Name: be.Name, Metadata: be.Metadata}
 	delete(c.structured.Backends, beName)
 	return nil
 }

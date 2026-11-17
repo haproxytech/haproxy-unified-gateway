@@ -187,7 +187,10 @@ func (h *AppManagerImpl) applyCfgUpdates(haproxyCfgDiffs diffs.HaproxyConfDiffs)
 
 	// -----------------
 	// Reload ?
-	if reload.Instance().NeedReload() {
+	// ReloadNeed carries the controller's intent: a reload that was committed but
+	// not applied is retried on the next cycle with an empty diff set, so the
+	// flag must be honoured here as well as the reload manager's own.
+	if reload.Instance().NeedReload() || haproxyCfgDiffs.ReloadNeed {
 		h.logger.LogAttrs(context.Background(), slog.LevelInfo,
 			"Haproxy reload")
 		msg := ""
@@ -197,6 +200,7 @@ func (h *AppManagerImpl) applyCfgUpdates(haproxyCfgDiffs diffs.HaproxyConfDiffs)
 				slog.String("reason", msg),
 				logging.LogAttrError(err),
 			)
+			reload.Instance().SetReloadFailure()
 			return err
 		}
 		metrics.HaproxyReloadTotal.Inc()
@@ -534,6 +538,7 @@ func (h *AppManagerImpl) confUpdateProcessed(haproxyCfgDiffs diffs.HaproxyConfDi
 	if haproxyCfgDiffs.ResultCh != nil {
 		confResult := diffs.HaproxyConfResult{
 			Err:                 err,
+			ReloadFailed:        reload.Instance().ReloadFailed(),
 			ObservedGenerations: haproxyCfgDiffs.ObservedGenerations(),
 		}
 		h.logger.LogAttrs(context.Background(), slog.LevelInfo, "[sending] HUG => CONTROLLER: haproxy conf update result", slog.Any("result", confResult))
