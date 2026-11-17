@@ -34,8 +34,13 @@ type dynamicUpdateServerState struct {
 
 // The singleton type
 type reloadMgr struct {
-	logger                   *slog.Logger
-	reload                   bool
+	logger *slog.Logger
+	reload bool
+	// reloadFailed records the outcome of the last reload attempt: a configuration
+	// that was committed but not applied has its diffs in the file and must not be
+	// replayed, only its reload retried. Reset clears the record with the rest of
+	// the cycle's state.
+	reloadFailed             bool
 	dynamicUpdateServerState dynamicUpdateServerState
 }
 
@@ -88,18 +93,32 @@ func (rlm *reloadMgr) SetDynamicServerStateUpdateFailure(reason string, args ...
 }
 
 func (rlm *reloadMgr) Reset() {
-	if rlm.reload && rlm.logger != nil {
+	if (rlm.reload || rlm.reloadFailed) && rlm.logger != nil {
 		rlm.logger.LogAttrs(
 			context.WithValue(context.Background(), logging.CallerAdditionalSkipKey, 1), slog.LevelInfo,
 			"reload reset",
 		)
 	}
 	rlm.reload = false
+	rlm.reloadFailed = false
 	rlm.dynamicUpdateServerState = dynamicUpdateServerState{}
 }
 
 func (rlm *reloadMgr) NeedReload() bool {
 	return rlm.reload
+}
+
+// SetReloadFailure records that HAProxy refused the configuration that was just
+// committed.
+func (rlm *reloadMgr) SetReloadFailure() {
+	rlm.reloadFailed = true
+}
+
+// ReloadFailed reports whether the last reload attempt was refused for a
+// configuration that was committed. It answers for the cycle that just ran: Reset
+// clears it before the next one.
+func (rlm *reloadMgr) ReloadFailed() bool {
+	return rlm.reloadFailed
 }
 
 func (rlm *reloadMgr) DynamicUpdateServerStateFailed() bool {

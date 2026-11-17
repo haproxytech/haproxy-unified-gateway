@@ -137,8 +137,11 @@ func (el *EventLoop) Start(ctx context.Context) error {
 			el.timerC = nil
 			el.timer = nil
 
-			// If no batch is currently handled and events exist, handle batch now
-			if !el.GetHandling() && len(el.nextBatch.Events) > 0 {
+			// If no batch is currently handled and events exist, handle batch now.
+			// A batch is also run when no event arrived but an earlier one left a
+			// configuration to retry: the retry has no event of its own to wait for,
+			// and the sync period is the only clock it has.
+			if !el.GetHandling() && (len(el.nextBatch.Events) > 0 || el.handler.HasConfigurationToRetry()) {
 				swapAndHandleBatch()
 			} else {
 				el.startTimer()

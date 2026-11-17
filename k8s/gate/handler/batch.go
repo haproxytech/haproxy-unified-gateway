@@ -15,6 +15,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -45,6 +46,11 @@ type EventHandler interface {
 	// HandleEventBatch handles a batch of events.
 	// EventBatch can include duplicated events.
 	HandleEventBatch(ctx context.Context, batch events.EventBatch)
+	// HasConfigurationToRetry reports whether an earlier batch left a
+	// configuration that must be applied again. It lets the event loop run a batch
+	// that carries no event: a retry that waited for a resource to change would
+	// never run in a cluster that simply stayed broken for a while.
+	HasConfigurationToRetry() bool
 }
 
 type GateTreeConfig struct {
@@ -163,6 +169,10 @@ func NewEventHandlerImpl(
 	return handler
 }
 
+func (h *eventHandlerImpl) HasConfigurationToRetry() bool {
+	return h.haproxyConfBuilder.HasConfigurationToRetry()
+}
+
 func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.EventBatch) {
 	start := time.Now()
 
@@ -231,7 +241,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, batch events.Ev
 			h.logger.LogAttrs(context.Background(), slog.LevelInfo, "[received] HUG => CONTROLLER: DIFFS (Done)")
 
 			// Forward the HUG result back as status feedback to the relevant Gateway/Route objects.
-			h.forwardFeedback(ctx, haproxyConfDiffs.ResultCh)
+			h.processResultFromDiffApplication(ctx, haproxyConfDiffs.ResultCh)
 		}
 	}
 
@@ -292,17 +302,20 @@ func (h *eventHandlerImpl) waitDone(done <-chan struct{}) {
 	}
 }
 
-// forwardFeedbackTimeout is the maximum time to wait for a result on ResultCh
+// applyResultTimeout is the maximum time to wait for a result on ResultCh
 // after Done has been closed. The result may arrive slightly after Done in some
 // implementations, so we give a short grace period before giving up.
-const forwardFeedbackTimeout = 5 * time.Second
+const applyResultTimeout = 5 * time.Second
 
-// forwardFeedback waits up to forwardFeedbackTimeout for a result on resultCh,
-// prepares the feedback status updates, and dispatches them through the shared
-// statusUpdater channel.
-func (h *eventHandlerImpl) forwardFeedback(ctx context.Context, resultCh chan diffs.HaproxyConfResult) {
+// processResultFromDiffApplication waits up to applyResultTimeout for the result
+// of applying the configuration diffs, stamps the listener Programmed conditions
+// and the resource statuses from it, and hands the outcome to the configuration
+// manager so that a cycle that was not applied is kept and retried.
+func (h *eventHandlerImpl) processResultFromDiffApplication(
+	ctx context.Context, resultsFromTheApply chan diffs.HaproxyConfResult,
+) {
 	select {
-	case result := <-resultCh:
+	case result := <-resultsFromTheApply:
 		h.logger.LogAttrs(ctx, slog.LevelInfo, "[received] HUG => CONTROLLER: haproxy conf update result ", slog.Any("result", result))
 		gatetree := h.treeBuilder.GetTree()
 		for gwKey, gen := range result.GatewayObservedGenerations {
@@ -312,12 +325,20 @@ func (h *eventHandlerImpl) forwardFeedback(ctx context.Context, resultCh chan di
 		updates := h.statusUpdater.PrepareFeedbackStatusUpdate(result, gateways)
 		gatetree.RUnlockGateways()
 		h.statusUpdater.UpdateStatus(ctx, updates)
-	case <-time.After(forwardFeedbackTimeout):
+		// Record the outcome so that a cycle that was not applied is kept and
+		// retried by the next ComputeDiffs instead of being silently dropped.
+		h.haproxyConfBuilder.RecordDiffApplicationOutcome(result)
+	case <-time.After(applyResultTimeout):
 		// TODO: check with the team
 		h.logger.LogAttrs(
 			context.Background(), slog.LevelWarn,
 			"timed out waiting for result from HUG on ResultCh",
 		)
+		// The outcome is unknown: replay next cycle rather than dropping the
+		// changes, since replaying the same diffs is idempotent.
+		h.haproxyConfBuilder.RecordDiffApplicationOutcome(diffs.HaproxyConfResult{
+			Err: errors.New("timed out waiting for the HAProxy configuration apply result"),
+		})
 	}
 }
 

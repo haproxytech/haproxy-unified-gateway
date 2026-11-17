@@ -55,7 +55,7 @@ type GateTree struct {
 	Defaults                 *DefaultsCR
 	ReferenceGrants          map[types.NamespacedName]*ReferenceGrant
 	// mu protects concurrent access to gateway listener conditions, which may
-	// be written by the feedback path (forwardFeedback) from a separate goroutine.
+	// be written by the feedback path (processResultFromDiffApplication) from a separate goroutine.
 	mu sync.RWMutex
 }
 

@@ -14,8 +14,11 @@
 package diffs
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/haproxytech/client-native/v6/models"
@@ -36,7 +39,11 @@ type GatewayObservedGenerations map[types.NamespacedName]int64
 // HaproxyConfResult is the outcome of a single HaproxyConfDiffs processing
 // cycle, sent back to the controller via HaproxyConfDiffs.ResultCh.
 type HaproxyConfResult struct {
-	Err                        error
+	Err error
+	// ReloadFailed is true when the configuration was committed but HAProxy
+	// refused to reload it: the diffs were applied and must not be replayed, but
+	// the reload has to be retried.
+	ReloadFailed               bool
 	GatewayObservedGenerations GatewayObservedGenerations
 }
 
@@ -125,6 +132,75 @@ func extractGatewayGenerationsFromFrontend(fe *models.Frontend) map[types.Namesp
 		result[nn] = int64(genFloat)
 	}
 	return result
+}
+
+// ResourceFingerprint identifies the input a diff set was built from, with the
+// generation of each Gateway that was read, plus the content of the Global and
+// Defaults sections, which record no owner. It answers "is this the same input?"
+// for a replay budget: an input that changed gets a fresh budget, while an
+// unchanged one is replayed a bounded number of times and then suspended.
+//
+// The identity is per Gateway on this line, because that is the owner the sections
+// record in their metadata. A change below a Gateway that does not move its
+// generation is not part of it; the retry interval covers that case.
+func (c HaproxyConfDiffs) ResourceFingerprint() string {
+	gateways := c.GatewayObservedGenerations()
+
+	// The deleted sections keep their metadata, so the Gateways they were read from
+	// are part of the input too: a change on a Gateway whose only pending effect is
+	// the deletion of a section it owns is a new input, not a repetition.
+	for _, fe := range c.Deleted.Frontends {
+		for gateway, generation := range extractGatewayGenerationsFromFrontend(fe) {
+			if known, ok := gateways[gateway]; !ok || generation > known {
+				gateways[gateway] = generation
+			}
+		}
+	}
+
+	entriesOfTheFingerprint := make([]string, 0, len(gateways))
+	for gateway, generation := range gateways {
+		entriesOfTheFingerprint = append(entriesOfTheFingerprint,
+			fmt.Sprintf("gateway|%s|%d", gateway.String(), generation))
+	}
+
+	// Global and Defaults carry no owner metadata: their own content is what
+	// changes when their CR is edited, so it must be part of the fingerprint. A fix
+	// to a Defaults CR has to resume a suspended replay, and it is the typical cause
+	// of a configuration HAProxy refuses. Only the created and updated directions
+	// contribute: a deleted Global or Defaults carries no content, a key being all
+	// its removal needs.
+	for _, globalsOfOneDirection := range []map[string]*models.Global{
+		c.Created.Globals, c.Updated.Globals,
+	} {
+		for sectionKey, globalSection := range globalsOfOneDirection {
+			entriesOfTheFingerprint = append(entriesOfTheFingerprint,
+				"global|"+sectionKey+"|"+renderForFingerprint(globalSection))
+		}
+	}
+	for _, defaultsOfOneDirection := range []map[string]*models.Defaults{
+		c.Created.Defaults, c.Updated.Defaults,
+	} {
+		for sectionKey, defaultsSection := range defaultsOfOneDirection {
+			entriesOfTheFingerprint = append(entriesOfTheFingerprint,
+				"defaults|"+sectionKey+"|"+renderForFingerprint(defaultsSection))
+		}
+	}
+
+	slices.Sort(entriesOfTheFingerprint)
+
+	digest := sha256.Sum256([]byte(strings.Join(entriesOfTheFingerprint, "\n")))
+	return hex.EncodeToString(digest[:])
+}
+
+// renderForFingerprint renders one section for the fingerprint. A marshal failure
+// yields an empty string rather than dropping the entry, so the presence of the
+// section still counts.
+func renderForFingerprint(section any) string {
+	by, err := json.Marshal(section)
+	if err != nil {
+		return ""
+	}
+	return string(by)
 }
 
 func parseNamespacedName(s string) types.NamespacedName {
