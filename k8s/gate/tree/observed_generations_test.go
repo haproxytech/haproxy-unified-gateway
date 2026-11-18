@@ -26,7 +26,7 @@ import (
 // "object member name must be a string" instead of the generations it was handed -- which is
 // how this was found.
 func TestObservedGenerationsMarshal(t *testing.T) {
-	generations := ObservedGenerations{
+	generations := ObservedGenerationsByOwner{
 		{Kind: OwnerKindGateway, Key: types.NamespacedName{Namespace: "infra", Name: "gw"}}:      7,
 		{Kind: OwnerKindListenerSet, Key: types.NamespacedName{Namespace: "tenant", Name: "ls"}}: 11,
 	}

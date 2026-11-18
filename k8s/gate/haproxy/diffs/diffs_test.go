@@ -150,7 +150,7 @@ func TestExtractGatewayGenerationsFromFrontend(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			all := make(tree.ObservedGenerations)
+			all := make(tree.ObservedGenerationsByOwner)
 			extractObservedGenerationsFromFrontend(tt.frontend, all)
 			// Every fixture above is Gateway-declared; the kinds are covered apart.
 			got := make(map[types.NamespacedName]int64)
@@ -188,10 +188,10 @@ func TestExtractObservedGenerationsKeepsEachDeclaringKind(t *testing.T) {
 		}),
 	}
 
-	got := make(tree.ObservedGenerations)
+	got := make(tree.ObservedGenerationsByOwner)
 	extractObservedGenerationsFromFrontend(frontend, got)
 
-	want := tree.ObservedGenerations{
+	want := tree.ObservedGenerationsByOwner{
 		{Kind: tree.OwnerKindGateway, Key: types.NamespacedName{Namespace: "infra", Name: "shared"}}:     3,
 		{Kind: tree.OwnerKindListenerSet, Key: types.NamespacedName{Namespace: "infra", Name: "shared"}}: 11,
 	}

@@ -84,7 +84,7 @@ func TestListenerSetAttachedRoutesFollowRouteOnlyChanges(t *testing.T) {
 	builder := NewGateTreeBuilder(cs, GateTreeConfig{})
 	runListenerSetTreeCycle(&builder)
 	require.Len(t, cs.GateTree.ListenerSets[lsKey].Entries, 2)
-	cs.GateTree.UpdateListenerProgrammedConditions(logger, tree.ObservedGenerations{
+	cs.GateTree.UpdateListenerProgrammedConditions(logger, tree.ObservedGenerationsByOwner{
 		{Kind: tree.OwnerKindGateway, Key: gwKey}:     1,
 		{Kind: tree.OwnerKindListenerSet, Key: lsKey}: 1,
 	}, nil)

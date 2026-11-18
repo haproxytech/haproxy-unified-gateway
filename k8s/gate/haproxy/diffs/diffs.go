@@ -34,16 +34,17 @@ type MergeStrategies struct {
 	Defaults string // override or append
 }
 
-// ObservedGenerations maps each resource a frontend was programmed against to the highest
-// generation it was programmed from. It is the tree's type because the feedback that stamps a
-// listener's Programmed condition routes by the same (kind, key) pair.
-type ObservedGenerations = tree.ObservedGenerations
+// ObservedGenerationsByOwner maps each owner a frontend was programmed from to the
+// highest generation it was programmed from, so the owner is part of the key. It is
+// the tree's type because the feedback that stamps a listener's Programmed condition
+// routes by the same (kind, key) pair.
+type ObservedGenerationsByOwner = tree.ObservedGenerationsByOwner
 
 // HaproxyConfResult is the outcome of a single HaproxyConfDiffs processing
 // cycle, sent back to the controller via HaproxyConfDiffs.ResultCh.
 type HaproxyConfResult struct {
-	Err                 error
-	ObservedGenerations ObservedGenerations
+	Err                        error
+	ObservedGenerationsByOwner ObservedGenerationsByOwner
 	// ReloadFailed is true when the configuration was committed but HAProxy
 	// refused to reload it: the diffs were applied and must not be replayed, but
 	// the reload has to be retried.
@@ -74,11 +75,11 @@ func (c HaproxyConfDiffs) IsEmpty() bool {
 	return c.Created.IsEmpty() && c.Updated.IsEmpty() && c.Deleted.IsEmpty()
 }
 
-// ObservedGenerations builds the per-resource generations from the metadata of all Created
+// ObservedGenerationsByOwner builds the per-resource generations from the metadata of all Created
 // and Updated frontends. Deleted frontends are excluded because their config is no longer
 // active.
-func (c HaproxyConfDiffs) ObservedGenerations() ObservedGenerations {
-	result := make(ObservedGenerations)
+func (c HaproxyConfDiffs) ObservedGenerationsByOwner() ObservedGenerationsByOwner {
+	result := make(ObservedGenerationsByOwner)
 	for _, fe := range c.Created.Frontends {
 		extractObservedGenerationsFromFrontend(fe, result)
 	}
@@ -100,10 +101,10 @@ func (c HaproxyConfDiffs) ObservedGenerations() ObservedGenerations {
 func (c HaproxyConfDiffs) ResourceFingerprint() string {
 	// Every section the set carries contributes its owners, whichever direction the
 	// diff goes: a section to create, to update and to delete are all part of the
-	// input this fingerprint identifies. ObservedGenerations is not reused
+	// input this fingerprint identifies. ObservedGenerationsByOwner is not reused
 	// here on purpose: it feeds the status stamping, where a deleted section must
 	// not count, and that rule has nothing to do with the identity of the input.
-	owners := make(ObservedGenerations)
+	owners := make(ObservedGenerationsByOwner)
 	for _, frontendsOfOneDirection := range []map[string]*models.Frontend{
 		c.Created.Frontends, c.Updated.Frontends, c.Deleted.Frontends,
 	} {
@@ -167,7 +168,7 @@ func renderForFingerprint(section any) string {
 
 // extractObservedGenerationsFromFrontend reads every kind a frontend records, keeping the
 // highest generation seen for each resource.
-func extractObservedGenerationsFromFrontend(frontend *models.Frontend, generationsSeenSoFar ObservedGenerations) {
+func extractObservedGenerationsFromFrontend(frontend *models.Frontend, generationsSeenSoFar ObservedGenerationsByOwner) {
 	if frontend == nil {
 		return
 	}
@@ -176,7 +177,7 @@ func extractObservedGenerationsFromFrontend(frontend *models.Frontend, generatio
 
 // extractObservedGenerationsFromBackend does the same for a backend, whose metadata records
 // the routes it serves (BackendMetaData).
-func extractObservedGenerationsFromBackend(backend *models.Backend, generationsSeenSoFar ObservedGenerations) {
+func extractObservedGenerationsFromBackend(backend *models.Backend, generationsSeenSoFar ObservedGenerationsByOwner) {
 	if backend == nil {
 		return
 	}
@@ -187,7 +188,7 @@ func extractObservedGenerationsFromBackend(backend *models.Backend, generationsS
 // JSON round-trip in the metadata builder, the structure is:
 // { "<kind>": { "namespace/name": { "Generation": float64, "LinkID": string } } }.
 func extractObservedGenerationsFromMetadata(
-	sectionMetadata map[string]any, generationsSeenSoFar ObservedGenerations,
+	sectionMetadata map[string]any, generationsSeenSoFar ObservedGenerationsByOwner,
 ) {
 	if sectionMetadata == nil {
 		return

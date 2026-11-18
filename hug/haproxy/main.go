@@ -537,9 +537,9 @@ func (h *AppManagerImpl) confUpdateProcessed(haproxyCfgDiffs diffs.HaproxyConfDi
 
 	if haproxyCfgDiffs.ResultCh != nil {
 		confResult := diffs.HaproxyConfResult{
-			Err:                 err,
-			ReloadFailed:        reload.Instance().ReloadFailed(),
-			ObservedGenerations: haproxyCfgDiffs.ObservedGenerations(),
+			Err:                        err,
+			ReloadFailed:               reload.Instance().ReloadFailed(),
+			ObservedGenerationsByOwner: haproxyCfgDiffs.ObservedGenerationsByOwner(),
 		}
 		h.logger.LogAttrs(context.Background(), slog.LevelInfo, "[sending] HUG => CONTROLLER: haproxy conf update result", slog.Any("result", confResult))
 		select {
