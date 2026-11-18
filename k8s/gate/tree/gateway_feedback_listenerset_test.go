@@ -46,7 +46,7 @@ func TestProgrammedFeedbackRefreshesTheListenerSetRollUp(t *testing.T) {
 	// The apply succeeded, against ListenerSet generation 11.
 	f.store.GateTree.UpdateListenerProgrammedConditions(
 		f.store.Logger,
-		ObservedGenerations{{Kind: OwnerKindListenerSet, Key: lsKey}: 11},
+		ObservedGenerationsByOwner{{Kind: OwnerKindListenerSet, Key: lsKey}: 11},
 		nil,
 	)
 
@@ -101,7 +101,7 @@ func TestProgrammedFeedbackReachesAnEntryAttachedInTheSameCycle(t *testing.T) {
 
 	f.store.GateTree.UpdateListenerProgrammedConditions(
 		f.store.Logger,
-		ObservedGenerations{{Kind: OwnerKindListenerSet, Key: lsKey}: 1},
+		ObservedGenerationsByOwner{{Kind: OwnerKindListenerSet, Key: lsKey}: 1},
 		nil,
 	)
 

@@ -48,9 +48,10 @@ func (o ObservedOwner) MarshalText() ([]byte, error) {
 	return []byte(o.String()), nil
 }
 
-// ObservedGenerations maps each resource a frontend was programmed against to the
-// generation that programming was made from.
-type ObservedGenerations map[ObservedOwner]int64
+// ObservedGenerationsByOwner maps each owner a section was programmed from -- a
+// Gateway, a route -- to the generation of that owner the programming was made
+// from. The owner is what the map is keyed on, hence the name.
+type ObservedGenerationsByOwner map[ObservedOwner]int64
 
 // UpdateListenerProgrammedConditions stamps the Programmed condition of every listener whose
 // declaring resource was programmed in this apply cycle, with the generation of that
@@ -69,7 +70,7 @@ type ObservedGenerations map[ObservedOwner]int64
 // failure: it either writes the Programmed condition or leaves the previous one
 // alone, so a problem building that condition would otherwise leave no trace at
 // all.
-func (t *GateTree) UpdateListenerProgrammedConditions(logger *slog.Logger, observed ObservedGenerations, applyErr error) {
+func (t *GateTree) UpdateListenerProgrammedConditions(logger *slog.Logger, observed ObservedGenerationsByOwner, applyErr error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

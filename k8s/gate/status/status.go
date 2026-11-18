@@ -63,7 +63,7 @@ type StatusUpdater interface {
 	// PrepareFeedbackStatusUpdate builds status updates for the Programmed conditions of the
 	// listeners the apply reported (already updated by UpdateListenerProgrammedConditions):
 	// the Gateway's own listeners on the Gateway, the entries on their ListenerSet. Only the
-	// resources present in result.ObservedGenerations are updated.
+	// resources present in result.ObservedGenerationsByOwner are updated.
 	PrepareFeedbackStatusUpdate(
 		ctx context.Context,
 		result diffs.HaproxyConfResult,

@@ -363,7 +363,7 @@ func (h *eventHandlerImpl) processResultFromDiffApplication(
 	case result := <-resultsFromTheApply:
 		h.logger.LogAttrs(ctx, slog.LevelInfo, "[received] HUG => CONTROLLER: haproxy conf update result ", slog.Any("result", result))
 		gatetree := h.treeBuilder.GetTree()
-		gatetree.UpdateListenerProgrammedConditions(h.logger, result.ObservedGenerations, result.Err)
+		gatetree.UpdateListenerProgrammedConditions(h.logger, result.ObservedGenerationsByOwner, result.Err)
 		gateways, listenerSets := gatetree.RLockFeedbackView()
 		updates := h.statusUpdater.PrepareFeedbackStatusUpdate(ctx, result, gateways, listenerSets)
 		gatetree.RUnlockFeedbackView()

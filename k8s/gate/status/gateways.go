@@ -30,7 +30,7 @@ import (
 
 // PrepareFeedbackStatusUpdate builds a PreparedStatusUpdates from the tree's
 // current listener Programmed conditions. Only the resources present in
-// result.ObservedGenerations are included, each published on the object that carries its
+// result.ObservedGenerationsByOwner are included, each published on the object that carries its
 // conditions: the Gateway for its own listeners, the ListenerSet for the entries it
 // contributed -- whose programmation is reported nowhere else, since the periodic pass
 // runs before the apply. The conditions must already have been updated via
@@ -41,8 +41,8 @@ func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(
 	gateways map[types.NamespacedName]*tree.Gateway,
 	listenerSets map[types.NamespacedName]*tree.ListenerSet,
 ) PreparedStatusUpdates {
-	updates := make(PreparedStatusUpdates, 0, len(result.ObservedGenerations))
-	for owner := range result.ObservedGenerations {
+	updates := make(PreparedStatusUpdates, 0, len(result.ObservedGenerationsByOwner))
+	for owner := range result.ObservedGenerationsByOwner {
 		if owner.Kind != tree.OwnerKindGateway {
 			continue
 		}
@@ -96,7 +96,7 @@ func (s *StatusUpdaterImpl) PrepareFeedbackStatusUpdate(
 	// the periodic pass ran before the apply: republish the ListenerSets this apply programmed,
 	// or the fresh verdict would wait for an unrelated event to be written.
 	observedListenerSets := make(map[types.NamespacedName]*tree.ListenerSet)
-	for owner := range result.ObservedGenerations {
+	for owner := range result.ObservedGenerationsByOwner {
 		if owner.Kind != tree.OwnerKindListenerSet {
 			continue
 		}

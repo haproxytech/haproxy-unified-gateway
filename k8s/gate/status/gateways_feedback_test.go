@@ -37,7 +37,7 @@ func TestPrepareFeedbackStatusUpdatePublishesOnlyTheProgrammedListenerSets(t *te
 
 	t.Run("a ListenerSet the apply programmed is republished", func(t *testing.T) {
 		result := diffs.HaproxyConfResult{
-			ObservedGenerations: tree.ObservedGenerations{
+			ObservedGenerationsByOwner: tree.ObservedGenerationsByOwner{
 				{Kind: tree.OwnerKindListenerSet, Key: lsKey}: 7,
 			},
 		}
@@ -49,7 +49,7 @@ func TestPrepareFeedbackStatusUpdatePublishesOnlyTheProgrammedListenerSets(t *te
 
 	t.Run("a ListenerSet the apply did not program is left to the periodic pass", func(t *testing.T) {
 		result := diffs.HaproxyConfResult{
-			ObservedGenerations: tree.ObservedGenerations{
+			ObservedGenerationsByOwner: tree.ObservedGenerationsByOwner{
 				{Kind: tree.OwnerKindListenerSet, Key: types.NamespacedName{Namespace: "tenant", Name: "other"}}: 1,
 			},
 		}
