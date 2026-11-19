@@ -21,7 +21,38 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 )
 
+// trustBackendCRs lists the test namespace as trusted in HugConf, so its
+// Backend CRs are applied in full. It returns the function removing the trust.
+func (s *HTTPRouteTestSuite) trustBackendCRs() func() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "backend-crd", "trust")
+	s.CreateFixturesInNamespace(fixturePath, hugConfNamespace, nil)
+	return func() { s.CleanupFixturesInNamespace(fixturePath, hugConfNamespace, nil) }
+}
+
+// Test_HTTPRoute_BackendCRD_trust verifies that a Backend CR is reduced to
+// tuning fields by default, and that listing or removing its namespace in
+// HugConf rebuilds the backend without any change to the route.
+func (s *HTTPRouteTestSuite) Test_HTTPRoute_BackendCRD_trust() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "backend-crd", "basic")
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixturesCheckMapFiles(fixturePath, nil, []string{"hug_http_8080"})
+
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedBackends := []string{"hug_e2e-tests-httproute_http-echo_80_ef84fba452b3f62faf235c47b46c1e54"}
+
+	// Untrusted: the header rules of the Backend CR are dropped.
+	s.ExpectBackends(s.IntTest().Ctx, path.Join(expectationsPath, "backends-untrusted"), expectedBackends)
+
+	removeTrust := s.trustBackendCRs()
+	s.ExpectBackends(s.IntTest().Ctx, path.Join(expectationsPath, "backends"), expectedBackends)
+
+	removeTrust()
+	s.ExpectBackends(s.IntTest().Ctx, path.Join(expectationsPath, "backends-untrusted"), expectedBackends)
+}
+
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_BackendCRD_basic() {
+	removeTrust := s.trustBackendCRs()
+	defer removeTrust()
 	fixtureDirPath := utils.GetCRDFixturePath()
 	fixtureDir := "backend-crd"
 
@@ -52,6 +83,8 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_BackendCRD_basic() {
 }
 
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_BackendCRD_extended() {
+	removeTrust := s.trustBackendCRs()
+	defer removeTrust()
 	fixtureDirPath := utils.GetCRDFixturePath()
 	fixtureDir := "backend-crd"
 

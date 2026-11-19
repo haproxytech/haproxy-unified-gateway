@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    conf.hug/version: v0.7.0
+    conf.hug/version: v0.8.0
   name: hugconfs.gate.v3.haproxy.org
 spec:
   group: gate.v3.haproxy.org
@@ -135,6 +135,18 @@ spec:
                         - None
                       type: string
                   type: object
+                trustedBackendCRNamespaces:
+                  description: |-
+                    TrustedBackendCRNamespaces lists the namespaces whose Backend CRs are
+                    applied in full. An entry is a namespace name, where "*" stands for any
+                    run of characters, as in "team-*". A Backend CR from any other namespace
+                    is reduced to tuning fields (timeouts, balance, health checks,
+                    persistence, server defaults); its rule lists and file directives are
+                    dropped.
+                  items:
+                    type: string
+                  type: array
+                  x-kubernetes-list-type: set
               required:
                 - logging
               type: object
