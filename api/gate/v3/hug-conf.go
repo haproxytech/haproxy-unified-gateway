@@ -26,7 +26,7 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
-// +kubebuilder:metadata:annotations="conf.hug/version=v0.7.0"
+// +kubebuilder:metadata:annotations="conf.hug/version=v0.8.0"
 
 // HugConf is a specification for a the controller related configuration
 type HugConf struct {
@@ -71,7 +71,15 @@ type CRReference struct {
 type ControllerConfSpec struct {
 	GlobalRef   *CRReference `json:"globalRef,omitempty"`
 	DefaultsRef *CRReference `json:"defaultsRef,omitempty"`
-	Logging     Logging      `json:"logging"`
+	// TrustedBackendCRNamespaces lists the namespaces whose Backend CRs are
+	// applied in full. An entry is a namespace name, where "*" stands for any
+	// run of characters, as in "team-*". A Backend CR from any other namespace
+	// is reduced to tuning fields (timeouts, balance, health checks,
+	// persistence, server defaults); its rule lists and file directives are
+	// dropped.
+	// +listType=set
+	TrustedBackendCRNamespaces []string `json:"trustedBackendCRNamespaces,omitempty"`
+	Logging                    Logging  `json:"logging"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

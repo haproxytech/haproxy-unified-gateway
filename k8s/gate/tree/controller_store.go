@@ -15,6 +15,7 @@ package tree
 
 import (
 	"log/slog"
+	"path"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/certificate"
@@ -49,6 +50,10 @@ type ControllerStore struct {
 	mapPort2Listeners         map[gatewayv1.PortNumber]listenerConflict
 	// from config
 	ControllerName string
+	// TrustedBackendCRNamespaces holds the namespace patterns whose Backend CRs
+	// are applied in full. Backend CRs from any other namespace are reduced to
+	// tuning fields. It mirrors the HugConf spec and is set by its builder.
+	TrustedBackendCRNamespaces []string
 }
 
 type CertUpdates struct {
@@ -148,4 +153,17 @@ func (b *ControllerStore) GetGatewayForListener(listener *Listener) *Gateway {
 	}
 
 	return treeGw
+}
+
+// IsBackendCRNamespaceTrusted reports whether namespace matches one of the
+// trusted Backend CR namespace patterns. A pattern is a namespace name where
+// "*" stands for any run of characters, as in "team-*". A malformed pattern
+// matches nothing.
+func (b *ControllerStore) IsBackendCRNamespaceTrusted(namespace string) bool {
+	for _, pattern := range b.TrustedBackendCRNamespaces {
+		if ok, err := path.Match(pattern, namespace); err == nil && ok {
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,7 @@
+apiVersion: gate.v3.haproxy.org/v3
+kind: HugConf
+metadata:
+  name: hugconf
+spec:
+  trustedBackendCRNamespaces:
+    - e2e-tests-*
