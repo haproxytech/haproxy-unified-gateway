@@ -38,6 +38,42 @@ func writeMapFile(t *testing.T, dir, name string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("key value\n"), 0o644))
 }
 
+func TestRemoveOrphanMapsDirectories(t *testing.T) {
+	mapsBaseDir := t.TempDir()
+	storage := newTestMapsStorage(t, mapsBaseDir)
+
+	writeMapFile(t, filepath.Join(mapsBaseDir, "hug_http_31080"), "listener_exact_match.map")
+	writeMapFile(t, filepath.Join(mapsBaseDir, "hug_https_31443"), "sni.map")
+	writeMapFile(t, filepath.Join(mapsBaseDir, "orphan_http_31999"), "stale.map")
+
+	err := storage.RemoveOrphanMapsDirectories([]string{"hug_http_31080", "hug_https_31443"})
+	require.NoError(t, err)
+
+	assert.DirExists(t, filepath.Join(mapsBaseDir, "hug_http_31080"))
+	assert.DirExists(t, filepath.Join(mapsBaseDir, "hug_https_31443"))
+	assert.NoDirExists(t, filepath.Join(mapsBaseDir, "orphan_http_31999"))
+}
+
+func TestRemoveOrphanMapsDirectoriesWithoutMapsBaseDir(t *testing.T) {
+	storage := newTestMapsStorage(t, filepath.Join(t.TempDir(), "absent"))
+
+	assert.NoError(t, storage.RemoveOrphanMapsDirectories([]string{"hug_http_31080"}))
+}
+
+func TestRemoveOrphanMapsDirectoriesKeepsTrackedState(t *testing.T) {
+	mapsBaseDir := t.TempDir()
+	storage := newTestMapsStorage(t, mapsBaseDir)
+
+	storage.GetListenerExactMatchMapFile("hug_http_31080")
+	writeMapFile(t, filepath.Join(mapsBaseDir, "hug_http_31080"), "listener_exact_match.map")
+	writeMapFile(t, filepath.Join(mapsBaseDir, "orphan_http_31999"), "stale.map")
+
+	require.NoError(t, storage.RemoveOrphanMapsDirectories([]string{"hug_http_31080"}))
+
+	assert.Contains(t, storage.GetMaps(), filepath.Join(mapsBaseDir, "hug_http_31080"))
+	assert.NotContains(t, storage.GetMaps(), filepath.Join(mapsBaseDir, "orphan_http_31999"))
+}
+
 func TestDeleteMapsDirectoryForFrontendIsIdempotent(t *testing.T) {
 	mapsBaseDir := t.TempDir()
 	storage := newTestMapsStorage(t, mapsBaseDir)
