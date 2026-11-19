@@ -103,6 +103,7 @@ func (b *GatewayBuilderImpl) computeListenerConflicts() {
 	listenersByPort := groupListenersByPort(sortedGws)
 	b.detectProtocolConflicts(listenersByPort)
 	b.detectHostnameConflicts(listenersByPort)
+	b.detectPortConflicts(listenersByPort)
 }
 
 // nonDeletedGateways returns a filtered copy of b.GateTree.Gateways containing
@@ -271,6 +272,38 @@ func (b *GatewayBuilderImpl) detectHostnameConflicts(listenersByPort map[gateway
 				continue
 			}
 			claimed[claim] = struct{}{}
+		}
+	}
+}
+
+// detectPortConflicts marks every TCP or UDP listener whose port already has
+// one, the first in the merged list's precedence order keeping the port.
+//
+// These protocols carry no hostname, so a port has a single destination and two
+// such listeners cannot both be served. Left unmarked, both were merged into one
+// VirtualListener and the port went to the oldest route, whoever owned the
+// listener it was attached to.
+//
+// The claim spans Gateways, unlike hostnameClaim: every Gateway is served from
+// one frontend per port, so a second Gateway on the port takes it from the first
+// just as a ListenerSet entry would.
+//
+// A listener already in conflict on protocol does not serve the port and takes no
+// claim. The conflict is reported as a protocol one: the API has no reason for a
+// port that is simply taken.
+func (b *GatewayBuilderImpl) detectPortConflicts(listenersByPort map[gatewayv1.PortNumber][]*Listener) {
+	for port, listeners := range listenersByPort {
+		conflictsOnPort := b.ControllerStore.conflictsByPort[port]
+		taken := false
+		for _, listener := range listeners {
+			if protocols.CarriesHostname(listener.Protocol()) || conflictsOnPort[listener.Key()].has(conflictOnProtocol) {
+				continue
+			}
+			if taken {
+				conflictsOnPort[listener.Key()] |= conflictOnProtocol
+				continue
+			}
+			taken = true
 		}
 	}
 }

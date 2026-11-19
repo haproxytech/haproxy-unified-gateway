@@ -1,0 +1,12 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: TCPRoute
+metadata:
+  name: tcproute
+spec:
+  parentRefs:
+    - name: tcp-gateway
+      sectionName: tcp
+  rules:
+    - backendRefs:
+        - name: http-echo
+          port: 443
