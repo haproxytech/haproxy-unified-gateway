@@ -17,6 +17,7 @@ package maps
 import (
 	"io"
 	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -742,4 +743,46 @@ func TestMapFileState_RemoveEntriesFromRoute(t *testing.T) {
 		assert.Contains(t, m.Entries[EntryKey{Hostname: "tls.com"}].DesiredValue, "be-tls")
 		assert.Contains(t, m.Entries[EntryKey{Hostname: "listener.com"}].DesiredValue, "listener")
 	})
+}
+
+func TestIsUnsafeEntry(t *testing.T) {
+	tests := []struct {
+		name, key, value string
+		want             bool
+	}{
+		{"plain entry", "example.com/api", "be1", false},
+		{"value may hold spaces", "example.com/api", `{"be1": 1, "be2": 2}`, false},
+		{"space in key", "example.com/x be_other", "be1", true},
+		{"tab in key", "example.com/x\tbe_other", "be1", true},
+		{"newline in key", "example.com/y\nzz", "be1", true},
+		{"newline in value", "example.com/api", "be1\nzz be2", true},
+		{"carriage return in value", "example.com/api", "be1\rzz be2", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsUnsafeEntry(tt.key, tt.value))
+		})
+	}
+}
+
+func TestMapFileState_WriteOnDiskIfChanged_SkipsUnsafeKeys(t *testing.T) {
+	handler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})
+	state := NewMapFileState(t.TempDir(), "test.map", slog.New(handler))
+	state.PlainValues = true
+	origin := ResourceOrigin{"default", "res1"}
+	for _, ek := range []EntryKey{
+		{Hostname: "example.com", Path: "/api"},
+		{Hostname: "example.com", Path: "/x be_other"},
+		{Hostname: "example.com", Path: "/y\nzz"},
+	} {
+		state.ApplyDesiredBackends(ek, origin,
+			map[string]*WeightedValue{"be1": {ValueName: "be1", Weight: new(int32(1))}})
+	}
+	state.ProcessMapFiles()
+
+	assert.NoError(t, state.WriteOnDiskIfChanged())
+
+	content, err := os.ReadFile(state.Path.FullPath())
+	assert.NoError(t, err)
+	assert.Equal(t, "example.com/api be1\n", string(content))
 }

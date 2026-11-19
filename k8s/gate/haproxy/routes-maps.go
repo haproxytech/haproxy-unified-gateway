@@ -597,6 +597,13 @@ func (b *RouteMgrImpl) runtimeMapSync() error {
 					key += escapeSlashForRuntime(entryKey.Path)
 				}
 				routeValue := mapData.BuildValue(entryValue.DesiredValue)
+				// The CLI splits on whitespace, same framing as the map file.
+				if maps.IsUnsafeEntry(entryKey.Hostname+entryKey.Path, routeValue) {
+					b.topManager.logger.LogAttrs(context.Background(), slog.LevelError,
+						"map [runtime] entry skipped: separator in key or value",
+						slog.String("map", mapData.Path.FileName), slog.String("key", key))
+					continue
+				}
 				// if routeValue is empty, delete the entry
 				if routeValue == "" {
 					b.topManager.logger.LogAttrs(context.Background(), slog.LevelDebug, "Deleting map [runtime] entry", slog.String("map", mapData.Path.FileName), slog.String("key", key))

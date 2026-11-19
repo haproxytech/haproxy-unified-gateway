@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	futils "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/fileutils"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/logging"
@@ -594,6 +595,12 @@ func (m *MapFileState) WriteOnDiskIfChanged() error {
 		if value == "" {
 			continue
 		}
+		// Skip instead of failing: an error here would block every tenant's maps.
+		if IsUnsafeEntry(key, value) {
+			m.logger.LogAttrs(context.Background(), slog.LevelError, "Map file entry skipped: separator in key or value",
+				slog.String("key", key), slog.String("value", value))
+			continue
+		}
 		m.logger.LogAttrs(context.Background(), slog.LevelDebug, "Map file entry",
 			slog.String("key", key), slog.String("value", value))
 		if _, err := fmt.Fprintf(f, "%s %s\n", key, value); err != nil {
@@ -601,6 +608,19 @@ func (m *MapFileState) WriteOnDiskIfChanged() error {
 		}
 	}
 	return nil
+}
+
+// IsUnsafeEntry reports whether key or value would break the "key value\n"
+// framing of a map entry. HAProxy map files have no escape for the separators.
+func IsUnsafeEntry(key, value string) bool {
+	return HasSpaceOrControl(key) || strings.ContainsAny(value, "\r\n")
+}
+
+// HasSpaceOrControl reports whether s holds a whitespace or control character.
+func HasSpaceOrControl(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r)
+	})
 }
 
 // BuildValue returns the map-file value string for the given desired state,

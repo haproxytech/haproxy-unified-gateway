@@ -142,6 +142,17 @@ func (r *HTTPRouteRule) checkFilters() {
 func (r *HTTPRouteRule) checkMatches() {
 	perRuleSize := 0
 	for _, match := range r.K8sResource.Matches {
+		// The path becomes a map key, and map keys cannot hold separators.
+		if match.Path != nil && match.Path.Value != nil && maps.HasSpaceOrControl(*match.Path.Value) {
+			r.CheckMatches = CheckResult{
+				Valid: false,
+				Conditions: rc.ConditionKOAcceptedUnsupportedValue(fmt.Sprintf(
+					"invalid path %q: whitespace and control characters are not allowed, percent-encode them (a space is %%20)",
+					*match.Path.Value)),
+			}
+			r.Valid = false
+			return
+		}
 		conds, err := maps.NormalizeHTTPRouteMatch(match)
 		if err != nil {
 			r.CheckMatches = CheckResult{
