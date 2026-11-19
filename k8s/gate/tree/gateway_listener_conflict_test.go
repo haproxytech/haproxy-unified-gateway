@@ -894,4 +894,38 @@ func TestListenerSetEntriesAreComparedInTheirServingGatewayScope(t *testing.T) {
 		assert.Equal(t, noConflict, conflictsOf(t, results, 443, gatewayListenerKey(gw1Key, "https")))
 		assert.Equal(t, protocolConflict, conflictsOf(t, results, 443, entry.Key()))
 	})
+
+	t.Run("the Gateway's own TCP listener keeps the port against an entry", func(t *testing.T) {
+		// The Gateway is the newer object: precedence is the merged list order,
+		// never a timestamp.
+		entry := mkEntry(gw1Key, client.ObjectKey{Namespace: "tenant", Name: "ls-old"}, "tcp", 9000, gatewayv1.TCPProtocolType, nil)
+		gw1 := merge(mkGateway(gw1Key, t2, ownListener("tcp", 9000, gatewayv1.TCPProtocolType, nil)), entry)
+
+		results := run(t, gw1)
+
+		assert.Equal(t, noConflict, conflictsOf(t, results, 9000, gatewayListenerKey(gw1Key, "tcp")))
+		assert.Equal(t, protocolConflict, conflictsOf(t, results, 9000, entry.Key()),
+			"a TCP port has one destination: a second TCP listener must not be merged into it")
+	})
+
+	t.Run("the older Gateway's TCP listener keeps the port against another Gateway", func(t *testing.T) {
+		gw1 := merge(mkGateway(gw1Key, t1, ownListener("tcp", 9000, gatewayv1.TCPProtocolType, nil)))
+		gw2 := merge(mkGateway(gw2Key, t2, ownListener("tcp", 9000, gatewayv1.TCPProtocolType, nil)))
+
+		results := run(t, gw1, gw2)
+
+		assert.Equal(t, noConflict, conflictsOf(t, results, 9000, gatewayListenerKey(gw1Key, "tcp")))
+		assert.Equal(t, protocolConflict, conflictsOf(t, results, 9000, gatewayListenerKey(gw2Key, "tcp")),
+			"every Gateway is served from one frontend per port, so the port claim spans Gateways")
+	})
+
+	t.Run("TCP listeners on different ports do not conflict", func(t *testing.T) {
+		gw1 := merge(mkGateway(gw1Key, t1, ownListener("tcp", 9000, gatewayv1.TCPProtocolType, nil)))
+		gw2 := merge(mkGateway(gw2Key, t2, ownListener("tcp", 9001, gatewayv1.TCPProtocolType, nil)))
+
+		results := run(t, gw1, gw2)
+
+		assert.Equal(t, noConflict, conflictsOf(t, results, 9000, gatewayListenerKey(gw1Key, "tcp")))
+		assert.Equal(t, noConflict, conflictsOf(t, results, 9001, gatewayListenerKey(gw2Key, "tcp")))
+	})
 }

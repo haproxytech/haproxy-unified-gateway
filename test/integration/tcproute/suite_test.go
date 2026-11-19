@@ -9,6 +9,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/base"
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 	"github.com/stretchr/testify/suite"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -50,5 +51,26 @@ func (s *TCPRouteSuite) expectConditionsRouteUpdated(ctx context.Context, namesp
 		return gotConditions.Equal(expectedConditions)
 	}) {
 		s.T().Fatalf("conditions not correct,\nGot %+v\nExpected %+v\n", gotConditions, expectedConditions)
+	}
+}
+
+// expectAllListenersConflicting waits for a Gateway to be refused because every
+// listener it declares is in conflict. Such a Gateway publishes no listener status.
+func (s *TCPRouteSuite) expectAllListenersConflicting(gatewayName string) {
+	gw := &gatewayv1.Gateway{}
+	if !utils.WaitFor(s.IntTest().Ctx, interval, timeout, func() bool {
+		key := types.NamespacedName{Name: gatewayName, Namespace: s.IntTest().Namespace}
+		if err := s.IntTest().Client.Get(s.IntTest().Ctx, key, gw); err != nil {
+			return false
+		}
+		for _, cond := range gw.Status.Conditions {
+			if cond.Type == string(gatewayv1.GatewayConditionAccepted) {
+				return cond.Status == metav1.ConditionFalse &&
+					cond.Reason == string(gatewayv1.GatewayReasonListenersNotValid)
+			}
+		}
+		return false
+	}) {
+		s.T().Fatalf("Gateway %s is not refused for conflicting listeners, status: %+v", gatewayName, gw.Status)
 	}
 }

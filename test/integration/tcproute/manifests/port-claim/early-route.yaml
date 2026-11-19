@@ -1,0 +1,12 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: TCPRoute
+metadata:
+  name: early-route
+spec:
+  parentRefs:
+    - name: tcp-gateway-late
+      sectionName: tcp
+  rules:
+    - backendRefs:
+        - name: http-echo
+          port: 80
