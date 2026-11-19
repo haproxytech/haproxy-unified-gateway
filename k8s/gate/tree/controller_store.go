@@ -15,6 +15,7 @@ package tree
 
 import (
 	"log/slog"
+	"path"
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/caps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/certificate"
@@ -29,6 +30,9 @@ import (
 )
 
 type ControllerStore struct {
+	// PortBinder reports whether the controller process can bind to a given
+	// port — derived from CAP_NET_BIND_SERVICE and the netns sysctl.
+	PortBinder        caps.PortBinder
 	ClusterStore      *store.ClusterStore
 	GateTree          *GateTree
 	UnmanagedGateTree *GateTree
@@ -44,9 +48,6 @@ type ControllerStore struct {
 	// validate cross-namespace references outside the tree builders (e.g. the
 	// Service-level Backend CR merge in the HAProxy config manager).
 	ReferenceGrantManager *ReferenceGrantManager
-	// PortBinder reports whether the controller process can bind to a given
-	// port — derived from CAP_NET_BIND_SERVICE and the netns sysctl.
-	PortBinder caps.PortBinder
 	// protocolCategoryByPort is the category a port serves, fixed by the first
 	// listener that claims it. It is a property of the port and not of any one
 	// listener: every listener on the port either matches it or conflicts on
@@ -86,14 +87,18 @@ type ControllerStore struct {
 	ControllerName string
 	// IngressClass is the value of --ingress.class used to select managed Ingresses.
 	IngressClass string
-	// EmptyIngressClass, when IngressClass is set, also selects classless Ingresses.
-	EmptyIngressClass bool
+	// TrustedBackendCRNamespaces holds the namespace patterns whose Backend CRs
+	// are applied in full. Backend CRs from any other namespace are reduced to
+	// tuning fields. It mirrors the HugConf spec and is set by its builder.
+	TrustedBackendCRNamespaces []string
 	// HTTPIngressFrontendPort is the listening port of the HTTP listener of the
 	// synthetic Ingress gateway.
 	HTTPIngressFrontendPort int
 	// HTTPSIngressFrontendPort is the listening port of the HTTPS listener of the
 	// synthetic Ingress gateway.
 	HTTPSIngressFrontendPort int
+	// EmptyIngressClass, when IngressClass is set, also selects classless Ingresses.
+	EmptyIngressClass bool
 }
 
 type CertUpdates struct {
@@ -279,4 +284,17 @@ func conditionOfType(conditions []metav1.Condition, conditionType string) (metav
 		}
 	}
 	return metav1.Condition{}, false
+}
+
+// IsBackendCRNamespaceTrusted reports whether namespace matches one of the
+// trusted Backend CR namespace patterns. A pattern is a namespace name where
+// "*" stands for any run of characters, as in "team-*". A malformed pattern
+// matches nothing.
+func (b *ControllerStore) IsBackendCRNamespaceTrusted(namespace string) bool {
+	for _, pattern := range b.TrustedBackendCRNamespaces {
+		if ok, err := path.Match(pattern, namespace); err == nil && ok {
+			return true
+		}
+	}
+	return false
 }

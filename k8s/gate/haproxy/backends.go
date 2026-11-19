@@ -1015,10 +1015,13 @@ func (b *HaproxyConfMgrImpl) mergeWithBackendCRs(backendRef gatewayv1.HTTPBacken
 		if !ok {
 			continue
 		}
-		beCR.Spec.BackendBase.Name = ""
 		// At this point we have or a Backend custom ExtensionRef or a MergType
+		spec, ok := b.mergeableBackendCRSpec(beCR, nsName)
+		if !ok {
+			continue
+		}
 
-		err := mergo.Merge(newBackend, &beCR.Spec.Backend, opts...)
+		err := mergo.Merge(newBackend, spec, opts...)
 		if err != nil {
 			errs.Add(err)
 			continue
@@ -1088,11 +1091,46 @@ func (b *HaproxyConfMgrImpl) mergeServiceBackendCR(newBackend *models.Backend, b
 		return nil
 	}
 
-	// Deep copy so blanking the name does not mutate the store object; override
-	// (no AppendSlice) so the Service CR replaces, not appends to, the route result.
-	cr := beCR.DeepCopy()
-	cr.Spec.BackendBase.Name = ""
-	return mergo.Merge(newBackend, &cr.Spec.Backend, mergo.WithOverride)
+	spec, ok := b.mergeableBackendCRSpec(beCR, k8stypes.NamespacedName{Namespace: crNamespace, Name: crName})
+	if !ok {
+		return nil
+	}
+	// Override (no AppendSlice) so the Service CR replaces, not appends to, the route result.
+	return mergo.Merge(newBackend, spec, mergo.WithOverride)
+}
+
+// mergeableBackendCRSpec returns the part of a Backend CR that may be merged
+// into a generated backend, as a copy so the store object is never mutated.
+// A CR from a trusted namespace is returned in full. Any other CR is reduced
+// to tuning fields, because the full model can read files and rewrite shared
+// state. It returns false when the CR must be ignored.
+func (b *HaproxyConfMgrImpl) mergeableBackendCRSpec(cr *v3.Backend, nsName k8stypes.NamespacedName) (*models.Backend, bool) {
+	if b.controllerStore.IsBackendCRNamespaceTrusted(nsName.Namespace) {
+		spec := &cr.DeepCopy().Spec.Backend
+		spec.Name = ""
+		return spec, true
+	}
+	spec, dropped, err := restrictBackendCR(&cr.Spec.Backend)
+	if err != nil {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelError,
+			"Backend CR ignored: unsafe value from a namespace not listed in HugConf trustedBackendCRNamespaces",
+			logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
+			logging.LogAttrKey(nsName),
+			logging.LogAttrError(err),
+		)
+		return nil, false
+	}
+	if len(dropped) > 0 {
+		b.logger.LogAttrs(
+			context.Background(), slog.LevelWarn,
+			"Backend CR fields dropped: namespace not listed in HugConf trustedBackendCRNamespaces",
+			logging.LogAttrCategory(logging.LogCategoryHaproxyCfgMgr),
+			logging.LogAttrKey(nsName),
+			slog.Any("fields", dropped),
+		)
+	}
+	return spec, true
 }
 
 // resolveBackendCR resolves the Backend CR referenced by nsName. The reference

@@ -141,6 +141,10 @@ accepts can be written in the CR.
 
 ### The Backend CR
 
+> **Note:** HUG applies only the tuning fields of a Backend CR unless its
+> namespace is trusted. See
+> [Trusted namespaces](CustomResources/backend.md#trusted-namespaces).
+
 An Ingress carries the `cr-backend` annotation to merge a **foreign
 `ingress.v3.haproxy.org` Backend CR** (the Ingress Controller's CRD, if
 installed) into every backend built for that Ingress. The CR is where the

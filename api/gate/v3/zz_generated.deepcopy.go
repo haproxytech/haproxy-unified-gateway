@@ -150,6 +150,11 @@ func (in *ControllerConfSpec) DeepCopyInto(out *ControllerConfSpec) {
 		*out = new(CRReference)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.TrustedBackendCRNamespaces != nil {
+		in, out := &in.TrustedBackendCRNamespaces, &out.TrustedBackendCRNamespaces
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	in.Logging.DeepCopyInto(&out.Logging)
 }
 

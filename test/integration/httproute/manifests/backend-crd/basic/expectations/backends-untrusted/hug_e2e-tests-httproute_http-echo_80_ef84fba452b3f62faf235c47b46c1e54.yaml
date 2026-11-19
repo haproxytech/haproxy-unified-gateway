@@ -1,0 +1,17 @@
+abortonclose: disabled
+balance:
+  algorithm: roundrobin
+default_server:
+  check: enabled
+forwardfor:
+  enabled: enabled
+from: haproxytech
+metadata:
+  hug:
+    HTTPRoute:
+      e2e-tests-httproute/route-echo-backend-cr-basic:
+        Generation: 1
+        LinkID: hug
+mode: http
+name: hug_e2e-tests-httproute_http-echo_80_ef84fba452b3f62faf235c47b46c1e54
+server_timeout: 70000

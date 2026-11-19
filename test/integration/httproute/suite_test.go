@@ -21,6 +21,7 @@ import (
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -29,11 +30,22 @@ type HTTPRouteSuite struct {
 	base.BaseSuite
 }
 
+// hugConfNamespace is where the controller under test watches its HugConf.
+const hugConfNamespace = "test"
+
 func (s *HTTPRouteSuite) SetupSuite() {
 	s.BaseSuite.SetupSuite("", 0)
+
+	err := utils.CreateRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, &v1.Namespace{
+		Name: hugConfNamespace,
+	}, true)
+	s.Require().NoError(err)
 }
 
 func (s *HTTPRouteSuite) TearDownSuite() {
+	_ = utils.DeleteRuntimeObject(s.IntTest().Ctx, s.IntTest().Client, &v1.Namespace{
+		Name: hugConfNamespace,
+	}, false)
 	s.BaseSuite.TearDownSuite()
 }
 

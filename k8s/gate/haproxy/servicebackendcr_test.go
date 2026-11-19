@@ -47,14 +47,21 @@ func grantServiceToBackend(fromNs, toNs string) *tree.ReferenceGrantManager {
 	return rgm
 }
 
+// serviceCRMgr trusts every namespace holding a Backend CR, so these tests
+// exercise reference resolution with full CRs.
 func serviceCRMgr(
 	services map[k8stypes.NamespacedName]*apiv1.Service,
 	backendCRs map[k8stypes.NamespacedName]*v3.Backend,
 ) *HaproxyConfMgrImpl {
+	var trusted []string
+	for nn := range backendCRs {
+		trusted = append(trusted, nn.Namespace)
+	}
 	return &HaproxyConfMgrImpl{
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		controllerStore: &tree.ControllerStore{
-			ClusterStore: &store.ClusterStore{Services: services, BackendCRs: backendCRs},
+			ClusterStore:               &store.ClusterStore{Services: services, BackendCRs: backendCRs},
+			TrustedBackendCRNamespaces: trusted,
 		},
 	}
 }

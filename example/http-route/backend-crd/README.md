@@ -1,5 +1,11 @@
 # Hello World HTTPRoute Example With Backend CRD
 
+> **Note:** the `http-request` rules of this example are applied only when the
+> namespace of the Backend CR is trusted. Add it to
+> `spec.trustedBackendCRNamespaces` of the `HugConf` resource first. See
+> [Trusted namespaces](../../../documentation/CustomResources/backend.md#trusted-namespaces).
+> Without it, HUG applies the tuning fields only (here `timeout server` and `balance`).
+
 This example demonstrates how to use an HTTPRoute to expose simple "hello world" applications through the HAProxy Kubernetes Gateway, using a Backend CRD to customize the generated Backend in haproy.cfg configuration.
 
 ### Feature

@@ -10,6 +10,10 @@ The CRD schema can be found here: [Backend CRD](../../api/definition/gate.v3.hap
 The `spec` accepts all fields of the HAProxy `backend` section (via the embedded
 `models.Backend` from client-native).
 
+By default HUG applies only the tuning fields of a Backend CR. HUG applies the
+full `spec` only for namespaces that the administrator trusts (see
+[Trusted namespaces](#trusted-namespaces)).
+
 ---
 
 ## Two ways to attach a Backend CR
@@ -54,6 +58,84 @@ spec:
 `spec.name` is irrelevant for the merge: HUG blanks it before merging so the CR
 cannot rename the generated backend. The backend name is always derived by HUG
 (see [Backend identity](#backend-identity)).
+
+---
+
+## Trusted namespaces
+
+The full backend model is powerful. A rule can make HAProxy return a file from
+its disk, or rewrite a routing map shared by all routes. A user who can create
+a Backend CR could use that against other namespaces.
+
+HUG therefore sorts Backend CRs by the namespace they live in:
+
+| Namespace of the Backend CR | What HUG applies |
+|---|---|
+| Not trusted (default) | The tuning fields only. All other fields are dropped. |
+| Trusted | The full `spec`. |
+
+The tuning fields are:
+
+* Load balancing: `balance` (without `hash_expression`), `hash_type`, `hash_balance_factor`.
+* Timeouts: `check_timeout`, `connect_timeout`, `queue_timeout`, `server_timeout`,
+  `server_fin_timeout`, `tunnel_timeout`, `http_request_timeout`, `http_keep_alive_timeout`.
+* Retries and queueing: `retries`, `retry_on`, `redispatch`, `fullconn`, `max_keep_alive_queue`.
+* Connection handling: `abortonclose`, `http_connection_mode`, `http_reuse`,
+  `http-buffer-request`, `http_pretend_keepalive`, `prefer_last_server`, `forwardfor`.
+* Health checks: `adv_check`, `httpchk_params`, `log_health_checks`.
+* Persistence: `cookie`.
+* Server defaults, in `default_server`: `check`, `inter`, `fastinter`, `downinter`,
+  `fall`, `rise`, `health_check_port`, `maxconn`, `maxqueue`, `minconn`, `weight`,
+  `slowstart`, `backup`, `error_limit`, `observe`, `on-error`, `on-marked-down`,
+  `on-marked-up`, `pool_low_conn`, `pool_max_conn`, `pool_purge_delay`, `max_reuse`,
+  `ssl`, `verify`, `ssl_min_ver`, `ssl_max_ver`, `alpn`, `proto`, `check-ssl`,
+  `check_alpn`, `check_proto`, `send-proxy`, `send-proxy-v2`, `check-send-proxy`.
+
+Everything else is dropped for a namespace that is not trusted. This includes
+all rule lists (`http_request_rule_list` and similar), ACLs, error files, log
+targets, stick tables and external checks.
+
+HUG ignores the whole Backend CR when a tuning field holds whitespace or a
+control character. The only exception is `retry_on`, which is a space-separated
+list.
+
+### Trust a namespace
+
+Only do this for namespaces whose users you trust with the whole HAProxy
+configuration.
+
+1. Open the `HugConf` resource that the controller uses (option `--hugconf-crd`).
+2. Add the namespace to `spec.trustedBackendCRNamespaces`:
+
+   ```yaml
+   apiVersion: gate.v3.haproxy.org/v3
+   kind: HugConf
+   metadata:
+     name: hugconf
+     namespace: haproxy-unified-gateway
+   spec:
+     trustedBackendCRNamespaces:
+       - infra
+       - company-xyz-*
+   ```
+
+3. Apply the resource.
+
+An entry is a namespace name. A `*` stands for any run of characters, so
+`company-xyz-*` trusts every namespace that starts with `company-xyz-`.
+
+HUG applies the change without a controller restart. It rebuilds the affected
+backends, and reloads HAProxy when their configuration changes.
+
+### Find dropped fields
+
+HUG logs each reduced Backend CR. Search the controller log for these messages:
+
+* `Backend CR fields dropped` (level Warn): lists the dropped fields.
+* `Backend CR ignored` (level Error): the CR held an unsafe value.
+
+For a cross-namespace reference, the namespace of the Backend CR decides, not
+the namespace of the route or the Service.
 
 ---
 
