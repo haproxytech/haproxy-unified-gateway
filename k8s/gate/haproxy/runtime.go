@@ -73,6 +73,8 @@ func (b *HaproxyConfMgrImpl) runtimeDeleteServers(backendName string, serverDiff
 	for _, runtimeServerData := range runtimeServerStateData {
 		err := b.runtimeDeleteServer(runtimeServerData.BackendName, runtimeServerData.ServerName)
 		if err != nil {
+			// A stale server may stay in the running HAProxy: force a reload from the config.
+			reload.Instance().SetDynamicServerStateUpdateFailure("backend %s", backendName)
 			b.logger.LogAttrs(context.Background(), slog.LevelError, "Runtime delete of server failed",
 				logging.LogAttrError(err), logging.LogAttrBackendName(runtimeServerData.BackendName),
 				logging.LogAttrServerName(runtimeServerData.ServerName))
