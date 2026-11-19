@@ -14,8 +14,11 @@
 package tree
 
 import (
+	"fmt"
+
 	genericconditions "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
+	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -94,6 +97,22 @@ func (r *HTTPRouteRule) checkBackendRef(httpRoute *HTTPRoute, controllerStore Co
 // Unsupported Extended filters (e.g. RequestMirror) are silently ignored: the
 // route rule remains valid and all supported filters still apply.
 func (r *HTTPRouteRule) checkFilters() {
+	// The path becomes a map key, and map keys cannot hold separators.
+	// shortcut: reported through CheckFilters, so the status reason reads
+	// IncompatibleFilters; upgrade when this branch gets a match check result.
+	for _, match := range r.K8sResource.Matches {
+		if match.Path != nil && match.Path.Value != nil && maps.HasSpaceOrControl(*match.Path.Value) {
+			r.CheckFilters = CheckResult{
+				Valid: false,
+				Conditions: rc.ConditionKOAcceptedIncompatibleFilters(fmt.Sprintf(
+					"invalid path %q: whitespace and control characters are not allowed, percent-encode them (a space is %%20)",
+					*match.Path.Value)),
+			}
+			r.Valid = false
+			return
+		}
+	}
+
 	// Rule-level filter checks.
 	if cond, ok := validateFilterList(r.K8sResource.Filters, "rule"); !ok {
 		r.CheckFilters = CheckResult{Valid: false, Conditions: cond}
