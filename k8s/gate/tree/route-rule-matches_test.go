@@ -102,6 +102,37 @@ func TestCheckMatches(t *testing.T) {
 			wantValid: false,
 			wantInMsg: "invalid query param",
 		},
+		{
+			name: "percent-encoded space in path is valid",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchExact), Value: new("/my%20file")}},
+			},
+			wantValid: true,
+		},
+		{
+			name: "space in regex path is rejected",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchRegularExpression), Value: new("/x hug_other_vsvc_80__")}},
+			},
+			wantValid: false,
+			wantInMsg: "invalid path",
+		},
+		{
+			name: "newline in prefix path is rejected",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchPathPrefix), Value: new("/y\nzz")}},
+			},
+			wantValid: false,
+			wantInMsg: "invalid path",
+		},
+		{
+			name: "tab in exact path is rejected",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchExact), Value: new("/a\tb")}},
+			},
+			wantValid: false,
+			wantInMsg: "invalid path",
+		},
 	}
 
 	for _, tt := range tests {
