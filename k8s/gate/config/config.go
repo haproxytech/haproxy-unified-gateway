@@ -148,7 +148,7 @@ func NewBaseLogger(handlerType logging.LogHandlerType, defaultLevel slog.Level, 
 			// AddSource: true,
 		})
 	case logging.LogHandlerTypeText:
-		baseHandler = tint.NewHandler(os.Stdout, &tint.Options{
+		baseHandler = tint.NewTextHandler(os.Stdout, &tint.Options{
 			Level:   slog.LevelDebug,
 			NoColor: os.Getenv("NO_COLOR") != "",
 			// TimeFormat: time.Kitchen,
