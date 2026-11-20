@@ -1,0 +1,12 @@
+apiVersion: gate.v3.haproxy.org/v3
+kind: Defaults
+metadata:
+  name: defaults
+spec:
+  merge_strategy: override
+  name: haproxytech
+  # The same CR, with a format that commits. This is the correction the replay has
+  # to carry, once the cycle above has been refused and retried.
+  # No space in the value: client-native writes it verbatim and HAProxy takes a
+  # single argument.
+  log_format: "%ci:%cp-%ft-%b/%s-%ST-%B"
