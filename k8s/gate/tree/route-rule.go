@@ -18,6 +18,7 @@ import (
 
 	genericconditions "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
+	haproxyfilters "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/filters"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"k8s.io/apimachinery/pkg/types"
@@ -122,6 +123,27 @@ func (r *HTTPRouteRule) checkFilters() {
 				r.Valid = false
 				return
 			}
+		}
+	}
+
+	// Filter values are written into the shared configuration as text.
+	// shortcut: same IncompatibleFilters reason as the path checks above.
+	var prefixes []string
+	for _, match := range r.K8sResource.Matches {
+		isPrefix := match.Path == nil || match.Path.Type == nil || *match.Path.Type == gatewayv1.PathMatchPathPrefix
+		if isPrefix && match.Path != nil && match.Path.Value != nil {
+			prefixes = append(prefixes, *match.Path.Value)
+		}
+	}
+	filterLists := [][]gatewayv1.HTTPRouteFilter{r.K8sResource.Filters}
+	for _, backendRef := range r.K8sResource.BackendRefs {
+		filterLists = append(filterLists, backendRef.Filters)
+	}
+	for _, filterList := range filterLists {
+		if err := haproxyfilters.ValidateFilters(filterList, prefixes...); err != nil {
+			r.CheckFilters = CheckResult{Valid: false, Conditions: rc.ConditionKOAcceptedIncompatibleFilters(err.Error())}
+			r.Valid = false
+			return
 		}
 	}
 

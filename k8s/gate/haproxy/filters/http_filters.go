@@ -40,6 +40,10 @@ type Result struct {
 // URLRewrite and RequestRedirect filters that use PrefixMatchHTTPPathModifier.
 func ToHAProxyRules(httpFilters []gatewayv1.HTTPRouteFilter, matchPrefix string) Result {
 	var result Result
+	// Second barrier: validation already drops the rule before it gets here.
+	if ValidateFilters(httpFilters, matchPrefix) != nil {
+		return result
+	}
 	for _, filter := range httpFilters {
 		switch filter.Type {
 		case gatewayv1.HTTPRouteFilterRequestHeaderModifier:
@@ -271,7 +275,7 @@ func urlRewriteRules(f *gatewayv1.HTTPURLRewriteFilter, matchPrefix string) mode
 			if f.Path.ReplaceFullPath != nil {
 				rules = append(rules, &models.HTTPRequestRule{
 					Type:    "set-path",
-					PathFmt: *f.Path.ReplaceFullPath,
+					PathFmt: escapeFmt(*f.Path.ReplaceFullPath),
 				})
 			}
 		case gatewayv1.PrefixMatchHTTPPathModifier:
@@ -283,7 +287,7 @@ func urlRewriteRules(f *gatewayv1.HTTPURLRewriteFilter, matchPrefix string) mode
 					if replacement != "" {
 						rules = append(rules, &models.HTTPRequestRule{
 							Type:    "set-path",
-							PathFmt: fmt.Sprintf("%s%%[path,regsub(^/$,)]", replacement),
+							PathFmt: fmt.Sprintf("%s%%[path,regsub(^/$,)]", escapeFmt(replacement)),
 						})
 					}
 				} else {
@@ -310,7 +314,7 @@ func urlRewriteRules(f *gatewayv1.HTTPURLRewriteFilter, matchPrefix string) mode
 						rules = append(rules, &models.HTTPRequestRule{
 							Type:      "replace-path",
 							PathMatch: fmt.Sprintf("^%s(/.*)?$", escapedPrefix),
-							PathFmt:   fmt.Sprintf("%s\\1", replacement),
+							PathFmt:   fmt.Sprintf("%s\\1", escapeFmt(replacement)),
 						})
 					}
 				}
@@ -392,7 +396,7 @@ func requestRedirectRules(f *gatewayv1.HTTPRequestRedirectFilter, matchPrefix st
 	case gatewayv1.FullPathHTTPPathModifier:
 		pathValue := "%[path]"
 		if f.Path.ReplaceFullPath != nil {
-			pathValue = *f.Path.ReplaceFullPath
+			pathValue = escapeFmt(*f.Path.ReplaceFullPath)
 		}
 		return models.HTTPRequestRules{redirect(pfx+pathValue, "", "")}
 
@@ -406,7 +410,7 @@ func requestRedirectRules(f *gatewayv1.HTTPRequestRedirectFilter, matchPrefix st
 				return models.HTTPRequestRules{redirect(pfx+"%[path]", "", "")}
 			}
 			return models.HTTPRequestRules{
-				redirect(fmt.Sprintf("%s%s%%[path,regsub(^/$,)]", pfx, replacement), "", ""),
+				redirect(fmt.Sprintf("%s%s%%[path,regsub(^/$,)]", pfx, escapeFmt(replacement)), "", ""),
 			}
 		}
 		escapedPrefix := regexEscapePath(matchPrefix)
@@ -426,7 +430,7 @@ func requestHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPReques
 		rules = append(rules, &models.HTTPRequestRule{
 			Type:      "set-header",
 			HdrName:   string(h.Name),
-			HdrFormat: h.Value,
+			HdrFormat: literalFmt(h.Value),
 		})
 	}
 	for _, h := range f.Add {
@@ -439,14 +443,14 @@ func requestHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPReques
 			&models.HTTPRequestRule{
 				Type:      "set-header",
 				HdrName:   name,
-				HdrFormat: fmt.Sprintf("%%[req.hdr(%s)],%s", name, h.Value),
+				HdrFormat: fmt.Sprintf("%%[req.hdr(%s)],%s", name, literalFmt(h.Value)),
 				Cond:      "if",
 				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
 			},
 			&models.HTTPRequestRule{
 				Type:      "add-header",
 				HdrName:   name,
-				HdrFormat: h.Value,
+				HdrFormat: literalFmt(h.Value),
 				Cond:      "unless",
 				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
 			},
@@ -468,7 +472,7 @@ func responseHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPRespo
 		rules = append(rules, &models.HTTPResponseRule{
 			Type:      "set-header",
 			HdrName:   string(h.Name),
-			HdrFormat: h.Value,
+			HdrFormat: literalFmt(h.Value),
 		})
 	}
 	for _, h := range f.Add {
@@ -478,14 +482,14 @@ func responseHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPRespo
 			&models.HTTPResponseRule{
 				Type:      "set-header",
 				HdrName:   name,
-				HdrFormat: fmt.Sprintf("%%[res.hdr(%s)],%s", name, h.Value),
+				HdrFormat: fmt.Sprintf("%%[res.hdr(%s)],%s", name, literalFmt(h.Value)),
 				Cond:      "if",
 				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
 			},
 			&models.HTTPResponseRule{
 				Type:      "add-header",
 				HdrName:   name,
-				HdrFormat: h.Value,
+				HdrFormat: literalFmt(h.Value),
 				Cond:      "unless",
 				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
 			},
