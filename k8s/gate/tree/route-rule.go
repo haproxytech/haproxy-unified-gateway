@@ -18,6 +18,7 @@ import (
 
 	genericconditions "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/generic"
 	rc "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/conditions/routes"
+	haproxyfilters "github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/filters"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/haproxy/storage/maps"
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 	"k8s.io/apimachinery/pkg/types"
@@ -101,6 +102,26 @@ func (r *HTTPRouteRule) checkBackendRef(httpRoute *HTTPRoute, controllerStore Co
 // Unsupported Extended filters (e.g. RequestMirror) are silently ignored: the
 // route rule remains valid and all supported filters still apply.
 func (r *HTTPRouteRule) checkFilters() {
+	// Filter values are written into the shared configuration as text.
+	var prefixes []string
+	for _, match := range r.K8sResource.Matches {
+		isPrefix := match.Path == nil || match.Path.Type == nil || *match.Path.Type == gatewayv1.PathMatchPathPrefix
+		if isPrefix && match.Path != nil && match.Path.Value != nil {
+			prefixes = append(prefixes, *match.Path.Value)
+		}
+	}
+	filterLists := [][]gatewayv1.HTTPRouteFilter{r.K8sResource.Filters}
+	for _, backendRef := range r.K8sResource.BackendRefs {
+		filterLists = append(filterLists, backendRef.Filters)
+	}
+	for _, filterList := range filterLists {
+		if err := haproxyfilters.ValidateFilters(filterList, prefixes...); err != nil {
+			r.CheckFilters = CheckResult{Valid: false, Conditions: rc.ConditionKOAcceptedUnsupportedValue(err.Error())}
+			r.Valid = false
+			return
+		}
+	}
+
 	// Rule-level filter checks.
 	if cond, ok := validateFilterList(r.K8sResource.Filters, "rule"); !ok {
 		r.CheckFilters = CheckResult{Valid: false, Conditions: cond}

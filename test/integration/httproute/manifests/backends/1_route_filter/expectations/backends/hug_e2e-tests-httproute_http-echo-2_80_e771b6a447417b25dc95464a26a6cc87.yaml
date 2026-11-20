@@ -17,5 +17,5 @@ forwardfor:
 http_request_rule_list:
 - type: set-header
   hdr_name: X-Canary-Flag
-  hdr_format: active
+  hdr_format: "'active'"
 server_timeout: 50000
