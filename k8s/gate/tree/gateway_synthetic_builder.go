@@ -158,6 +158,22 @@ func (b *SyntheticGatewayBuilderImpl) ingressTLSCertificateRefs() []gatewayv1.Se
 			}
 			seen[key] = struct{}{}
 
+			// One unusable Secret must not cost every Ingress its HTTPS.
+			problem := "does not exist"
+			if secret := b.ClusterStore.Secrets[key]; secret != nil {
+				problem = tlsSecretProblem(secret)
+			}
+			if problem != "" {
+				b.Logger.LogAttrs(
+					context.Background(), slog.LevelWarn,
+					"Ingress TLS Secret ignored",
+					slog.String("ingress", ingress.Namespace+"/"+ingress.Name),
+					slog.String("secret", key.String()),
+					slog.String("reason", problem),
+				)
+				continue
+			}
+
 			namespace := gatewayv1.Namespace(ingress.Namespace)
 			refs = append(refs, gatewayv1.SecretObjectReference{
 				Group:     &secretGroup,

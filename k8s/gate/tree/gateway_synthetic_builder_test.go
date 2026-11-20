@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,6 +27,26 @@ import (
 
 	"github.com/haproxytech/haproxy-unified-gateway/k8s/gate/store"
 )
+
+const (
+	testCertPEM = "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----\n"
+	testKeyPEM  = "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----\n"
+)
+
+func tlsSecret(namespace, name, cert, key string) *v1.Secret {
+	return &v1.Secret{
+		Namespace: namespace, Name: name,
+		Data: map[string][]byte{v1.TLSCertKey: []byte(cert), v1.TLSPrivateKeyKey: []byte(key)},
+	}
+}
+
+func secretsByKey(secrets ...*v1.Secret) map[types.NamespacedName]*v1.Secret {
+	byKey := make(map[types.NamespacedName]*v1.Secret, len(secrets))
+	for _, secret := range secrets {
+		byKey[types.NamespacedName{Namespace: secret.Namespace, Name: secret.Name}] = secret
+	}
+	return byKey
+}
 
 // TestIngressTLSCertificateRefs checks that the synthetic https listener's
 // certificateRefs are collected only from eligible Ingresses' spec.tls, in the
@@ -52,6 +73,12 @@ func TestIngressTLSCertificateRefs(t *testing.T) {
 		ingWithTLS("extra", "hug", "extra-tls"),        // eligible
 		ingWithTLS("foreign", "nginx", "foreign-tls"),  // ineligible (unknown class) -> excluded
 		ingWithTLS("plain", "hug"),                     // eligible but no TLS -> contributes nothing
+		// One Ingress with an unusable Secret must not cost the others their
+		// listener: its reference is left out.
+		ingWithTLS("typo", "hug", "missing-tls"),
+		ingWithTLS("junk", "hug", "junk-tls"),
+		ingWithTLS("badkey", "hug", "badkey-tls"),
+		ingWithTLS("same", "hug", "same-tls"),
 	} {
 		byKey[types.NamespacedName{Namespace: ing.Namespace, Name: ing.Name}] = ing
 	}
@@ -59,6 +86,14 @@ func TestIngressTLSCertificateRefs(t *testing.T) {
 	b := &SyntheticGatewayBuilderImpl{ControllerStore: &ControllerStore{
 		ClusterStore: &store.ClusterStore{
 			Ingresses: byKey,
+			Secrets: secretsByKey(
+				tlsSecret(ns, "web-tls", testCertPEM, testKeyPEM),
+				tlsSecret(ns, "extra-tls", testCertPEM, testKeyPEM),
+				tlsSecret(ns, "foreign-tls", testCertPEM, testKeyPEM),
+				tlsSecret(ns, "junk-tls", "not a certificate", testKeyPEM),
+				tlsSecret(ns, "badkey-tls", testCertPEM, "not a key"),
+				tlsSecret(ns, "same-tls", testCertPEM, testCertPEM),
+			),
 			IngressClasses: map[types.NamespacedName]*networkingv1.IngressClass{
 				{Name: "hug"}: {ObjectMeta: metav1.ObjectMeta{Name: "hug"}, Spec: networkingv1.IngressClassSpec{Controller: CONTROLLER}},
 			},
@@ -84,7 +119,7 @@ func TestIngressTLSCertificateRefs(t *testing.T) {
 		got[string(r.Name)] = true
 	}
 	if len(refs) != 2 || !got["web-tls"] || !got["extra-tls"] {
-		t.Fatalf("expected deduped eligible-only refs {web-tls, extra-tls}, got %d: %v", len(refs), got)
+		t.Fatalf("expected deduped, eligible, usable refs {web-tls, extra-tls}, got %d: %v", len(refs), got)
 	}
 	if got["foreign-tls"] {
 		t.Error("the TLS secret of an ineligible Ingress must be excluded")
@@ -108,6 +143,7 @@ func TestSyntheticGatewayBuilderHTTPSListener(t *testing.T) {
 		return &SyntheticGatewayBuilderImpl{ControllerStore: &ControllerStore{
 			ClusterStore: &store.ClusterStore{
 				Ingresses: byKey,
+				Secrets:   secretsByKey(tlsSecret(ns, "web-tls", testCertPEM, testKeyPEM)),
 				Updates:   store.NewClusterUpdates(),
 			},
 			GateTree:                 &GateTree{Gateways: map[types.NamespacedName]*Gateway{}},
@@ -137,6 +173,31 @@ func TestSyntheticGatewayBuilderHTTPSListener(t *testing.T) {
 		b := newBuilder(&networkingv1.Ingress{Namespace: ns, Name: "web"})
 		b.ComputeTreeUpdates()
 		assert.Equal(t, []string{"http"}, listenerNames(b))
+	})
+
+	t.Run("only a missing TLS secret -> http listener only", func(t *testing.T) {
+		b := newBuilder(&networkingv1.Ingress{
+			Namespace: ns, Name: "web",
+			Spec: networkingv1.IngressSpec{TLS: []networkingv1.IngressTLS{{SecretName: "missing-tls"}}},
+		})
+		b.ComputeTreeUpdates()
+		assert.Equal(t, []string{"http"}, listenerNames(b))
+	})
+
+	t.Run("a missing TLS secret next to a usable one -> https keeps the usable one", func(t *testing.T) {
+		tlsIngress := func(name, secret string) *networkingv1.Ingress {
+			return &networkingv1.Ingress{
+				Namespace: ns, Name: name,
+				Spec: networkingv1.IngressSpec{TLS: []networkingv1.IngressTLS{{SecretName: secret}}},
+			}
+		}
+		b := newBuilder(tlsIngress("web", "web-tls"), tlsIngress("typo", "missing-tls"))
+		b.ComputeTreeUpdates()
+		assert.Equal(t, []string{"http", "https"}, listenerNames(b))
+		refs := b.ClusterStore.Updates.Gateways[syntheticGatewayNamespacedName].NewObject.Spec.Listeners[1].TLS.CertificateRefs
+		if assert.Len(t, refs, 1) {
+			assert.Equal(t, gatewayv1.ObjectName("web-tls"), refs[0].Name)
+		}
 	})
 
 	t.Run("an Ingress with a TLS secret -> http and https listeners", func(t *testing.T) {

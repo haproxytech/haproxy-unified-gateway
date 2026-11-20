@@ -123,6 +123,10 @@ for it and its backends are not built.
   `PathPrefix` match, i.e. the lowest routing precedence — the fallback.
 * `spec.tls[].secretName`: the Secrets are collected from **every** managed
   Ingress and attached to the synthetic `https` listener as `certificateRefs`.
+  A Secret that does not exist, or that holds no valid PEM certificate and
+  key, is left out. The controller logs the warning `Ingress TLS Secret
+  ignored` with the Ingress, the Secret and the reason. The other Ingresses
+  keep their HTTPS. The Secret is picked up as soon as it becomes valid.
 * Several rules/hosts in one Ingress (one synthetic route per rule).
 * The Backend CR, referenced by the `cr-backend` annotation (see below).
 * `status.loadBalancer.ingress`, unless `--disable-ingress-status-update`.

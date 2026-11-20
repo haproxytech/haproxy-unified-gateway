@@ -187,6 +187,38 @@ func (s *IngressTestSuite) Test_Ingress_TLSBringsUpHTTPSListener() {
 	s.expectMapFileExists("hug_https_8443/path_prefix.map")
 }
 
+// The https listener is shared by every Ingress. A second Ingress naming a
+// Secret that does not exist must not take it away from the first one: the
+// missing certificate is left out and the listener keeps the usable one.
+func (s *IngressTestSuite) Test_Ingress_MissingTLSSecretKeepsSharedHTTPS() {
+	fixturePath := path.Join(utils.GetCRDFixturePath(), "basic", "tls")
+	manifests := []string{"ingressclass.yaml", "secret.yaml", "http-echo.yaml", "ingress.yaml"}
+	s.CreateFixtures(fixturePath, manifests)
+	defer s.CleanupFixtures(fixturePath, manifests)
+
+	s.expectBackendExists("hug_e2e-tests-ingress_http-echo_80__")
+	s.expectMapFileExists("hug_https_8443/path_prefix.map")
+
+	typoPath := path.Join(utils.GetCRDFixturePath(), "basic", "tls_missing_secret")
+	typoManifests := []string{"ingress-typo.yaml"}
+	s.CreateFixtures(typoPath, typoManifests)
+	defer s.CleanupFixtures(typoPath, typoManifests)
+
+	// Barrier: the second Ingress is programmed.
+	s.expectMapFileContains("hug_http_8080/listener_route_exact_match.map", "typo.haproxy")
+
+	ns := s.IntTest().Namespace
+	s.ExpectCrtLists(s.IntTest().Ctx, map[futils.FilePath][]string{
+		{
+			Dir:      path.Join(s.IntTest().HaproxyCfgDir, "certlists"),
+			FileName: "/hug_https_8443.list",
+		}: {
+			path.Join(s.IntTest().HaproxyCfgDir, "certs", ns, "in", "hug_"+ns+"_ingress-tls.pem"),
+		},
+	})
+	s.expectMapFileContains("hug_https_8443/listener_route_exact_match.map", "offload.haproxy")
+}
+
 // An Ingress with only a default backend (no rules) must still produce a
 // backend for the referenced Service, mirroring kubernetes-ingress. Before
 // default-backend support this Ingress translated to nothing.
