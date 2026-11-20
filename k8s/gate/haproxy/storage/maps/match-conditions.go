@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 
@@ -175,4 +176,57 @@ func percentEncode(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// ValidateRegexPath checks a RegularExpression path value before it becomes
+// part of a routing map key. The key is the route identity followed by the
+// value, so the value must not be able to match outside its own route:
+//
+//   - it must compile in the Go RE2 dialect, which also guarantees balanced
+//     groups, so the group the key wraps it in cannot be closed early;
+//   - every alternative must start with a literal "/". The route identity is a
+//     string prefix of a sibling route's identity (route-a, route-ab), and only
+//     the "/" that starts every request path tells them apart.
+//
+// A leading "^" is accepted: the key is anchored already.
+func ValidateRegexPath(value string) error {
+	parsed, err := syntax.Parse(strings.TrimPrefix(value, "^"), syntax.Perl)
+	if err != nil {
+		return err
+	}
+	if !startsWithSlash(parsed) {
+		return errors.New(`every alternative must start with "/"`)
+	}
+	return nil
+}
+
+// startsWithSlash reports whether every string re matches starts with "/".
+func startsWithSlash(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpLiteral:
+		return len(re.Rune) > 0 && re.Rune[0] == '/'
+	case syntax.OpCharClass:
+		return len(re.Rune) == 2 && re.Rune[0] == '/' && re.Rune[1] == '/'
+	case syntax.OpCapture, syntax.OpPlus:
+		return startsWithSlash(re.Sub[0])
+	case syntax.OpRepeat:
+		return re.Min >= 1 && startsWithSlash(re.Sub[0])
+	case syntax.OpConcat:
+		for _, sub := range re.Sub {
+			// Anchors consume nothing: the next element decides.
+			if sub.Op == syntax.OpBeginLine || sub.Op == syntax.OpBeginText || sub.Op == syntax.OpEmptyMatch {
+				continue
+			}
+			return startsWithSlash(sub)
+		}
+		return false
+	case syntax.OpAlternate:
+		for _, sub := range re.Sub {
+			if !startsWithSlash(sub) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }

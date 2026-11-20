@@ -33,6 +33,18 @@ params) into HAProxy routing. Path and hostname matching are covered by the
   supported subset excludes PCRE-only constructs such as lookarounds
   (`(?=...)`, `(?!...)`) and backreferences. A value that fails this
   validation rejects its rule with an `UnsupportedValue` condition.
+- **Path values** must not contain whitespace or control characters.
+  Percent-encode them: a space is `%20`. A path that holds one rejects its
+  rule with an `UnsupportedValue` condition.
+- **`RegularExpression` paths** follow three rules:
+  - The regex is matched from the start of the request path. It has no end
+    anchor: add `$` when the whole path must match.
+  - The regex must compile with the Go (RE2) engine, like header regexes.
+  - Every alternative must start with `/`. Write `/a|/b` or `/(a|b)`, not
+    `/a|b`. Write `/.*/edit`, not `.*/edit`.
+
+  A regex that breaks one of these rules rejects its rule with an
+  `UnsupportedValue` condition.
 
 ## Precedence
 
@@ -106,7 +118,7 @@ Rules whose match conditions cannot be programmed are dropped:
 - Some rules invalid → `PartiallyInvalid: True`, reason `UnsupportedValue`,
   message prefixed with `Dropped Rule`.
 
-This covers invalid regexes and rules whose encoded conditions exceed the
+This covers invalid regexes, invalid path values and rules whose encoded conditions exceed the
 map-value size limit (~16KB per HAProxy map value): a single rule is capped
 at 4096 bytes and a whole route at 12288 bytes of encoded conditions.
 

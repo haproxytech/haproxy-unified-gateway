@@ -110,6 +110,36 @@ func TestCheckMatches(t *testing.T) {
 			wantValid: true,
 		},
 		{
+			name: "regex path is valid",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchRegularExpression), Value: new("^/api/.*")}},
+			},
+			wantValid: true,
+		},
+		{
+			name: "regex path with an alternative matching every request is rejected",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchRegularExpression), Value: new("/x|.*")}},
+			},
+			wantValid: false,
+			wantInMsg: "invalid path regex",
+		},
+		{
+			name: "regex path that does not compile is rejected",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchRegularExpression), Value: new("/x)|(.*")}},
+			},
+			wantValid: false,
+			wantInMsg: "invalid path regex",
+		},
+		{
+			name: "the same text is fine as a prefix path",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchPathPrefix), Value: new("/x|.*")}},
+			},
+			wantValid: true,
+		},
+		{
 			name: "space in regex path is rejected",
 			matches: []gatewayv1.HTTPRouteMatch{
 				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchRegularExpression), Value: new("/x hug_other_vsvc_80__")}},

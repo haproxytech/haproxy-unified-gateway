@@ -153,6 +153,18 @@ func (r *HTTPRouteRule) checkMatches() {
 			r.Valid = false
 			return
 		}
+		if match.Path != nil && match.Path.Value != nil && match.Path.Type != nil &&
+			*match.Path.Type == gatewayv1.PathMatchRegularExpression {
+			if err := maps.ValidateRegexPath(*match.Path.Value); err != nil {
+				r.CheckMatches = CheckResult{
+					Valid: false,
+					Conditions: rc.ConditionKOAcceptedUnsupportedValue(fmt.Sprintf(
+						"invalid path regex %q: %v", *match.Path.Value, err)),
+				}
+				r.Valid = false
+				return
+			}
+		}
 		conds, err := maps.NormalizeHTTPRouteMatch(match)
 		if err != nil {
 			r.CheckMatches = CheckResult{
