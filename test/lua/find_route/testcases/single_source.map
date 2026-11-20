@@ -11,3 +11,12 @@ wildcard_source_only             /special/x     -    lr2  be_r2_special
 wildcard_default_prefix          /anything      -    lr2  be_r2_default
 prefix_needs_element_boundary    /apiexample    lr1  -    -
 longer_prefix_non_boundary_falls_back  /api/v2example  lr1  -    be_r1_api
+
+# Regex keys in the generated form: the listener-route identity, then the
+# path regex in a group.
+regex_escaped_dot_matches_a_dot          /files/a.php   lr1  -    be_r1_php
+regex_escaped_dot_is_literal             /files/aXphp   lr1  -    -
+regex_plain_dot_matches_any_character    /any/aXb       lr1  -    be_r1_anychar
+regex_alternation_first                  /alt/x         lr1  -    be_r1_alt
+regex_alternation_second                 /alt/y         lr1  -    be_r1_alt
+regex_alternation_needs_the_identity     /alt/y         lr9  -    -

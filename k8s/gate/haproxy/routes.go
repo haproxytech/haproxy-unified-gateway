@@ -335,7 +335,9 @@ func (d *desiredBackendsMaps) resolveEntry(hostname string, match gatewayv1.HTTP
 		selected = d.regex
 		// Grouped so an alternation in the path cannot split the key and
 		// match without the route identity in front of it.
-		path = "(" + sanitizeRegexp(strings.TrimPrefix(path, "^")) + ")"
+		// The path is the user's regex and is kept as written: only the
+		// hostname is literal text that needs its dots escaped.
+		path = "(" + strings.TrimPrefix(path, "^") + ")"
 		hostname = sanitizeRegexp(hostname)
 	}
 	key := maps.EntryKey{Hostname: hostname, Path: path}
