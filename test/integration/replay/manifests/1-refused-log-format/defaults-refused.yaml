@@ -1,0 +1,11 @@
+apiVersion: gate.v3.haproxy.org/v3
+kind: Defaults
+metadata:
+  name: defaults
+spec:
+  merge_strategy: override
+  name: haproxytech
+  # An unknown sample fetch. The CRD takes it as a plain string, and the cycle that
+  # carries it is refused when client-native commits it: the rejected transaction
+  # never reaches the configuration file. That is the failure this case is built on.
+  log_format: "%[hug_unknown_fetch]"

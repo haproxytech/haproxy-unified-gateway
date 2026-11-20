@@ -39,12 +39,12 @@ type GatewayObservedGenerations map[types.NamespacedName]int64
 // HaproxyConfResult is the outcome of a single HaproxyConfDiffs processing
 // cycle, sent back to the controller via HaproxyConfDiffs.ResultCh.
 type HaproxyConfResult struct {
-	Err error
+	Err                        error
+	GatewayObservedGenerations GatewayObservedGenerations
 	// ReloadFailed is true when the configuration was committed but HAProxy
 	// refused to reload it: the diffs were applied and must not be replayed, but
 	// the reload has to be retried.
-	ReloadFailed               bool
-	GatewayObservedGenerations GatewayObservedGenerations
+	ReloadFailed bool
 }
 
 type HaproxyConfDiffs struct {
