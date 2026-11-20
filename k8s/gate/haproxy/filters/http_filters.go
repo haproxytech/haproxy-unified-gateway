@@ -484,7 +484,7 @@ func requestHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPReques
 			&models.HTTPRequestRule{
 				Type:      "set-header",
 				HdrName:   name,
-				HdrFormat: fmt.Sprintf("%%[req.hdr(%s)],%s", name, literalFmt(h.Value)),
+				HdrFormat: fmt.Sprintf("%%[req.fhdr(%s)],%s", name, literalFmt(h.Value)),
 				Cond:      "if",
 				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
 			},
@@ -523,7 +523,7 @@ func responseHeaderModifierRules(f *gatewayv1.HTTPHeaderFilter) models.HTTPRespo
 			&models.HTTPResponseRule{
 				Type:      "set-header",
 				HdrName:   name,
-				HdrFormat: fmt.Sprintf("%%[res.hdr(%s)],%s", name, literalFmt(h.Value)),
+				HdrFormat: fmt.Sprintf("%%[res.fhdr(%s)],%s", name, literalFmt(h.Value)),
 				Cond:      "if",
 				CondTest:  fmt.Sprintf("{ hdr_cnt(%s) gt 0 }", name),
 			},

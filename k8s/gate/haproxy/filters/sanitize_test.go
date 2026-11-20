@@ -151,7 +151,7 @@ func TestToHAProxyRulesRendersValuesLiterally(t *testing.T) {
 	}), "")
 	require.Len(t, result.HTTPRequestRules, 3)
 	assert.Equal(t, `'%%[env(HOME)] it'\''s'`, result.HTTPRequestRules[0].HdrFormat)
-	assert.Equal(t, `%[req.hdr(X-Add)],'a b'`, result.HTTPRequestRules[1].HdrFormat)
+	assert.Equal(t, `%[req.fhdr(X-Add)],'a b'`, result.HTTPRequestRules[1].HdrFormat)
 	assert.Equal(t, `'a b'`, result.HTTPRequestRules[2].HdrFormat)
 
 	response := ToHAProxyRules(responseHeaderFilter(gatewayv1.HTTPHeaderFilter{
@@ -160,7 +160,7 @@ func TestToHAProxyRulesRendersValuesLiterally(t *testing.T) {
 	}), "")
 	require.Len(t, response.HTTPResponseRules, 3)
 	assert.Equal(t, `'100%%'`, response.HTTPResponseRules[0].HdrFormat)
-	assert.Equal(t, `%[res.hdr(X-Add)],'a b'`, response.HTTPResponseRules[1].HdrFormat)
+	assert.Equal(t, `%[res.fhdr(X-Add)],'a b'`, response.HTTPResponseRules[1].HdrFormat)
 	assert.Equal(t, `'a b'`, response.HTTPResponseRules[2].HdrFormat)
 }
 
