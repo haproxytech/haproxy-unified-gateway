@@ -127,7 +127,17 @@ func TestResolveEntry(t *testing.T) {
 			pathType:   gatewayv1.PathMatchRegularExpression,
 			path:       "/foo",
 			wantBucket: bucketRegex,
-			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: "/foo"},
+			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: "(/foo)"},
+		},
+		{
+			// Alternation must stay inside the group: unwrapped, the second
+			// alternative would match on its own, for any route.
+			name:       "regex-path alternation stays grouped",
+			hostname:   "example.com",
+			pathType:   gatewayv1.PathMatchRegularExpression,
+			path:       "/x|/y",
+			wantBucket: bucketRegex,
+			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: "(/x|/y)"},
 		},
 		{
 			name:       "regex-path wildcard-host",
@@ -135,7 +145,7 @@ func TestResolveEntry(t *testing.T) {
 			pathType:   gatewayv1.PathMatchRegularExpression,
 			path:       "/foo",
 			wantBucket: bucketRegex,
-			wantKey:    maps.EntryKey{Hostname: `\.example\.com`, Path: "/foo"},
+			wantKey:    maps.EntryKey{Hostname: `\.example\.com`, Path: "(/foo)"},
 		},
 		{
 			// nil match.Path → defaults to path="/" and type=PathPrefix
@@ -152,7 +162,7 @@ func TestResolveEntry(t *testing.T) {
 			pathType:   gatewayv1.PathMatchRegularExpression,
 			path:       "^/foo",
 			wantBucket: bucketRegex,
-			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: "/foo"},
+			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: "(/foo)"},
 		},
 		{
 			// root path "/" with prefix type and wildcard host → path becomes "/.*"

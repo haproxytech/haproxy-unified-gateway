@@ -111,6 +111,18 @@ func (r *HTTPRouteRule) checkFilters() {
 			r.Valid = false
 			return
 		}
+		if match.Path != nil && match.Path.Value != nil && match.Path.Type != nil &&
+			*match.Path.Type == gatewayv1.PathMatchRegularExpression {
+			if err := maps.ValidateRegexPath(*match.Path.Value); err != nil {
+				r.CheckFilters = CheckResult{
+					Valid: false,
+					Conditions: rc.ConditionKOAcceptedIncompatibleFilters(fmt.Sprintf(
+						"invalid path regex %q: %v", *match.Path.Value, err)),
+				}
+				r.Valid = false
+				return
+			}
+		}
 	}
 
 	// Rule-level filter checks.

@@ -33,6 +33,11 @@ func TestCheckFiltersRejectsUnsafePaths(t *testing.T) {
 		{"space in regex path is rejected", gatewayv1.PathMatchRegularExpression, "/x hug_other_vsvc_80__", false},
 		{"newline in prefix path is rejected", gatewayv1.PathMatchPathPrefix, "/y\nzz", false},
 		{"tab in exact path is rejected", gatewayv1.PathMatchExact, "/a\tb", false},
+		{"regex alternation starting with a slash is valid", gatewayv1.PathMatchRegularExpression, "/a|/b", true},
+		{"regex alternative matching everything is rejected", gatewayv1.PathMatchRegularExpression, "/x|.*", false},
+		{"regex without leading slash is rejected", gatewayv1.PathMatchRegularExpression, ".*", false},
+		{"regex that does not compile is rejected", gatewayv1.PathMatchRegularExpression, "/x)|(.*", false},
+		{"exact path is not parsed as regex", gatewayv1.PathMatchExact, "/x)|(.*", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
