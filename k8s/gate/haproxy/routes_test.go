@@ -140,6 +140,23 @@ func TestResolveEntry(t *testing.T) {
 			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: "(/x|/y)"},
 		},
 		{
+			// The path is the user's regex: an escaped dot stays escaped.
+			name:       "regex-path escaped dot is kept",
+			hostname:   "example.com",
+			pathType:   gatewayv1.PathMatchRegularExpression,
+			path:       `/.*\.php`,
+			wantBucket: bucketRegex,
+			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: `(/.*\.php)`},
+		},
+		{
+			name:       "regex-path plain dot stays a wildcard",
+			hostname:   "example.com",
+			pathType:   gatewayv1.PathMatchRegularExpression,
+			path:       "/a.b",
+			wantBucket: bucketRegex,
+			wantKey:    maps.EntryKey{Hostname: `^example\.com`, Path: "(/a.b)"},
+		},
+		{
 			name:       "regex-path wildcard-host",
 			hostname:   "*.example.com",
 			pathType:   gatewayv1.PathMatchRegularExpression,
