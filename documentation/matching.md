@@ -33,6 +33,20 @@ params) into HAProxy routing. Path and hostname matching are covered by the
   supported subset excludes PCRE-only constructs such as lookarounds
   (`(?=...)`, `(?!...)`) and backreferences. A value that fails this
   validation rejects its rule with an `UnsupportedValue` condition.
+- **`RegularExpression` cost** is limited, for headers, query params and
+  paths alike. A slow regex would stall the gateway for every route.
+  - Repeat only a single character, class or dot: `[0-9]+` and `.*` are
+    valid, `(ab)+` and `(a|b)*` are not. An optional group `(ab)?` is valid.
+  - Use at most 3 repetitions (`*`, `+`, `{n,m}`) and at most 8 optional
+    parts (`?`) in one regex. An exact count `{n}` is not a repetition.
+  - Write a brace as `{n}`, `{n,}` or `{n,m}`, or escape it as `\{`.
+  - `\Q...\E` quoting is not supported.
+
+  A regex that breaks one of these rules rejects its rule with an
+  `UnsupportedValue` condition.
+- **`RegularExpression` header and query values**: a regex tests the first
+  4 values of a repeated header or query param. It skips a value longer
+  than 1024 bytes. `Exact` matching has no such limit.
 - **Path values** must not contain whitespace or control characters.
   Percent-encode them: a space is `%20`. A path that holds one rejects its
   rule with an `UnsupportedValue` condition.
