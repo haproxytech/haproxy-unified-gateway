@@ -555,6 +555,10 @@ func (r *HTTPRoute) mergeFilterConditions() {
 		return
 	}
 
+	// An unsafe filter value is not a filter incompatibility: keep its reason.
+	first, _ := invalidRules[0].conds.GetCondition(generic.ConditionType(gatewayv1.RouteConditionAccepted))
+	unsupportedValue := first.Reason == string(gatewayv1.RouteReasonUnsupportedValue)
+
 	var conds generic.Conditions
 	if len(invalidRules) == len(r.Rules) {
 		// All rules invalid — route is fully invalid.
@@ -568,6 +572,9 @@ func (r *HTTPRoute) mergeFilterConditions() {
 			msg.WriteString(fmt.Sprintf("rule %d: %s", ir.index, reason))
 		}
 		conds = rc.ConditionKOAcceptedIncompatibleFilters(msg.String())
+		if unsupportedValue {
+			conds = rc.ConditionKOAcceptedUnsupportedValue(msg.String())
+		}
 	} else {
 		// Only a portion of rules are invalid — drop them and signal PartiallyInvalid.
 		var msg strings.Builder
@@ -577,6 +584,9 @@ func (r *HTTPRoute) mergeFilterConditions() {
 			msg.WriteString(fmt.Sprintf(" (rule %d: %s)", ir.index, reason))
 		}
 		conds = rc.ConditionPartiallyInvalidIncompatibleFilters(msg.String())
+		if unsupportedValue {
+			conds = rc.ConditionPartiallyInvalidUnsupportedValue(msg.String())
+		}
 	}
 
 	r.Conditions.Conditions.Iterate(func(key string, _ generic.Conditions) bool {

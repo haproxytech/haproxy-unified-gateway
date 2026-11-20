@@ -17,6 +17,7 @@ package httproute
 
 import (
 	"path"
+	"time"
 
 	"github.com/haproxytech/haproxy-unified-gateway/test/integration/utils"
 	v1 "k8s.io/api/core/v1"
@@ -246,6 +247,47 @@ func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_partial() 
 
 	httpRouteName := "route-echo-1"
 	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
+}
+
+// A filter value that would add lines to the shared configuration drops its
+// rule. The other rule of the route is still served.
+func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_unsafe_value() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+	fixtureDir := "backends"
+	fixturePath := path.Join(fixtureDirPath, fixtureDir, "1_route_filter_ko_unsafe_value")
+	s.CreateFixtures(fixturePath, nil)
+	defer s.CleanupFixtures(fixturePath, nil)
+
+	expectationsPath := path.Join(fixturePath, "expectations")
+	expectedCondPath := path.Join(expectationsPath, "route-conditions.yaml")
+	expectedConditions := s.YamlToRouteConditions(expectedCondPath)
+
+	httpRouteName := "route-echo-1"
+	s.expectConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, httpRouteName, expectedConditions)
+
+	// The configuration is written after the status: wait for the valid rule.
+	var literal []string
+	var unsafeRendered bool
+	s.Eventually(func() bool {
+		backends, err := s.IntTest().HaproxyClient.BackendsGet()
+		if err != nil {
+			return false
+		}
+		literal, unsafeRendered = nil, false
+		for _, backend := range backends {
+			for _, rule := range backend.HTTPRequestRuleList {
+				if rule.Type == "del-header" {
+					unsafeRendered = true
+				}
+				if rule.HdrName == "X-Literal" {
+					literal = append(literal, rule.HdrFormat)
+				}
+			}
+		}
+		return len(literal) > 0
+	}, 30*time.Second, 200*time.Millisecond)
+	s.False(unsafeRendered, "the unsafe rule must not be rendered")
+	s.Equal([]string{`'%%[env(HOME)] is not evaluated'`}, literal)
 }
 
 func (s *HTTPRouteTestSuite) Test_HTTPRoute_Backend_1_route_filter_ko_all_rules_invalid() {

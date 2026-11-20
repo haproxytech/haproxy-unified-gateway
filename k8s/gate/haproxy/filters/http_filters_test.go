@@ -528,7 +528,7 @@ func TestToHAProxyRules(t *testing.T) {
 		r0 := result.HTTPRequestRules[0]
 		assert.Equal(t, "set-header", r0.Type)
 		assert.Equal(t, "X-Append", r0.HdrName)
-		assert.Equal(t, "%[req.hdr(X-Append)],new-val", r0.HdrFormat)
+		assert.Equal(t, "%[req.hdr(X-Append)],'new-val'", r0.HdrFormat)
 		assert.Equal(t, "if", r0.Cond)
 		assert.Equal(t, "{ hdr_cnt(X-Append) gt 0 }", r0.CondTest)
 		// Rule 1: add-header when header is absent

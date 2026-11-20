@@ -15,7 +15,7 @@ default_server:
 forwardfor:
   enabled: enabled
 http_response_rule_list:
-- hdr_format: hello
+- hdr_format: "'hello'"
   hdr_name: X-Custom-Response
   type: set-header
 server_timeout: 50000

@@ -1,0 +1,23 @@
+parents:
+- conditions:
+  - message: Route Accepted
+    observedGeneration: 1
+    reason: Accepted
+    status: "True"
+    type: Accepted
+  - message: References resolved
+    observedGeneration: 1
+    reason: ResolvedRefs
+    status: "True"
+    type: ResolvedRefs
+  - message: "Dropped Rule (rule 1: invalid filter RequestHeaderModifier: header name \"x\\nfrontend injected\\n  bind 127.0.0.1:28999\": only letters, digits and !&*+-.^_`|~ are allowed)"
+    observedGeneration: 1
+    reason: UnsupportedValue
+    status: "True"
+    type: PartiallyInvalid
+  controllerName: gate.haproxy.org/hug
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+    sectionName: http
