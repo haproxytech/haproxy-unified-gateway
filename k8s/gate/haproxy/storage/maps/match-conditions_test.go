@@ -571,3 +571,44 @@ func TestBuildRouteValueUnconditionalFirstRuleWins(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRegexPath(t *testing.T) {
+	valid := []string{
+		"/foo",
+		"^/foo",
+		"/api/.*",
+		"/(a|b)/x",
+		"/x|/y",
+		"(/a|/b)c",
+		"/+x",
+		`/a\.b`,
+		"(?i)/Foo",
+	}
+	for _, value := range valid {
+		t.Run("valid "+value, func(t *testing.T) {
+			if err := ValidateRegexPath(value); err != nil {
+				t.Errorf("ValidateRegexPath(%q) = %v, want nil", value, err)
+			}
+		})
+	}
+
+	invalid := []struct{ name, value string }{
+		{"alternative matching everything", "/x|.*"},
+		{"no leading slash", ".*"},
+		{"empty", ""},
+		{"plain word", "x"},
+		{"sibling route suffix", "2/secret"},
+		{"optional slash", "/?x"},
+		{"slash as one choice of a class", "[/a]x"},
+		{"unbalanced group closing the key group", "/x)|(.*"},
+		{"unclosed group", "(unclosed"},
+		{"construct outside the supported dialect", "/one(?=two)"},
+	}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateRegexPath(tt.value); err == nil {
+				t.Errorf("ValidateRegexPath(%q) = nil, want an error", tt.value)
+			}
+		})
+	}
+}

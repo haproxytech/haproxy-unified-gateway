@@ -1,0 +1,27 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-regex-path
+spec:
+  parentRefs:
+  - name: hug-gateway
+    sectionName: http
+  hostnames:
+  - "regex.haproxy"
+  rules:
+  # rule 0 is valid: its alternation stays inside the route's own map key
+  - matches:
+    - path:
+        type: RegularExpression
+        value: "/ok/a|/ok/b"
+    backendRefs:
+    - name: http-echo
+      port: 80
+  # rule 1 has an alternative that would match every request of the listener
+  - matches:
+    - path:
+        type: RegularExpression
+        value: "/x|.*"
+    backendRefs:
+    - name: http-echo
+      port: 443

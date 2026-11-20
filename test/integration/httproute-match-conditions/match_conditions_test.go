@@ -67,3 +67,30 @@ func (s *MatchConditionsSuite) Test_MatchConditions() {
 	expectedMapsPath := path.Join(expectationsPath, "maps")
 	s.ExpectMapContents("hug_http_31081", expectedMapsPath)
 }
+
+// Test_RegexPath verifies how a RegularExpression path reaches the regex map.
+//
+// A valid alternation is wrapped in a group behind the route's own identity,
+// so no alternative can match a request of another route. A regex with an
+// alternative that does not start with "/" is dropped with a PartiallyInvalid
+// condition and writes no map entry: unanchored, it would match every request
+// of the listener, whatever the hostname.
+func (s *MatchConditionsSuite) Test_RegexPath() {
+	fixtureDirPath := utils.GetCRDFixturePath()
+
+	manifests := []string{
+		"echo.yaml",
+		"gateway.yaml",
+		"gatewayclass.yaml",
+		"route-regex-path.yaml",
+	}
+	s.CreateFixtures(fixtureDirPath, manifests)
+	defer s.CleanupFixtures(fixtureDirPath, manifests)
+
+	expectationsPath := path.Join(fixtureDirPath, "expectations-regex-path")
+
+	s.ExpectRouteConditionsUpdated(s.IntTest().Ctx, s.IntTest().Namespace, "route-regex-path",
+		s.YamlToRouteConditions(path.Join(expectationsPath, "route-conditions.yaml")))
+
+	s.ExpectMapContents("hug_http_31081", path.Join(expectationsPath, "maps"))
+}
