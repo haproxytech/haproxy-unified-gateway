@@ -515,29 +515,8 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			}
 			continue
 		}
-		certPEM := treeSecret.K8sResource.Data[v1.TLSCertKey]
-		keyPEM := treeSecret.K8sResource.Data[v1.TLSPrivateKeyKey]
-
-		if bytes.Equal(certPEM, keyPEM) {
-			msg := fmt.Sprintf("Secret %s/%s: certificate and key are identical", nsName.Namespace, nsName.Name)
-			l.CheckSecret = CheckResult{
-				Valid:      false,
-				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
-			}
-			continue
-		}
-
-		if block, _ := pem.Decode(certPEM); block == nil {
-			msg := fmt.Sprintf("Secret %s/%s: certificate contains an invalid PEM", nsName.Namespace, nsName.Name)
-			l.CheckSecret = CheckResult{
-				Valid:      false,
-				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
-			}
-			continue
-		}
-
-		if block, _ := pem.Decode(keyPEM); block == nil {
-			msg := fmt.Sprintf("Secret %s/%s: key contains an invalid PEM", nsName.Namespace, nsName.Name)
+		if problem := tlsSecretProblem(treeSecret.K8sResource); problem != "" {
+			msg := fmt.Sprintf("Secret %s/%s: %s", nsName.Namespace, nsName.Name, problem)
 			l.CheckSecret = CheckResult{
 				Valid:      false,
 				Conditions: l.conditionsFor(conditions.VerdictInvalidCertificateRef, msg),
@@ -545,6 +524,23 @@ func (l *Listener) checkCertificateRefs(gateSecrets map[types.NamespacedName]*Se
 			continue
 		}
 	}
+}
+
+// tlsSecretProblem tells why a Secret cannot serve as a certificate. It
+// returns "" for a usable one.
+func tlsSecretProblem(secret *v1.Secret) string {
+	certPEM := secret.Data[v1.TLSCertKey]
+	keyPEM := secret.Data[v1.TLSPrivateKeyKey]
+	if bytes.Equal(certPEM, keyPEM) {
+		return "certificate and key are identical"
+	}
+	if block, _ := pem.Decode(certPEM); block == nil {
+		return "certificate contains an invalid PEM"
+	}
+	if block, _ := pem.Decode(keyPEM); block == nil {
+		return "key contains an invalid PEM"
+	}
+	return ""
 }
 
 // checkPort rejects the listener when the controller process cannot bind to

@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-typo
+spec:
+  ingressClassName: hug
+  tls:
+    - hosts:
+        - typo.haproxy
+      secretName: no-such-secret
+  rules:
+    - host: typo.haproxy
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: http-echo
+                port:
+                  number: 80
