@@ -133,6 +133,38 @@ func TestCheckMatches(t *testing.T) {
 			wantInMsg: "invalid path regex",
 		},
 		{
+			name: "header regex with a repeated group is rejected",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Headers: []gatewayv1.HTTPHeaderMatch{{
+					Name:  "x-k",
+					Value: "(a|aa)+$",
+					Type:  mptr(gatewayv1.HeaderMatchRegularExpression),
+				}}},
+			},
+			wantValid: false,
+			wantInMsg: "a group must not be repeated",
+		},
+		{
+			name: "header regex with a brace form only HAProxy repeats is rejected",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Headers: []gatewayv1.HTTPHeaderMatch{{
+					Name:  "x-k",
+					Value: "^(a|aa){,1000}$",
+					Type:  mptr(gatewayv1.HeaderMatchRegularExpression),
+				}}},
+			},
+			wantValid: false,
+			wantInMsg: "a group must not be repeated",
+		},
+		{
+			name: "regex path with a repeated group is rejected",
+			matches: []gatewayv1.HTTPRouteMatch{
+				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchRegularExpression), Value: new("/(a|aa)+$")}},
+			},
+			wantValid: false,
+			wantInMsg: "a group must not be repeated",
+		},
+		{
 			name: "the same text is fine as a prefix path",
 			matches: []gatewayv1.HTTPRouteMatch{
 				{Path: &gatewayv1.HTTPPathMatch{Type: mptr(gatewayv1.PathMatchPathPrefix), Value: new("/x|.*")}},

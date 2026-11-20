@@ -361,6 +361,11 @@ local function request_method(txn, ctx)
     return ctx.method
 end
 
+-- Regex conditions test this many values of a repeated header or query
+-- parameter, and skip any value longer than this many bytes.
+local MAX_REGEX_VALUES = 4
+local MAX_REGEX_VALUE_LEN = 1024
+
 local function cond_matches(txn, cond, ctx)
     if cond.kind == "m" then
         return request_method(txn, ctx) == cond.value
@@ -376,13 +381,27 @@ local function cond_matches(txn, cond, ctx)
     if vals == nil then
         return false
     end
-    for _, v in pairs(vals) do
-        if cond.type == "r" then
+    if cond.type == "r" then
+        if cond.re == nil then
+            return false
+        end
+        -- Bounded regex work per request. Header values start at index 0,
+        -- query values at 1.
+        local first = vals[0] ~= nil and 0 or 1
+        for i = first, first + MAX_REGEX_VALUES - 1 do
+            local v = vals[i]
+            if v == nil then
+                return false
+            end
             -- Unanchored search; anchor with ^...$ for exact matches.
-            if cond.re ~= nil and cond.re:exec(v) then
+            if #v <= MAX_REGEX_VALUE_LEN and cond.re:exec(v) then
                 return true
             end
-        elseif v == cond.value then
+        end
+        return false
+    end
+    for _, v in pairs(vals) do
+        if v == cond.value then
             return true
         end
     end

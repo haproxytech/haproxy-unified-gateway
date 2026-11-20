@@ -612,3 +612,70 @@ func TestValidateRegexPath(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRegexCost(t *testing.T) {
+	valid := []string{
+		"^v[0-9]+$",
+		"/api/.*",
+		"/v[0-9]+/users/[0-9]+/.*",
+		"(foo|bar)baz",
+		"(abc)?d",
+		"a{2,5}",
+		`\{,5}`,
+		`\p{Greek}+`,
+		`\x{41}`,
+		"(?i)abc+",
+		"a?b?c?d?e?f?g?h?",
+	}
+	for _, value := range valid {
+		t.Run("valid "+value, func(t *testing.T) {
+			if err := validateRegexCost(value); err != nil {
+				t.Errorf("validateRegexCost(%q) = %v, want nil", value, err)
+			}
+		})
+	}
+
+	invalid := []struct{ name, value string }{
+		{"repeated alternation", "(a|aa)+$"},
+		{"nested repetition", "(a+)+"},
+		{"repeated duplicate alternation", "(a|a)+"},
+		{"repeated non-capturing group", "(?:a+)+c$"},
+		{"repeated group with star", "(ab)*"},
+		{"counted group", "(a|aa){2,30}"},
+		{"brace form the runtime engine reads as a quantifier", "^(a|aa){,1000}$"},
+		{"spaced brace quantifier", "a{ 1,2}"},
+		{"quoted text", `\Q(a+)+\E`},
+		{"too many repetitions", "a*a*a*a*c$"},
+		{"too many optional parts", "a?a?a?a?a?a?a?a?a?"},
+	}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateRegexCost(tt.value); err == nil {
+				t.Errorf("validateRegexCost(%q) = nil, want an error", tt.value)
+			}
+		})
+	}
+}
+
+func TestExpensiveRegexIsRejectedEverywhere(t *testing.T) {
+	re := gatewayv1.HeaderMatchRegularExpression
+	qre := gatewayv1.QueryParamMatchRegularExpression
+	if _, err := NormalizeHTTPRouteMatch(gatewayv1.HTTPRouteMatch{
+		Headers: []gatewayv1.HTTPHeaderMatch{{Name: "x-k", Type: &re, Value: "(a|aa)+$"}},
+	}); err == nil {
+		t.Error("header regex (a|aa)+$ accepted")
+	}
+	if _, err := NormalizeHTTPRouteMatch(gatewayv1.HTTPRouteMatch{
+		Headers: []gatewayv1.HTTPHeaderMatch{{Name: "x-k", Type: &re, Value: "^(a|aa){,1000}$"}},
+	}); err == nil {
+		t.Error("header regex ^(a|aa){,1000}$ accepted")
+	}
+	if _, err := NormalizeHTTPRouteMatch(gatewayv1.HTTPRouteMatch{
+		QueryParams: []gatewayv1.HTTPQueryParamMatch{{Name: "k", Type: &qre, Value: "(a|aa)+$"}},
+	}); err == nil {
+		t.Error("query regex (a|aa)+$ accepted")
+	}
+	if err := ValidateRegexPath("/(a|aa)+$"); err == nil {
+		t.Error("path regex /(a|aa)+$ accepted")
+	}
+}

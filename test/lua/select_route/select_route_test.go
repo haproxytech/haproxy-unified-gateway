@@ -65,6 +65,12 @@ func TestSelectRoute(t *testing.T) {
 		// Regex matching: unanchored search (users anchor with ^...$).
 		{name: "header regex matches", path: "/", hdrs: []string{"Version", "v42"}, wantBody: "be_vregex"},
 		{name: "header regex non-match 404s", path: "/", hdrs: []string{"Version", "v4x"}, wantStatus: 404, wantBody: "NOT FOUND"},
+		// Regex work per request is bounded: only the first 4 values of a
+		// repeated header are tested, and none longer than 1024 bytes.
+		{name: "header regex tests the fourth value", path: "/", hdrs: append(slices.Repeat([]string{"Version", "x"}, 3), "Version", "v42"), wantBody: "be_vregex"},
+		{name: "header regex skips the fifth value", path: "/", hdrs: append(slices.Repeat([]string{"Version", "x"}, 4), "Version", "v42"), wantStatus: 404, wantBody: "NOT FOUND"},
+		{name: "header regex tests a 1024 byte value", path: "/", hdrs: []string{"Version", "v" + strings.Repeat("1", 1023)}, wantBody: "be_vregex"},
+		{name: "header regex skips a longer value", path: "/", hdrs: []string{"Version", "v" + strings.Repeat("1", 1024)}, wantStatus: 404, wantBody: "NOT FOUND"},
 
 		// Method matching: method outranks header count.
 		{name: "method exact", method: "POST", path: "/", wantBody: "be_post"},
