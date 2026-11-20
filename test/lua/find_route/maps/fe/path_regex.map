@@ -1,1 +1,4 @@
 ^lr1/[0-9]+$  be_r1_digits
+^lr1(/files/.*\.php)  be_r1_php
+^lr1(/alt/x|/alt/y)  be_r1_alt
+^lr1(/any/a.b)  be_r1_anychar

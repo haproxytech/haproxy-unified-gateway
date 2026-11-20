@@ -43,6 +43,9 @@ params) into HAProxy routing. Path and hostname matching are covered by the
   - Every alternative must start with `/`. Write `/a|/b` or `/(a|b)`, not
     `/a|b`. Write `/.*/edit`, not `.*/edit`.
 
+  The regex is used as written. A dot matches any character: write `\.` for
+  a literal dot, as in `/.*\.php`.
+
   A regex that breaks one of these rules rejects its rule with an
   `UnsupportedValue` condition.
 
