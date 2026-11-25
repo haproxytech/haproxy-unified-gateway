@@ -128,10 +128,7 @@ func (b *HaproxyConfMgrImpl) processEndpointSlices(ctx context.Context) error {
 				continue
 			}
 
-			if err = b.runtimeDeleteServers(backendPort.backendName, serverDiffs); err != nil {
-				errors.Add(err)
-			}
-			if err = b.runtimeCreateServers(backendPort.backendName, serverDiffs, servers); err != nil {
+			if err = b.runtimeApplyServerDiffs(backendPort.backendName, serverDiffs, servers); err != nil {
 				errors.Add(err)
 			}
 		}
@@ -430,4 +427,15 @@ func (b *HaproxyConfMgrImpl) endpointSliceUpdatedByService() map[client.ObjectKe
 		res[updatedSvcKey][epsKey] = k8sEps
 	}
 	return res
+}
+
+// runtimeApplyServerDiffs adds the new servers before removing the old ones, so the backend is never
+// empty while every pod of a Service is replaced.
+// If the create step fails, the old servers are kept: the failure flag is set and the forced reload
+// (from the configuration, which already holds the new servers) fixes the state.
+func (b *HaproxyConfMgrImpl) runtimeApplyServerDiffs(backendName string, serverDiffs ServerDiff, servers map[string]models.Server) error {
+	if err := b.runtimeCreateServers(backendName, serverDiffs, servers); err != nil {
+		return err
+	}
+	return b.runtimeDeleteServers(backendName, serverDiffs)
 }
